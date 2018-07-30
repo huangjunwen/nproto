@@ -7,25 +7,25 @@ import "google/protobuf/duration.proto";
 // RPCRequest is request of a RPC call.
 message RPCRequest {
   // Params of the RPC.
-  bytes Params = 1;
+  bytes params = 1;
   // Timeout sets an optinal timeout for this RPC.
-  google.protobuf.Duration Timeout = 2;
+  google.protobuf.Duration timeout = 2;
   // Passthru is an optional dict carrying context values.
-  map<string, string> Passthru = 3;
+  map<string, string> passthru = 3;
 }
 
 // RPCErrorReply is error reply of a RPC call. Similar to jsonrpc.
 message RPCErrorReply {
   // Code is the error code.
-  int32 Code = 1;
+  int32 code = 1;
   // Message is the error description.
-  string Message = 2;
+  string message = 2;
 }
 
 // RPCReply is reply of a RPC call.
 message RPCReply {
   // Result is the normal reply of the RPC. Must not set when there is an error.
-  bytes Result = 1;
+  bytes result = 1;
   // Error is the error reply of the RPC. Must not set when there is no error.
-  RPCErrorReply Error = 2;
+  RPCErrorReply error = 2;
 }

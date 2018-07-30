@@ -1,4 +1,4 @@
-package nproto
+package rpc
 
 import (
 	"context"
