@@ -108,6 +108,7 @@ func (e PBClientEncoder) DecodeReply(data []byte, reply *RPCReply) error {
 	case *PBReply_Error:
 		// Error case.
 		reply.Error = errors.New(x.Error)
+		reply.Result = nil
 		return nil
 	case *PBReply_Result:
 		// Normal case. Decode result.
