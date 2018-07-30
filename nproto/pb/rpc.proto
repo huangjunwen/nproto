@@ -9,9 +9,9 @@ message RPCRequest {
   // Params of the RPC.
   bytes params = 1;
   // Timeout sets an optinal timeout for this RPC.
-  google.protobuf.Duration timeout = 9;
+  google.protobuf.Duration timeout = 2;
   // Passthru is an optional dict carrying context values.
-  map<string, string> passthru = 10;
+  map<string, string> passthru = 3;
 }
 
 // RPCErrorReply is error reply of a RPC call. Similar to jsonrpc.
