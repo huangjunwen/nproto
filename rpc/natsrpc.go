@@ -24,9 +24,9 @@ var (
 )
 
 var (
-	ErrServerClosed = errors.New("NatsRPCServer: server closed")
-	ErrDupSvcName   = errors.New("NatsRPCServer: duplicated svc name")
-	ErrClientClosed = errors.New("NatsRPCClient: client closed")
+	ErrNatsConnMaxRecon = errors.New("natsrpc: nats.Conn should have MaxReconnect < 0")
+	ErrServerClosed     = errors.New("natsrpc: server closed")
+	ErrClientClosed     = errors.New("natsrpc: client closed")
 )
 
 // NatsRPCServer implements RPCServer.
@@ -37,7 +37,7 @@ type NatsRPCServer struct {
 	mws      []RPCMiddleware     // middlewares
 
 	mu   sync.RWMutex
-	conn NatsConn                      // nil if closed
+	conn *nats.Conn                    // nil if closed
 	subs map[string]*nats.Subscription // svcName -> Subscription
 }
 
@@ -49,7 +49,7 @@ type NatsRPCClient struct {
 	mws      []RPCMiddleware     // middlewares
 
 	mu   sync.RWMutex
-	conn NatsConn
+	conn *nats.Conn
 }
 
 var (
@@ -59,7 +59,10 @@ var (
 
 // NewNatsRPCServer creates a new NatsRPCServer. `conn` should be a long-lived nats connection.
 // e.g. Always reconnect.
-func NewNatsRPCServer(conn NatsConn, opts ...NatsRPCServerOption) (*NatsRPCServer, error) {
+func NewNatsRPCServer(conn *nats.Conn, opts ...NatsRPCServerOption) (*NatsRPCServer, error) {
+	if conn.Opts.MaxReconnect >= 0 {
+		return nil, ErrNatsConnMaxRecon
+	}
 	server := &NatsRPCServer{
 		nameConv: DefaultSvcSubjNameConvertor,
 		group:    DefaultGroup,
@@ -101,7 +104,7 @@ func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*RPCMethod]RP
 		return ErrServerClosed
 	}
 	if sub != nil {
-		return ErrDupSvcName
+		return fmt.Errorf("natsrpc: duplicated service name %+q", svcName)
 	}
 
 	// Subscribe.
@@ -128,7 +131,7 @@ func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*RPCMethod]RP
 	}
 	if sub != nil {
 		sub2.Unsubscribe()
-		return ErrDupSvcName
+		return fmt.Errorf("natsrpc: duplicated service name %+q", svcName)
 	}
 
 	return nil
@@ -178,7 +181,7 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*RPCMethod]R
 	methodNames := make(map[string]*RPCMethod)
 	for method, _ := range methods {
 		if _, found := methodNames[method.Name]; found {
-			return nil, fmt.Errorf("NatsRPCServer: duplicated method name %+q", method.Name)
+			return nil, fmt.Errorf("natsrpc: duplicated method name %+q", method.Name)
 		}
 		methodNames[method.Name] = method
 	}
@@ -212,7 +215,7 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*RPCMethod]R
 			// Check method.
 			method, found := methodNames[methodName]
 			if !found {
-				server.replyError(msg.Reply, fmt.Errorf("Method %+q not found", methodName), encoding)
+				server.replyError(msg.Reply, fmt.Errorf("natsrpc: method %+q not found", methodName), encoding)
 				return
 			}
 			handler := methods[method]
@@ -280,7 +283,10 @@ Err:
 
 // NewNatsRPCClient creates a new NatsRPCClient. `conn` should be a long-lived nats connection.
 // e.g. Always reconnect.
-func NewNatsRPCClient(conn NatsConn, opts ...NatsRPCClientOption) (*NatsRPCClient, error) {
+func NewNatsRPCClient(conn *nats.Conn, opts ...NatsRPCClientOption) (*NatsRPCClient, error) {
+	if conn.Opts.MaxReconnect >= 0 {
+		return nil, ErrNatsConnMaxRecon
+	}
 	client := &NatsRPCClient{
 		nameConv: DefaultSvcSubjNameConvertor,
 		encoding: DefaultEncoding,
