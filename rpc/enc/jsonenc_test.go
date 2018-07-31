@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestPBRequest(t *testing.T) {
+func TestJSONRequest(t *testing.T) {
 
 	assert := assert.New(t)
 
@@ -29,7 +29,7 @@ func TestPBRequest(t *testing.T) {
 			Passthru: passthru,
 		}
 
-		data, err = PBClientEncoder{}.EncodeRequest(req)
+		data, err = JSONClientEncoder{}.EncodeRequest(req)
 		assert.NoError(err)
 	}
 
@@ -39,7 +39,7 @@ func TestPBRequest(t *testing.T) {
 		req := &RPCRequest{
 			Param: &p,
 		}
-		err = PBServerEncoder{}.DecodeRequest(data, req)
+		err = JSONServerEncoder{}.DecodeRequest(data, req)
 		assert.NoError(err)
 
 		assert.Equal(param.Seconds, p.Seconds)
@@ -52,13 +52,13 @@ func TestPBRequest(t *testing.T) {
 	{
 		req := &RPCRequest{}
 		assert.Panics(func() {
-			PBServerEncoder{}.DecodeRequest(data, req)
+			JSONServerEncoder{}.DecodeRequest(data, req)
 		})
 	}
 
 }
 
-func TestPBReply(t *testing.T) {
+func TestJSONReply(t *testing.T) {
 
 	assert := assert.New(t)
 
@@ -74,7 +74,7 @@ func TestPBReply(t *testing.T) {
 			reply := &RPCReply{
 				Result: &result,
 			}
-			data, err = PBServerEncoder{}.EncodeReply(reply)
+			data, err = JSONServerEncoder{}.EncodeReply(reply)
 			assert.NoError(err)
 		}
 
@@ -84,7 +84,7 @@ func TestPBReply(t *testing.T) {
 			reply := &RPCReply{
 				Result: &r,
 			}
-			err = PBClientEncoder{}.DecodeReply(data, reply)
+			err = JSONClientEncoder{}.DecodeReply(data, reply)
 			assert.NoError(err)
 
 			assert.Equal(r.Seconds, result.Seconds)
@@ -106,7 +106,7 @@ func TestPBReply(t *testing.T) {
 			reply := &RPCReply{
 				Error: errResult,
 			}
-			data, err = PBServerEncoder{}.EncodeReply(reply)
+			data, err = JSONServerEncoder{}.EncodeReply(reply)
 			assert.NoError(err)
 		}
 
@@ -116,7 +116,7 @@ func TestPBReply(t *testing.T) {
 			reply := &RPCReply{
 				Result: &r,
 			}
-			err = PBClientEncoder{}.DecodeReply(data, reply)
+			err = JSONClientEncoder{}.DecodeReply(data, reply)
 			assert.NoError(err)
 
 			assert.Equal(reply.Error.Error(), errResult.Error())
