@@ -127,3 +127,42 @@ func TestPBReply(t *testing.T) {
 	}
 
 }
+
+func BenchmarkPBEncode(b *testing.B) {
+
+	param := *ptypes.TimestampNow()
+	timeout := 10 * time.Nanosecond
+	passthru := map[string]string{"a": "z"}
+	req := &RPCRequest{
+		Param:    &param,
+		Timeout:  &timeout,
+		Passthru: passthru,
+	}
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		PBClientEncoder{}.EncodeRequest(req)
+	}
+
+}
+
+func BenchmarkPBDecode(b *testing.B) {
+
+	param := *ptypes.TimestampNow()
+	timeout := 10 * time.Nanosecond
+	passthru := map[string]string{"a": "z"}
+	data, _ := PBClientEncoder{}.EncodeRequest(&RPCRequest{
+		Param:    &param,
+		Timeout:  &timeout,
+		Passthru: passthru,
+	})
+
+	req := &RPCRequest{
+		Param: &timestamp.Timestamp{},
+	}
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		PBServerEncoder{}.DecodeRequest(data, req)
+	}
+
+}

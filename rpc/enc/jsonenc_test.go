@@ -127,3 +127,42 @@ func TestJSONReply(t *testing.T) {
 	}
 
 }
+
+func BenchmarkJSONEncode(b *testing.B) {
+
+	param := *ptypes.TimestampNow()
+	timeout := 10 * time.Nanosecond
+	passthru := map[string]string{"a": "z"}
+	req := &RPCRequest{
+		Param:    &param,
+		Timeout:  &timeout,
+		Passthru: passthru,
+	}
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		JSONClientEncoder{}.EncodeRequest(req)
+	}
+
+}
+
+func BenchmarkJSONDecode(b *testing.B) {
+
+	param := *ptypes.TimestampNow()
+	timeout := 10 * time.Nanosecond
+	passthru := map[string]string{"a": "z"}
+	data, _ := JSONClientEncoder{}.EncodeRequest(&RPCRequest{
+		Param:    &param,
+		Timeout:  &timeout,
+		Passthru: passthru,
+	})
+
+	req := &RPCRequest{
+		Param: &timestamp.Timestamp{},
+	}
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		JSONServerEncoder{}.DecodeRequest(data, req)
+	}
+
+}
