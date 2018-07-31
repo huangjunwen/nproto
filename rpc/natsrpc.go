@@ -299,7 +299,7 @@ func NewNatsRPCClient(conn NatsConn, opts ...NatsRPCClientOption) (*NatsRPCClien
 func (client *NatsRPCClient) InvokeSvc(svcName string, method *RPCMethod) RPCHandler {
 
 	encoder := chooseClientEncoder(client.encoding)
-	subj := fmt.Sprint("%s.%s.%s", client.nameConv(svcName), client.encoding, method.Name)
+	subj := fmt.Sprintf("%s.%s.%s", client.nameConv(svcName), client.encoding, method.Name)
 	handler := func(ctx context.Context, input proto.Message) (proto.Message, error) {
 
 		// Get conn and check closed.
