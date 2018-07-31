@@ -16,7 +16,7 @@ import (
 
 var (
 	// Default convertor for service name and nats subject name.
-	DefaultSvcSubjNameConvertor = func(name string) string { return fmt.Sprint("svc.%s", name) }
+	DefaultSvcSubjNameConvertor = func(name string) string { return fmt.Sprintf("svc.%s", name) }
 	// Default queue group.
 	DefaultGroup = "def"
 	// Default RPC encoding.
