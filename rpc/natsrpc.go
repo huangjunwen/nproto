@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/nats-io/go-nats"
@@ -18,30 +19,46 @@ var (
 	DefaultSvcSubjNameConvertor = func(name string) string { return fmt.Sprint("svc.%s", name) }
 	// Default queue group.
 	DefaultGroup = "def"
+	// Default RPC encoding.
+	DefaultEncoding = "pb"
 )
 
 var (
 	ErrServerClosed = errors.New("NatsRPCServer: server closed")
 	ErrDupSvcName   = errors.New("NatsRPCServer: duplicated svc name")
+	ErrClientClosed = errors.New("NatsRPCClient: client closed")
 )
 
+// NatsRPCServer implements RPCServer.
 type NatsRPCServer struct {
 	// Options
 	nameConv func(string) string // svcName -> subjName
 	group    string              // server group
-	mws      []RPCMiddleware     // middleware
+	mws      []RPCMiddleware     // middlewares
 
 	mu   sync.RWMutex
 	conn NatsConn                      // nil if closed
 	subs map[string]*nats.Subscription // svcName -> Subscription
 }
 
-type NatsRPCServerOption func(*NatsRPCServer) error
+// NatsRPCClient implements RPCClient.
+type NatsRPCClient struct {
+	// Options
+	nameConv func(string) string // svcName -> subjName
+	encoding string              // rpc encoding
+	mws      []RPCMiddleware     // middlewares
+
+	mu   sync.RWMutex
+	conn NatsConn
+}
 
 var (
 	_ RPCServer = (*NatsRPCServer)(nil)
+	_ RPCClient = (*NatsRPCClient)(nil)
 )
 
+// NewNatsRPCServer creates a new NatsRPCServer. `conn` should be a long-lived nats connection.
+// e.g. Always reconnect.
 func NewNatsRPCServer(conn NatsConn, opts ...NatsRPCServerOption) (*NatsRPCServer, error) {
 	server := &NatsRPCServer{
 		nameConv: DefaultSvcSubjNameConvertor,
@@ -58,6 +75,7 @@ func NewNatsRPCServer(conn NatsConn, opts ...NatsRPCServerOption) (*NatsRPCServe
 	return server, nil
 }
 
+// RegistSvc implements RPCServer interface.
 func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*RPCMethod]RPCHandler) error {
 	// Decorate rpc handlers with middlewares.
 	ms := make(map[*RPCMethod]RPCHandler)
@@ -116,6 +134,7 @@ func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*RPCMethod]RP
 	return nil
 }
 
+// DeregistSvc implements RPCServer interface.
 func (server *NatsRPCServer) DeregistSvc(svcName string) error {
 	// Pop svcName.
 	server.mu.Lock()
@@ -130,6 +149,7 @@ func (server *NatsRPCServer) DeregistSvc(svcName string) error {
 	return nil
 }
 
+// Close implements RPCServer interface.
 func (server *NatsRPCServer) Close() error {
 	// Set conn to nil to indicate close.
 	server.mu.Lock()
@@ -201,7 +221,7 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*RPCMethod]R
 			req := &enc.RPCRequest{
 				Param: method.NewInput(),
 			}
-			if err := chooseEncoder(encoding).DecodeRequest(msg.Data, req); err != nil {
+			if err := chooseServerEncoder(encoding).DecodeRequest(msg.Data, req); err != nil {
 				server.replyError(msg.Reply, err, encoding)
 				return
 			}
@@ -241,7 +261,7 @@ func (server *NatsRPCServer) replyError(subj string, err error, encoding string)
 
 func (server *NatsRPCServer) reply(subj string, r *enc.RPCReply, encoding string) {
 	// Encode reply.
-	data, err := chooseEncoder(encoding).EncodeReply(r)
+	data, err := chooseServerEncoder(encoding).EncodeReply(r)
 	if err != nil {
 		goto Err
 	}
@@ -258,11 +278,113 @@ Err:
 	return
 }
 
-func chooseEncoder(encoding string) enc.RPCServerEncoder {
+// NewNatsRPCClient creates a new NatsRPCClient. `conn` should be a long-lived nats connection.
+// e.g. Always reconnect.
+func NewNatsRPCClient(conn NatsConn, opts ...NatsRPCClientOption) (*NatsRPCClient, error) {
+	client := &NatsRPCClient{
+		nameConv: DefaultSvcSubjNameConvertor,
+		encoding: DefaultEncoding,
+		conn:     conn,
+	}
+	for _, opt := range opts {
+		if err := opt(client); err != nil {
+			return nil, err
+		}
+	}
+
+	return client, nil
+}
+
+// InvokeSvc implements RPCClient interface.
+func (client *NatsRPCClient) InvokeSvc(svcName string, method *RPCMethod) RPCHandler {
+
+	encoder := chooseClientEncoder(client.encoding)
+	subj := fmt.Sprint("%s.%s.%s", client.nameConv(svcName), client.encoding, method.Name)
+	handler := func(ctx context.Context, input proto.Message) (proto.Message, error) {
+
+		// Get conn and check closed.
+		client.mu.RLock()
+		conn := client.conn
+		client.mu.RUnlock()
+		if conn == nil {
+			return nil, ErrClientClosed
+		}
+
+		// Construct request.
+		req := &enc.RPCRequest{
+			Param: input,
+		}
+		if dl, ok := ctx.Deadline(); ok {
+			dur := dl.Sub(time.Now())
+			if dur <= 0 {
+				return nil, context.DeadlineExceeded
+			} else {
+				req.Timeout = &dur
+			}
+		}
+		passthru := Passthru(ctx)
+		if len(passthru) > 0 {
+			req.Passthru = passthru
+		}
+
+		// Encode request.
+		data, err := encoder.EncodeRequest(req)
+		if err != nil {
+			return nil, err
+		}
+
+		// Send request.
+		msg, err := conn.RequestWithContext(ctx, subj, data)
+		if err != nil {
+			return nil, err
+		}
+
+		// Parse reply palyload.
+		rep := &enc.RPCReply{
+			Result: method.NewOuput(),
+		}
+		if err := encoder.DecodeReply(msg.Data, rep); err != nil {
+			return nil, err
+		}
+
+		// Return.
+		return rep.Result, rep.Error
+	}
+
+	// Decorate handler with middlewares.
+	for i := len(client.mws) - 1; i >= 0; i-- {
+		handler = client.mws[i](handler)
+	}
+	return handler
+}
+
+// Close implements RPCClient interface.
+func (client *NatsRPCClient) Close() error {
+	client.mu.Lock()
+	conn := client.conn
+	client.conn = nil
+	client.mu.Unlock()
+
+	if conn == nil {
+		return ErrClientClosed
+	}
+	return nil
+}
+
+func chooseServerEncoder(encoding string) enc.RPCServerEncoder {
 	switch encoding {
 	case "json":
 		return enc.JSONServerEncoder{}
 	default:
 		return enc.PBServerEncoder{}
+	}
+}
+
+func chooseClientEncoder(encoding string) enc.RPCClientEncoder {
+	switch encoding {
+	case "json":
+		return enc.JSONClientEncoder{}
+	default:
+		return enc.PBClientEncoder{}
 	}
 }
