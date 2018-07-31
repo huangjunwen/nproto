@@ -1,6 +1,7 @@
 package enc
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -53,6 +54,76 @@ func TestRequest(t *testing.T) {
 		assert.Panics(func() {
 			PBServerEncoder{}.DecodeRequest(data, req)
 		})
+	}
+
+}
+
+func TestReply(t *testing.T) {
+
+	assert := assert.New(t)
+
+	// Normal result.
+	{
+		result := *ptypes.TimestampNow()
+
+		data := []byte{}
+		err := error(nil)
+
+		// Encode.
+		{
+			reply := &RPCReply{
+				Result: &result,
+			}
+			data, err = PBServerEncoder{}.EncodeReply(reply)
+			assert.NoError(err)
+		}
+
+		// Normal decode.
+		{
+			r := timestamp.Timestamp{}
+			reply := &RPCReply{
+				Result: &r,
+			}
+			err = PBClientEncoder{}.DecodeReply(data, reply)
+			assert.NoError(err)
+
+			assert.Equal(r.Seconds, result.Seconds)
+			assert.Equal(r.Nanos, result.Nanos)
+			assert.Nil(reply.Error)
+		}
+
+	}
+
+	// Error result.
+	{
+		errResult := errors.New("Some error")
+
+		data := []byte{}
+		err := error(nil)
+
+		// Encode.
+		{
+			reply := &RPCReply{
+				Error: errResult,
+			}
+			data, err = PBServerEncoder{}.EncodeReply(reply)
+			assert.NoError(err)
+		}
+
+		// Normal decode.
+		{
+			r := timestamp.Timestamp{}
+			reply := &RPCReply{
+				Result: &r,
+			}
+			err = PBClientEncoder{}.DecodeReply(data, reply)
+			assert.NoError(err)
+
+			assert.Equal(reply.Error.Error(), errResult.Error())
+			assert.Nil(reply.Result)
+
+		}
+
 	}
 
 }
