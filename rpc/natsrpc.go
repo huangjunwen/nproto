@@ -38,6 +38,10 @@ type NatsRPCServer struct {
 
 type NatsRPCServerOption func(*NatsRPCServer) error
 
+var (
+	_ RPCServer = (*NatsRPCServer)(nil)
+)
+
 func NewNatsRPCServer(conn NatsConn, opts ...NatsRPCServerOption) (*NatsRPCServer, error) {
 	server := &NatsRPCServer{
 		nameConv: DefaultSvcSubjNameConvertor,
@@ -54,14 +58,20 @@ func NewNatsRPCServer(conn NatsConn, opts ...NatsRPCServerOption) (*NatsRPCServe
 	return server, nil
 }
 
-func (server *NatsRPCServer) RegistSvc(svcName string, methods map[string]*RPCMethod, handlers map[string]RPCHandler) error {
-	hs := make(map[string]RPCHandler)
-	// Decorate handlers with middlewares.
-	for methodName, handler := range handlers {
+func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*RPCMethod]RPCHandler) error {
+	// Decorate rpc handlers with middlewares.
+	ms := make(map[*RPCMethod]RPCHandler)
+	for method, handler := range methods {
 		for i := len(server.mws) - 1; i >= 0; i-- {
 			handler = server.mws[i](handler)
 		}
-		hs[methodName] = handler
+		ms[method] = handler
+	}
+
+	// Create msg handler.
+	h, err := server.msgHandler(svcName, ms)
+	if err != nil {
+		return err
 	}
 
 	// First (read) lock: get conn and some checks.
@@ -80,7 +90,7 @@ func (server *NatsRPCServer) RegistSvc(svcName string, methods map[string]*RPCMe
 	sub2, err := server.conn.QueueSubscribe(
 		server.nameConv(svcName)+".>",
 		server.group,
-		server.msgHandler(svcName, methods, hs),
+		h,
 	)
 	if err != nil {
 		return err
@@ -143,18 +153,19 @@ func (server *NatsRPCServer) Close() error {
 	return nil
 }
 
-func (server *NatsRPCServer) msgHandler(svcName string, methods map[string]*RPCMethod, handlers map[string]RPCHandler) nats.MsgHandler {
-	// Some checks.
-	for methodName, method := range methods {
-		if method.Name != methodName {
-			panic(fmt.Errorf("NatsRPCServer: method name mismatch %+q != %+q", method.Name, methodName))
+func (server *NatsRPCServer) msgHandler(svcName string, methods map[*RPCMethod]RPCHandler) (nats.MsgHandler, error) {
+	// Method name -> method
+	methodNames := make(map[string]*RPCMethod)
+	for method, _ := range methods {
+		if _, found := methodNames[method.Name]; found {
+			return nil, fmt.Errorf("NatsRPCServer: duplicated method name %+q", method.Name)
 		}
-		if handlers[methodName] == nil {
-			panic(fmt.Errorf("NatsRPCServer: handler not found for method %+q", methodName))
-		}
+		methodNames[method.Name] = method
 	}
 
+	// Subject prefix.
 	prefix := server.nameConv(svcName) + "."
+
 	return func(msg *nats.Msg) {
 		go func() {
 			// Subject should be in the form of "subj.enc.method".
@@ -179,18 +190,18 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[string]*RPCM
 			}
 
 			// Check method.
-			method := methods[methodName]
-			handler := handlers[methodName]
-			if method == nil {
+			method, found := methodNames[methodName]
+			if !found {
 				server.replyError(msg.Reply, fmt.Errorf("Method %+q not found", methodName), encoding)
 				return
 			}
+			handler := methods[method]
 
 			// Parse request payload.
 			req := &enc.RPCRequest{
 				Param: method.NewInput(),
 			}
-			if err := server.chooseEncoder(encoding).DecodeRequest(msg.Data, req); err != nil {
+			if err := chooseEncoder(encoding).DecodeRequest(msg.Data, req); err != nil {
 				server.replyError(msg.Reply, err, encoding)
 				return
 			}
@@ -205,30 +216,32 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[string]*RPCM
 			}
 
 			// Handle.
-			output, err := handler(ctx, req.Param)
+			result, err := handler(ctx, req.Param)
 			if err != nil {
 				server.replyError(msg.Reply, err, encoding)
 			} else {
-				server.replyResult(msg.Reply, output, encoding)
+				server.replyResult(msg.Reply, result, encoding)
 			}
 
 		}()
-	}
-	return nil
+	}, nil
 }
 
-func (server *NatsRPCServer) chooseEncoder(encoding string) enc.RPCServerEncoder {
-	switch encoding {
-	case "json":
-		return enc.JSONServerEncoder{}
-	default:
-		return enc.PBServerEncoder{}
-	}
+func (server *NatsRPCServer) replyResult(subj string, result proto.Message, encoding string) {
+	server.reply(subj, &enc.RPCReply{
+		Result: result,
+	}, encoding)
+}
+
+func (server *NatsRPCServer) replyError(subj string, err error, encoding string) {
+	server.reply(subj, &enc.RPCReply{
+		Error: err,
+	}, encoding)
 }
 
 func (server *NatsRPCServer) reply(subj string, r *enc.RPCReply, encoding string) {
 	// Encode reply.
-	data, err := server.chooseEncoder(encoding).EncodeReply(r)
+	data, err := chooseEncoder(encoding).EncodeReply(r)
 	if err != nil {
 		goto Err
 	}
@@ -245,14 +258,11 @@ Err:
 	return
 }
 
-func (server *NatsRPCServer) replyResult(subj string, result proto.Message, encoding string) {
-	server.reply(subj, &enc.RPCReply{
-		Result: result,
-	}, encoding)
-}
-
-func (server *NatsRPCServer) replyError(subj string, err error, encoding string) {
-	server.reply(subj, &enc.RPCReply{
-		Error: err,
-	}, encoding)
+func chooseEncoder(encoding string) enc.RPCServerEncoder {
+	switch encoding {
+	case "json":
+		return enc.JSONServerEncoder{}
+	default:
+		return enc.PBServerEncoder{}
+	}
 }

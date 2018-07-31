@@ -9,7 +9,7 @@ import (
 // RPCServer is the server side of service.
 type RPCServer interface {
 	// RegistSvc regist a service with given method set and associated handlers.
-	RegistSvc(svcName string, methods map[string]*RPCMethod, handlers map[string]RPCHandler) error
+	RegistSvc(svcName string, methods map[*RPCMethod]RPCHandler) error
 
 	// DeregistSvc deregist a service.
 	DeregistSvc(svcName string) error
