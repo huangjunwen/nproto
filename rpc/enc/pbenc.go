@@ -27,7 +27,7 @@ func (e PBServerEncoder) DecodeRequest(data []byte, req *RPCRequest) error {
 	}
 
 	// Decode param.
-	if err := proto.Unmarshal(r.Params, req.Param); err != nil {
+	if err := proto.Unmarshal(r.Param, req.Param); err != nil {
 		return err
 	}
 
@@ -77,7 +77,7 @@ func (e PBClientEncoder) EncodeRequest(req *RPCRequest) ([]byte, error) {
 	var err error
 	r := &PBRequest{}
 	// Encode param.
-	r.Params, err = proto.Marshal(req.Param)
+	r.Param, err = proto.Marshal(req.Param)
 	if err != nil {
 		return nil, err
 	}

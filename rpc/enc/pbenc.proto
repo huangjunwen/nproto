@@ -6,8 +6,8 @@ import "google/protobuf/duration.proto";
 
 // PBRequest is request of a RPC call encoded by protobuf.
 message PBRequest {
-  // Params is protobuf encoded params.
-  bytes params = 1;
+  // Param is protobuf encoded param.
+  bytes param = 1;
   // Timeout sets an optinal timeout for this RPC.
   google.protobuf.Duration timeout = 2;
   // Passthru is an optional dict carrying context values.
