@@ -1,6 +1,9 @@
+package {{ .File.Package }}
+
 {{- $file := .File }}
-{{- $svc := .Service -}}
-package {{ $file.Package }}
+{{- $svc := .Service }}
+{{- $currentFile := $file.Name | getProtoFile }}
+{{- $currentPath := $currentFile.GoPkg.Path }}
 
 import (
   "context"
@@ -8,13 +11,17 @@ import (
 
   "github.com/golang/protobuf/proto"
   "github.com/huangjunwen/nproto/rpc"
+
+  {{ range $file.Dependency -}}
+    {{ (. | getProtoFile).GoPkg }}
+  {{ end -}}
 )
 
 /* {{""}}{{- leadingComment $svc }}{{""}} */
 type {{ $svc.Name }} interface {
   {{ range $svc.Method -}}
     /* {{""}}{{- leadingComment . | trim -}}{{""}} */
-    {{ .Name }}(ctx context.Context, input *{{ .InputType | shortType }}) (output *{{ .OutputType | shortType }}, err error)
+    {{ .Name }}(ctx context.Context, input *{{ (.InputType | getMessageType $file).GoType $currentPath }}) (output *{{ (.OutputType | getMessageType $file).GoType $currentPath }}, err error)
   {{ end }}
 }
 
@@ -23,7 +30,7 @@ func Serve{{ $svc.Name }}(svc {{ $svc.Name }}, server rpc.RPCServer) error {
   return server.RegistSvc("{{ $svc.Name }}", map[*rpc.RPCMethod]rpc.RPCHandler{
     {{ range $svc.Method -}}
       method{{ $svc.Name }}_{{ .Name }}: func(ctx context.Context, input proto.Message) (proto.Message, error) {
-        return svc.{{ .Name }}(ctx, input.(*{{ .InputType | shortType }}))
+        return svc.{{ .Name }}(ctx, input.(*{{ (.InputType | getMessageType $file).GoType $currentPath }}))
       },
     {{ end -}}
   })
@@ -40,8 +47,8 @@ func Client{{ $svc.Name }}(client rpc.RPCClient) {{ $svc.Name }} {
   // method{{ $svc.Name }}_{{ .Name }} is descriptor of method {{ $svc.Name }}.{{ .Name }}.
   var method{{ $svc.Name }}_{{ .Name }} = &rpc.RPCMethod{
     Name: "{{ .Name }}",
-    NewInput: func() proto.Message { return &{{ .InputType | shortType }}{} },
-    NewOutput: func() proto.Message { return &{{ .OutputType | shortType }}{} },
+    NewInput: func() proto.Message { return &{{ (.InputType | getMessageType $file).GoType $currentPath }}{} },
+    NewOutput: func() proto.Message { return &{{ (.OutputType | getMessageType $file).GoType $currentPath }}{} },
   }
 {{ end }}
 
@@ -55,7 +62,7 @@ type client{{ $svc.Name }} struct {
 
 {{ range $svc.Method }}
   // {{ .Name }} implements {{ $svc.Name }} interface.
-  func (svc *client{{ $svc.Name }}) {{ .Name }}(ctx context.Context, input *{{ .InputType | shortType }}) (*{{ .OutputType | shortType }}, error) {
+  func (svc *client{{ $svc.Name }}) {{ .Name }}(ctx context.Context, input *{{ (.InputType | getMessageType $file).GoType $currentPath }}) (*{{ (.OutputType | getMessageType $file).GoType $currentPath }}, error) {
     v := svc.handler{{ .Name }}.Load()
     if v == nil {
       v = svc.client.InvokeSvc("{{ $svc.Name }}", method{{ $svc.Name }}_{{ .Name }})
@@ -65,7 +72,7 @@ type client{{ $svc.Name }} struct {
     if err != nil {
       return nil, err
     }
-    return output.(*{{ .OutputType | shortType }}), nil
+    return output.(*{{ (.OutputType | getMessageType $file).GoType $currentPath }}), nil
   }
 {{ end }}
 
