@@ -11,6 +11,6 @@ Usage:
 Example:
 
 ```bash
-$ protoc --go_out=. --gotemplate_out=single-package-mode=true,template_dir=$GOPATH/src/github.com/huangjunwen/nproto/templates:. *.proto && gofmt -w *.go
+$ protoc --go_out=. --gotemplate_out=single-package-mode=true,template_dir=$GOPATH/src/github.com/huangjunwen/nproto/rpc/templates:. *.proto && gofmt -w *.go
 
 ```
