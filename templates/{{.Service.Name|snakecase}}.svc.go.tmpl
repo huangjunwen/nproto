@@ -25,7 +25,7 @@ type {{ $svc.Name }} interface {
   {{ end }}
 }
 
-// Serve{{ $svc.Name }} use rpc server to serve a {{ $svc.Name }}.
+// Serve{{ $svc.Name }} use rpc server to serve service {{ $svc.Name }}.
 func Serve{{ $svc.Name }}(svc {{ $svc.Name }}, server rpc.RPCServer) error {
   return server.RegistSvc("{{ $svc.Name }}", map[*rpc.RPCMethod]rpc.RPCHandler{
     {{ range $svc.Method -}}
@@ -36,7 +36,7 @@ func Serve{{ $svc.Name }}(svc {{ $svc.Name }}, server rpc.RPCServer) error {
   })
 }
 
-// Client{{ $svc.Name }} use rpc client to create a {{ $svc.Name }}.
+// Client{{ $svc.Name }} use rpc client to create service {{ $svc.Name }}.
 func Client{{ $svc.Name }}(client rpc.RPCClient) {{ $svc.Name }} {
   return &client{{ $svc.Name }}{
     client: client,
@@ -65,7 +65,7 @@ type client{{ $svc.Name }} struct {
   func (svc *client{{ $svc.Name }}) {{ .Name }}(ctx context.Context, input *{{ (.InputType | getMessageType $file).GoType $currentPath }}) (*{{ (.OutputType | getMessageType $file).GoType $currentPath }}, error) {
     v := svc.handler{{ .Name }}.Load()
     if v == nil {
-      v = svc.client.InvokeSvc("{{ $svc.Name }}", method{{ $svc.Name }}_{{ .Name }})
+      v = svc.client.MakeHandler("{{ $svc.Name }}", method{{ $svc.Name }}_{{ .Name }})
       svc.handler{{ .Name }}.Store(v)
     }
     output, err := v.(rpc.RPCHandler)(ctx, input)

@@ -304,8 +304,8 @@ func NewNatsRPCClient(conn *nats.Conn, opts ...NatsRPCClientOption) (*NatsRPCCli
 	return client, nil
 }
 
-// InvokeSvc implements RPCClient interface.
-func (client *NatsRPCClient) InvokeSvc(svcName string, method *RPCMethod) RPCHandler {
+// MakeHandler implements RPCClient interface.
+func (client *NatsRPCClient) MakeHandler(svcName string, method *RPCMethod) RPCHandler {
 
 	encoder := chooseClientEncoder(client.encoding)
 	subj := fmt.Sprintf("%s.%s.%s", client.nameConv(svcName), client.encoding, method.Name)

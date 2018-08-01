@@ -20,8 +20,8 @@ type RPCServer interface {
 
 // RPCClient is the client side of service.
 type RPCClient interface {
-	// InvokeSvc invoke a given method of a service.
-	InvokeSvc(svcName string, method *RPCMethod) RPCHandler
+	// MakeHandler creates a RPCHandler for a given method of a service.
+	MakeHandler(svcName string, method *RPCMethod) RPCHandler
 
 	// Close the client.
 	Close() error
