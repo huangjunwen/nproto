@@ -7,4 +7,4 @@ $ protoc --go_out=. --gotemplate_out=template_dir=$GOPATH/src/github.com/huangju
 
 ```
 
-** NOTE: proto files should follow the style guide: https://developers.google.com/protocol-buffers/docs/style **
+**NOTE: proto files should follow the style guide: https://developers.google.com/protocol-buffers/docs/style**
