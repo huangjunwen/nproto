@@ -350,7 +350,7 @@ func (client *NatsRPCClient) InvokeSvc(svcName string, method *RPCMethod) RPCHan
 
 		// Parse reply palyload.
 		rep := &enc.RPCReply{
-			Result: method.NewOuput(),
+			Result: method.NewOutput(),
 		}
 		if err := encoder.DecodeReply(msg.Data, rep); err != nil {
 			return nil, err

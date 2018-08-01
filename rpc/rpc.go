@@ -33,8 +33,8 @@ type RPCMethod struct {
 	Name string
 	// NewInput is used to generate a new input message.
 	NewInput func() proto.Message
-	// NewOuput is used to generate a new output message.
-	NewOuput func() proto.Message
+	// NewOutput is used to generate a new output message.
+	NewOutput func() proto.Message
 }
 
 // RPCHandler is where real logic resides.
