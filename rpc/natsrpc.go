@@ -10,6 +10,7 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	"github.com/nats-io/go-nats"
+	"github.com/rs/zerolog"
 
 	"github.com/huangjunwen/nproto/rpc/enc"
 )
@@ -35,6 +36,7 @@ type NatsRPCServer struct {
 	nameConv func(string) string // svcName -> subjName
 	group    string              // server group
 	mws      []RPCMiddleware     // middlewares
+	logger   zerolog.Logger      // logger
 
 	mu   sync.RWMutex
 	conn *nats.Conn                    // nil if closed
@@ -66,6 +68,7 @@ func NewNatsRPCServer(conn *nats.Conn, opts ...NatsRPCServerOption) (*NatsRPCSer
 	server := &NatsRPCServer{
 		nameConv: DefaultSvcSubjNameConvertor,
 		group:    DefaultGroup,
+		logger:   zerolog.Nop(),
 		conn:     conn,
 		subs:     make(map[string]*nats.Subscription),
 	}
@@ -194,7 +197,7 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*RPCMethod]R
 			// Subject should be in the form of "subj.enc.method".
 			// Extract encoding and method from it.
 			if !strings.HasPrefix(msg.Subject, prefix) {
-				// TODO: log, this should not happen.
+				server.logger.Error().Err(fmt.Errorf("Unexpected msg with subject: %+q", msg.Subject)).Msg("")
 				return
 			}
 			parts := strings.Split(msg.Subject[len(prefix):], ".")
@@ -277,7 +280,7 @@ func (server *NatsRPCServer) reply(subj string, r *enc.RPCReply, encoding string
 	return
 
 Err:
-	// TODO: log error
+	server.logger.Error().Err(err).Msg("")
 	return
 }
 

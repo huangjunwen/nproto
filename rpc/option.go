@@ -1,5 +1,9 @@
 package rpc
 
+import (
+	"github.com/rs/zerolog"
+)
+
 // NatsRPCServerOption is option in creating NatsRPCServer.
 type NatsRPCServerOption func(*NatsRPCServer) error
 
@@ -26,6 +30,14 @@ func ServerOptGroup(group string) NatsRPCServerOption {
 func ServerOptUseMiddleware(mw RPCMiddleware) NatsRPCServerOption {
 	return func(server *NatsRPCServer) error {
 		server.mws = append(server.mws, mw)
+		return nil
+	}
+}
+
+// ServerOptLogger sets logger.
+func ServerOptLogger(logger *zerolog.Logger) NatsRPCServerOption {
+	return func(server *NatsRPCServer) error {
+		server.logger = logger.With().Str("comp", "nproto.NatsRPCServer").Logger()
 		return nil
 	}
 }
