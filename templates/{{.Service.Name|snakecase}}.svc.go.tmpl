@@ -1,0 +1,79 @@
+{{- $file := .File }}
+{{- $svc := .Service -}}
+package {{ $file.Package }}
+
+import (
+  "context"
+  "sync/atomic"
+
+  "github.com/golang/protobuf/proto"
+  "github.com/huangjunwen/nproto/rpc"
+)
+
+/* {{""}}{{- leadingComment $svc }}{{""}} */
+type {{ $svc.Name }} interface {
+  {{ range $svc.Method -}}
+    /* {{""}}{{- leadingComment . | trim -}}{{""}} */
+    {{ .Name }}(ctx context.Context, input *{{ .InputType | shortType }}) (output *{{ .OutputType | shortType }}, err error)
+  {{ end }}
+}
+
+// Serve{{ $svc.Name }} use rpc server to serve a {{ $svc.Name }}.
+func Serve{{ $svc.Name }}(svc {{ $svc.Name }}, server rpc.RPCServer) error {
+  return server.RegistSvc("{{ $svc.Name }}", map[*rpc.RPCMethod]rpc.RPCHandler{
+    {{ range $svc.Method -}}
+      method{{ $svc.Name }}_{{ .Name }}: func(ctx context.Context, input proto.Message) (proto.Message, error) {
+        return svc.{{ .Name }}(ctx, input.(*{{ .InputType | shortType }}))
+      },
+    {{ end -}}
+  })
+}
+
+// Client{{ $svc.Name }} use rpc client to create a {{ $svc.Name }}.
+func Client{{ $svc.Name }}(client rpc.RPCClient) {{ $svc.Name }} {
+  return &client{{ $svc.Name }}{
+    client: client,
+  }
+}
+
+{{ range $svc.Method -}}
+  // method{{ $svc.Name }}_{{ .Name }} is descriptor of method {{ $svc.Name }}.{{ .Name }}.
+  var method{{ $svc.Name }}_{{ .Name }} = &rpc.RPCMethod{
+    Name: "{{ .Name }}",
+    NewInput: func() proto.Message { return &{{ .InputType | shortType }}{} },
+    NewOutput: func() proto.Message { return &{{ .OutputType | shortType }}{} },
+  }
+{{ end }}
+
+// client{{ $svc.Name }} implements {{ $svc.Name }} interface.
+type client{{ $svc.Name }} struct {
+  client rpc.RPCClient
+  {{ range $svc.Method -}}
+    handler{{ .Name }} atomic.Value // rpc.RPCHandler
+  {{ end -}}
+}
+
+{{ range $svc.Method }}
+  // {{ .Name }} implements {{ $svc.Name }} interface.
+  func (svc *client{{ $svc.Name }}) {{ .Name }}(ctx context.Context, input *{{ .InputType | shortType }}) (*{{ .OutputType | shortType }}, error) {
+    v := svc.handler{{ .Name }}.Load()
+    if v == nil {
+      v = svc.client.InvokeSvc("{{ $svc.Name }}", method{{ $svc.Name }}_{{ .Name }})
+      svc.handler{{ .Name }}.Store(v)
+    }
+    output, err := v.(rpc.RPCHandler)(ctx, input)
+    if err != nil {
+      return nil, err
+    }
+    return output.(*{{ .OutputType | shortType }}), nil
+  }
+{{ end }}
+
+// Avoid import and not used errors.
+var (
+  _ = context.Background
+  _ = atomic.AddInt32
+  _ = proto.Marshal
+  _ = rpc.Passthru
+)
+
