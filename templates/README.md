@@ -6,3 +6,5 @@ Use [protoc-gen-gotemplate](https://github.com/moul/protoc-gen-gotemplate) to ge
 $ protoc --go_out=. --gotemplate_out=template_dir=$GOPATH/src/github.com/huangjunwen/nproto/templates:. *.proto && gofmt -w *.go
 
 ```
+
+** NOTE: proto files should follow the style guide: https://developers.google.com/protocol-buffers/docs/style **
