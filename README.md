@@ -15,3 +15,9 @@ Depends on protobuf and [protoc-gen-gotemplate](https://github.com/moul/protoc-g
   $ git clone https://github.com/huangjunwen/protoc-gen-gotemplate.git .
   $ go get github.com/moul/protoc-gen-gotemplate
   ```
+
+## Usage
+
+```bash
+$ protoc --go_out=. --gotemplate_out=single-package-mode=true,template_dir=$GOPATH/src/github.com/huangjunwen/nproto/rpc/templates:. *.proto && gofmt -w *.go
+```
