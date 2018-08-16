@@ -1,4 +1,4 @@
-package msg
+package util
 
 import (
 	"errors"
@@ -8,16 +8,24 @@ import (
 
 	"github.com/nats-io/go-nats"
 	"github.com/nats-io/go-nats-streaming"
-	"github.com/rs/xid"
+	"github.com/nats-io/nuid"
+
+	"github.com/huangjunwen/nproto/testutil"
 )
 
 var (
-	ErrNotConnected   = errors.New("nproto.msg: not yet connected to streaming server")
-	ErrEmptyGroupName = errors.New("nproto.msg: empty group name")
+	ErrNotConnected   = errors.New("nproto.util.DurConn: not yet connected to streaming server")
+	ErrEmptyGroupName = errors.New("nproto.util.DurConn: empty group name")
+)
+
+// Can be mocked.
+var (
+	stanConnect = stan.Connect
+	newSyncer   = testutil.NewNoopSynchronizer
 )
 
 // DurConn provides re-connection/re-subscription functions on top of stan.DurConn.
-// It supports Publish/PublishAsync and durable QueueSubscribe.
+// It supports Publish/PublishAsync and durable QueueSubscribe (not support Unsubscribe).
 type DurConn struct {
 	id        string
 	options   Options
@@ -41,11 +49,11 @@ type subscription struct {
 	options SubscriptionOptions
 }
 
-// NewDurConn creates a new DurConn. nc should have MaxReconnects(-1) set.
+// NewDurConn creates a new DurConn. nc should have MaxReconnects < 0 set.
 func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) *DurConn {
 
 	c := &DurConn{
-		id:      xid.New().String(),
+		id:      nuid.Next(),
 		options: NewOptions(),
 		subs:    make(map[[2]string]*subscription),
 	}
@@ -58,7 +66,7 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) *DurConn {
 
 	var (
 		connect func(bool)
-		logger  = c.options.logger.With().Str("comp", "nproto.msg.DurConn.connect").Logger()
+		logger  = c.options.logger.With().Str("comp", "nproto.util.DurConn.connect").Logger()
 	)
 
 	// This function is used to close old connection (if any), release resouces used by old connection.
@@ -108,7 +116,7 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) *DurConn {
 			go connect(true)
 		}))
 
-		sc, err := stan.Connect(clusterID, c.id, opts...)
+		sc, err := stanConnect(clusterID, c.id, opts...)
 		if err != nil {
 			// Connect failed. Retry.
 			logger.Error().Err(err).Msg("Failed to connect.")
@@ -209,7 +217,7 @@ func (c *DurConn) QueueSubscribe(subject, group string, cb stan.MsgHandler, opts
 	c.mu.Lock()
 	if c.subs[key] != nil {
 		c.mu.Unlock()
-		return fmt.Errorf("nproto.msg: subject=%+q group=%+q has already subscribed", subject, group)
+		return fmt.Errorf("nproto.util.DurConn: subject=%+q group=%+q has already subscribed", subject, group)
 	}
 	c.subs[key] = sub
 	sc := c.sc
@@ -226,7 +234,7 @@ func (c *DurConn) QueueSubscribe(subject, group string, cb stan.MsgHandler, opts
 
 func (sub *subscription) queueSubscribeTo(sc stan.Conn, stalech chan struct{}) {
 	logger := sub.conn.options.logger.With().
-		Str("comp", "nproto.msg.DurConn.queueSubscribeTo").
+		Str("comp", "nproto.util.DurConn.queueSubscribeTo").
 		Str("subj", sub.subject).
 		Str("grp", sub.group).Logger()
 
