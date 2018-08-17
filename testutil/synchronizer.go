@@ -43,11 +43,10 @@ type TstSynchronizerController struct {
 	pending map[string][]*Yield // label -> list of pending yields
 }
 
-// TstSynchronizer is used for testing.
+// TstSynchronizer is used for testing. Each go routine should have one TstSynchronizer.
 type TstSynchronizer struct {
-	id      string
-	yieldC  chan *Yield
-	resumeC chan interface{}
+	ctrl *TstSynchronizerController
+	id   string
 }
 
 // Yield is raised from TstSynchronizer.Yield.
@@ -55,6 +54,7 @@ type Yield struct {
 	syncer  *TstSynchronizer
 	label   string
 	payload interface{}
+	resumeC chan interface{}
 	resumed bool
 }
 
@@ -69,9 +69,8 @@ func NewTstSynchronizerController() *TstSynchronizerController {
 // NewTstSynchronizer returns a new TstSynchronizer.
 func (c *TstSynchronizerController) NewTstSynchronizer() Synchronizer {
 	return &TstSynchronizer{
-		id:      nuid.Next(),
-		yieldC:  c.yieldC,
-		resumeC: make(chan interface{}),
+		id:   nuid.Next(),
+		ctrl: c,
 	}
 }
 
@@ -105,12 +104,14 @@ func (c *TstSynchronizerController) Expect(label string) *Yield {
 
 // Yield implements Synchronizer interface.
 func (s *TstSynchronizer) Yield(label string, payload interface{}) interface{} {
-	s.yieldC <- &Yield{
+	y := &Yield{
 		syncer:  s,
 		label:   label,
 		payload: payload,
+		resumeC: make(chan interface{}),
 	}
-	return <-s.resumeC
+	s.ctrl.yieldC <- y
+	return <-y.resumeC
 }
 
 // Resume the execution of the yield.
@@ -119,7 +120,7 @@ func (y *Yield) Resume(v interface{}) {
 		panic(ErrResume)
 	}
 	y.resumed = true
-	y.syncer.resumeC <- v
+	y.resumeC <- v
 }
 
 // Label returns the label of the yield.
