@@ -1,4 +1,4 @@
-package util
+package durconn
 
 import (
 	"errors"
@@ -9,8 +9,6 @@ import (
 	"github.com/nats-io/go-nats"
 	"github.com/nats-io/go-nats-streaming"
 	"github.com/nats-io/nuid"
-
-	"github.com/huangjunwen/nproto/testutil"
 )
 
 var (
@@ -21,7 +19,6 @@ var (
 // Can be mocked.
 var (
 	stanConnect = stan.Connect
-	newSyncer   = testutil.NewNoopSynchronizer
 )
 
 // DurConn provides re-connection/re-subscription functions on top of stan.DurConn.
