@@ -9,16 +9,23 @@ import (
 	"github.com/nats-io/go-nats"
 	"github.com/nats-io/go-nats-streaming"
 	"github.com/nats-io/nuid"
+
+	"github.com/huangjunwen/nproto/util"
+)
+
+const (
+	pkgName = "nproto.msg.durconn"
 )
 
 var (
-	ErrNotConnected   = errors.New("nproto.util.DurConn: not yet connected to streaming server")
-	ErrEmptyGroupName = errors.New("nproto.util.DurConn: empty group name")
+	ErrNotConnected   = errors.New(pkgName + ".DurConn: not yet connected to streaming server")
+	ErrEmptyGroupName = errors.New(pkgName + ".DurConn: empty group name")
 )
 
 // Can be mocked.
 var (
-	stanConnect = stan.Connect
+	stanConnect                      = stan.Connect
+	cfh         util.ControlFlowHook = util.ProdControlFlowHook{}
 )
 
 // DurConn provides re-connection/re-subscription functions on top of stan.DurConn.
@@ -26,16 +33,16 @@ var (
 type DurConn struct {
 	id        string
 	options   Options
-	connectMu sync.Mutex
+	connectMu sync.Mutex // sync between connect(s)/Close
 
-	mu      sync.RWMutex
-	sc      stan.Conn                   // nil if not connected
-	stalech chan struct{}               // stalech is closed when sc is staled
-	subs    map[[2]string]*subscription // (subject, group)->subscription
-	closed  bool                        // closed?
+	mu       sync.RWMutex
+	sc       stan.Conn                   // nil if not connected
+	scStaleC chan struct{}               // scStaleC is closed when sc is stale
+	subs     map[[2]string]*subscription // (subject, group)->subscription
+	closed   bool                        // closed or not
 }
 
-// subscription is a single subscription. Not support Unsubscribe.
+// subscription is a single subscription. NOTE: Not support Unsubscribe.
 type subscription struct {
 	conn *DurConn
 
@@ -46,7 +53,7 @@ type subscription struct {
 	options SubscriptionOptions
 }
 
-// NewDurConn creates a new DurConn. nc should have MaxReconnects < 0 set.
+// NewDurConn creates a new DurConn. nc should have MaxReconnects < 0 set (e.g. Always reconnect).
 func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) *DurConn {
 
 	c := &DurConn{
@@ -63,7 +70,7 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) *DurConn {
 
 	var (
 		connect func(bool)
-		logger  = c.options.logger.With().Str("comp", "nproto.util.DurConn.connect").Logger()
+		logger  = c.options.logger.With().Str("comp", pkgName+".NewDurConn.connect").Logger()
 	)
 
 	// This function is used to close old connection (if any), release resouces used by old connection.
@@ -82,23 +89,23 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) *DurConn {
 		{
 			c.mu.Lock()
 			sc := c.sc
-			stalech := c.stalech
+			scStaleC := c.scStaleC
 			closed := c.closed
 			c.sc = nil
-			c.stalech = nil
+			c.scStaleC = nil
 			c.mu.Unlock()
 
 			if sc != nil {
 				sc.Close()
 			}
-			if stalech != nil {
-				// Close stalech so other routines knows that the old sc is stale.
-				close(stalech)
+			if scStaleC != nil {
+				// Notify stale of sc.
+				close(scStaleC)
 			}
 
 			// DurConn has been closed.
 			if closed {
-				logger.Info().Msg("Conn closed. connect aborted.")
+				logger.Info().Msg("DurConn closed. connect aborted.")
 				return
 			}
 
@@ -127,10 +134,10 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) *DurConn {
 		defer c.mu.Unlock()
 
 		c.sc = sc
-		c.stalech = make(chan struct{})
+		c.scStaleC = make(chan struct{})
 
 		for _, sub := range c.subs {
-			go sub.queueSubscribeTo(c.sc, c.stalech)
+			go sub.queueSubscribeTo(c.sc, c.scStaleC)
 		}
 
 		return
@@ -150,9 +157,9 @@ func (c *DurConn) Close() {
 	// Set fields to blank. Set closed to true.
 	c.mu.Lock()
 	sc := c.sc
-	stalech := c.stalech
+	scStaleC := c.scStaleC
 	c.sc = nil
-	c.stalech = nil
+	c.scStaleC = nil
 	c.closed = true
 	c.mu.Unlock()
 
@@ -161,9 +168,9 @@ func (c *DurConn) Close() {
 		// NOTE: The callback (SetConnectionLostHandler) will not be invoked on normal Conn.Close().
 		sc.Close()
 	}
-	if stalech != nil {
-		// Close stalech.
-		close(stalech)
+	if scStaleC != nil {
+		// Close scStaleC.
+		close(scStaleC)
 	}
 
 	return
@@ -214,24 +221,24 @@ func (c *DurConn) QueueSubscribe(subject, group string, cb stan.MsgHandler, opts
 	c.mu.Lock()
 	if c.subs[key] != nil {
 		c.mu.Unlock()
-		return fmt.Errorf("nproto.util.DurConn: subject=%+q group=%+q has already subscribed", subject, group)
+		return fmt.Errorf("%s.DurConn: subject=%+q group=%+q has already subscribed", pkgName, subject, group)
 	}
 	c.subs[key] = sub
 	sc := c.sc
-	stalech := c.stalech
+	scStaleC := c.scStaleC
 	c.mu.Unlock()
 
 	// If sc is not nil, start to subscribe.
 	if sc != nil {
-		go sub.queueSubscribeTo(sc, stalech)
+		go sub.queueSubscribeTo(sc, scStaleC)
 	}
 	return nil
 
 }
 
-func (sub *subscription) queueSubscribeTo(sc stan.Conn, stalech chan struct{}) {
+func (sub *subscription) queueSubscribeTo(sc stan.Conn, scStaleC chan struct{}) {
 	logger := sub.conn.options.logger.With().
-		Str("comp", "nproto.util.DurConn.queueSubscribeTo").
+		Str("comp", pkgName+".subscription.queueSubscribeTo").
 		Str("subj", sub.subject).
 		Str("grp", sub.group).Logger()
 
@@ -256,7 +263,7 @@ func (sub *subscription) queueSubscribeTo(sc stan.Conn, stalech chan struct{}) {
 		// Wait a while.
 		t := time.NewTimer(sub.options.resubscribeWait)
 		select {
-		case <-stalech:
+		case <-scStaleC:
 			stale = true
 		case <-t.C:
 		}
