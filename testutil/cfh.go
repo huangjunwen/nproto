@@ -40,6 +40,15 @@ var (
 	_ util.ControlFlowHook = (*TestControlFlowHook)(nil)
 )
 
+// NewTestControlFlowHook creates a new TestControlFlowHook.
+func NewTestControlFlowHook() *TestControlFlowHook {
+	return &TestControlFlowHook{
+		ctrlC:        make(chan bool),
+		pendingCtrls: make([]*GoroutineController, 0),
+		ctrls:        make(map[uint64]*GoroutineController),
+	}
+}
+
 // Go implements ControlFlowHook interface.
 func (cfh *TestControlFlowHook) Go(label string, fn func()) {
 	go func() {
