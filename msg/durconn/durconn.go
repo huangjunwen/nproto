@@ -32,6 +32,8 @@ var (
 // It supports Publish/PublishAsync and durable QueueSubscribe (not support Unsubscribe).
 type DurConn struct {
 	id        string
+	nc        *nats.Conn
+	clusterID string
 	options   Options
 	connectMu sync.Mutex // sync between connect(s)/Close
 
@@ -57,25 +59,31 @@ type subscription struct {
 func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) *DurConn {
 
 	c := &DurConn{
-		id:      nuid.Next(),
-		options: NewOptions(),
-		subs:    make(map[[2]string]*subscription),
+		id:        nuid.Next(),
+		nc:        nc,
+		clusterID: clusterID,
+		options:   NewOptions(),
+		subs:      make(map[[2]string]*subscription),
 	}
 	for _, opt := range opts {
 		opt(&c.options)
 	}
 
-	// Add id.
+	// Add client id.
 	c.options.logger = c.options.logger.With().Str("client_id", c.id).Logger()
 
-	var (
-		connect func(bool)
-		logger  = c.options.logger.With().Str("comp", pkgName+".NewDurConn.connect").Logger()
-	)
+	// Start to connect.
+	c.connect(false)
+	return c
+}
 
-	// This function is used to close old connection (if any), release resouces used by old connection.
-	// Re-connect and re subscribe.
-	connect = func(wait bool) {
+// connect is used to close old connection (if any), release old resouces then
+// reconnect and resubscribe.
+func (c *DurConn) connect(wait bool) {
+	// Start a new routine to run.
+	cfh.Go("connect", func() {
+		logger := c.options.logger.With().Str("comp", pkgName+".DurConn.connect").Logger()
+
 		// Wait a while.
 		if wait {
 			time.Sleep(c.options.reconnectWait)
@@ -98,12 +106,13 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) *DurConn {
 			if sc != nil {
 				sc.Close()
 			}
+
 			if scStaleC != nil {
 				// Notify stale of sc.
 				close(scStaleC)
 			}
 
-			// DurConn has been closed.
+			// DurConn is closed.
 			if closed {
 				logger.Info().Msg("DurConn closed. connect aborted.")
 				return
@@ -114,17 +123,17 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) *DurConn {
 		// Start to connect.
 		opts := []stan.Option{}
 		opts = append(opts, c.options.stanOptions...)
-		opts = append(opts, stan.NatsConn(nc))
+		opts = append(opts, stan.NatsConn(c.nc))
 		opts = append(opts, stan.SetConnectionLostHandler(func(_ stan.Conn, _ error) {
 			// Reconnect when connection lost.
-			go connect(true)
+			c.connect(true)
 		}))
 
-		sc, err := stanConnect(clusterID, c.id, opts...)
+		sc, err := stanConnect(c.clusterID, c.id, opts...)
 		if err != nil {
-			// Connect failed. Retry.
+			// Reconnect when connection failed.
 			logger.Error().Err(err).Msg("Failed to connect.")
-			go connect(true)
+			c.connect(true)
 			return
 		}
 		logger.Info().Msg("Connected.")
@@ -135,17 +144,13 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) *DurConn {
 
 		c.sc = sc
 		c.scStaleC = make(chan struct{})
-
 		for _, sub := range c.subs {
-			go sub.queueSubscribeTo(c.sc, c.scStaleC)
+			c.queueSubscribe(sub, c.sc, c.scStaleC)
 		}
 
 		return
+	})
 
-	}
-
-	go connect(false)
-	return c
 }
 
 // Close DurConn.
@@ -168,6 +173,7 @@ func (c *DurConn) Close() {
 		// NOTE: The callback (SetConnectionLostHandler) will not be invoked on normal Conn.Close().
 		sc.Close()
 	}
+
 	if scStaleC != nil {
 		// Close scStaleC.
 		close(scStaleC)
@@ -218,55 +224,59 @@ func (c *DurConn) QueueSubscribe(subject, group string, cb stan.MsgHandler, opts
 
 	// Check duplication.
 	key := [2]string{subject, group}
+
 	c.mu.Lock()
 	if c.subs[key] != nil {
 		c.mu.Unlock()
 		return fmt.Errorf("%s.DurConn: subject=%+q group=%+q has already subscribed", pkgName, subject, group)
 	}
 	c.subs[key] = sub
-	sc := c.sc
-	scStaleC := c.scStaleC
+	if c.sc != nil {
+		// If sc is not nil, start to subscribe here.
+		c.queueSubscribe(sub, c.sc, c.scStaleC)
+	}
 	c.mu.Unlock()
 
-	// If sc is not nil, start to subscribe.
-	if sc != nil {
-		go sub.queueSubscribeTo(sc, scStaleC)
-	}
 	return nil
 
 }
 
-func (sub *subscription) queueSubscribeTo(sc stan.Conn, scStaleC chan struct{}) {
-	logger := sub.conn.options.logger.With().
-		Str("comp", pkgName+".subscription.queueSubscribeTo").
-		Str("subj", sub.subject).
-		Str("grp", sub.group).Logger()
+func (c *DurConn) queueSubscribe(sub *subscription, sc stan.Conn, scStaleC chan struct{}) {
 
-	// Group as DurableName
-	opts := []stan.SubscriptionOption{}
-	opts = append(opts, sub.options.stanOptions...)
-	opts = append(opts, stan.DurableName(sub.group))
+	cfh.Go("queueSubscribe", func() {
+		logger := sub.conn.options.logger.With().
+			Str("comp", pkgName+".DurConn.queueSubscribe").
+			Str("subj", sub.subject).
+			Str("grp", sub.group).Logger()
 
-	// Keep re-subscribing util stale become true if error.
-	stale := false
-	for !stale {
-		_, err := sc.QueueSubscribe(sub.subject, sub.group, sub.cb, opts...)
-		if err == nil {
-			// Normal case.
-			logger.Info().Msg("Subscribed.")
-			return
+		// Group as DurableName
+		opts := []stan.SubscriptionOption{}
+		opts = append(opts, sub.options.stanOptions...)
+		opts = append(opts, stan.DurableName(sub.group))
+
+		// Keep re-subscribing util stale become true.
+		stale := false
+		for !stale {
+			_, err := sc.QueueSubscribe(sub.subject, sub.group, sub.cb, opts...)
+			if err == nil {
+				// Normal case.
+				logger.Info().Msg("Subscribed.")
+				return
+			}
+
+			// Error case.
+			logger.Error().Err(err).Msg("Subscribe error.")
+
+			// Wait a while.
+			t := time.NewTimer(sub.options.resubscribeWait)
+			select {
+			case <-scStaleC:
+				stale = true
+			case <-t.C:
+			}
+			t.Stop()
 		}
 
-		// Error case.
-		logger.Error().Err(err).Msg("Subscribe error.")
+	})
 
-		// Wait a while.
-		t := time.NewTimer(sub.options.resubscribeWait)
-		select {
-		case <-scStaleC:
-			stale = true
-		case <-t.C:
-		}
-		t.Stop()
-	}
 }
