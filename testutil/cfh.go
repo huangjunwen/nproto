@@ -13,6 +13,7 @@ import (
 // TestControlFlowHook is used in testing.
 type TestControlFlowHook struct {
 	ctrlC        chan bool
+	wg           sync.WaitGroup
 	mu           sync.Mutex
 	pendingCtrls []*GoroutineController
 	ctrls        map[uint64]*GoroutineController // gid -> GoroutineController
@@ -51,6 +52,7 @@ func (cfh *TestControlFlowHook) Go(label string, fn func()) {
 		}
 
 		// Add.
+		cfh.wg.Add(1)
 		cfh.mu.Lock()
 		cfh.pendingCtrls = append(cfh.pendingCtrls, ctrl)
 		cfh.ctrls[ctrl.gid] = ctrl
@@ -62,6 +64,7 @@ func (cfh *TestControlFlowHook) Go(label string, fn func()) {
 			cfh.popPendingCtrl(func(c *GoroutineController) bool { return c.gid == ctrl.gid })
 			delete(cfh.ctrls, ctrl.gid)
 			cfh.mu.Unlock()
+			cfh.wg.Done()
 		}()
 
 		// Notify.
@@ -105,6 +108,11 @@ func (cfh *TestControlFlowHook) Suspend(label string, payload interface{}) inter
 		panic(fmt.Errorf("Suspending an unknown go routine %d. You must use ControlFlowHook.Go to start a go routine.", gid))
 	}
 	return ctrl.suspend(label, payload)
+}
+
+// Wait for all go routines exist.
+func (cfh *TestControlFlowHook) Wait() {
+	cfh.wg.Wait()
 }
 
 func (cfh *TestControlFlowHook) popPendingCtrl(check func(*GoroutineController) bool) *GoroutineController {
