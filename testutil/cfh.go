@@ -12,11 +12,10 @@ import (
 
 // TestControlFlowHook is used in testing.
 type TestControlFlowHook struct {
-	ctrlC        chan bool
-	wg           sync.WaitGroup
-	mu           sync.Mutex
-	pendingCtrls []*GoroutineController
-	ctrls        map[uint64]*GoroutineController // gid -> GoroutineController
+	captureC chan *GoroutineController
+	wg       sync.WaitGroup
+	mu       sync.Mutex
+	ctrls    map[uint64]*GoroutineController // gid -> GoroutineController
 }
 
 // GoroutineController is used to control suspensions of a go routine.
@@ -43,9 +42,8 @@ var (
 // NewTestControlFlowHook creates a new TestControlFlowHook.
 func NewTestControlFlowHook() *TestControlFlowHook {
 	return &TestControlFlowHook{
-		ctrlC:        make(chan bool),
-		pendingCtrls: make([]*GoroutineController, 0),
-		ctrls:        make(map[uint64]*GoroutineController),
+		captureC: make(chan *GoroutineController),
+		ctrls:    make(map[uint64]*GoroutineController),
 	}
 }
 
@@ -63,21 +61,22 @@ func (cfh *TestControlFlowHook) Go(label string, fn func()) {
 		// Add.
 		cfh.wg.Add(1)
 		cfh.mu.Lock()
-		cfh.pendingCtrls = append(cfh.pendingCtrls, ctrl)
 		cfh.ctrls[ctrl.gid] = ctrl
 		cfh.mu.Unlock()
 
 		// Remove
 		defer func() {
 			cfh.mu.Lock()
-			cfh.popPendingCtrl(func(c *GoroutineController) bool { return c.gid == ctrl.gid })
 			delete(cfh.ctrls, ctrl.gid)
+			close(ctrl.suspendC)
 			cfh.mu.Unlock()
 			cfh.wg.Done()
 		}()
 
-		// Notify.
-		cfh.ctrlC <- true
+		// Allow capture.
+		go func() {
+			cfh.captureC <- ctrl
+		}()
 
 		// First suspension.
 		ctrl.suspend("", nil)
@@ -89,19 +88,16 @@ func (cfh *TestControlFlowHook) Go(label string, fn func()) {
 // Capture captures a labeled go routine and return its controller (in suspension).
 func (cfh *TestControlFlowHook) Capture(label string) *GoroutineController {
 	for {
-		cfh.mu.Lock()
-		ctrl := cfh.popPendingCtrl(func(c *GoroutineController) bool {
-			return c.label == label
-		})
-		cfh.mu.Unlock()
-
-		if ctrl != nil {
+		ctrl := <-cfh.captureC
+		if ctrl.label == label {
 			// First expect.
 			ctrl.Expect("")
 			return ctrl
 		}
-		// Wait another.
-		<-cfh.ctrlC
+		go func() {
+			// Requeue.
+			cfh.captureC <- ctrl
+		}()
 	}
 }
 
@@ -114,7 +110,7 @@ func (cfh *TestControlFlowHook) Suspend(label string, payload interface{}) inter
 	cfh.mu.Unlock()
 
 	if ctrl == nil {
-		panic(fmt.Errorf("Suspending an unknown go routine %d. You must use ControlFlowHook.Go to start a go routine.", gid))
+		panic(fmt.Errorf("Suspending an unknown go routine %d. You must use TestControlFlowHook.Go to start a go routine.", gid))
 	}
 	return ctrl.suspend(label, payload)
 }
@@ -122,16 +118,6 @@ func (cfh *TestControlFlowHook) Suspend(label string, payload interface{}) inter
 // Wait for all go routines exist.
 func (cfh *TestControlFlowHook) Wait() {
 	cfh.wg.Wait()
-}
-
-func (cfh *TestControlFlowHook) popPendingCtrl(check func(*GoroutineController) bool) *GoroutineController {
-	for i, ctrl := range cfh.pendingCtrls {
-		if check(ctrl) {
-			cfh.pendingCtrls = append(cfh.pendingCtrls[:i], cfh.pendingCtrls[i+1:]...)
-			return ctrl
-		}
-	}
-	return nil
 }
 
 func (ctrl *GoroutineController) suspend(label string, payload interface{}) interface{} {
