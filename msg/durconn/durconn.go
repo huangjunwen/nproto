@@ -81,7 +81,7 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) *DurConn {
 // reconnect and resubscribe.
 func (c *DurConn) connect(wait bool) {
 	// Start a new routine to run.
-	cfh.Go("connect", func() {
+	cfh.Go("DurConn.connect", func() {
 		logger := c.options.logger.With().Str("comp", pkgName+".DurConn.connect").Logger()
 
 		// Wait a while.
@@ -93,31 +93,33 @@ func (c *DurConn) connect(wait bool) {
 		c.connectMu.Lock()
 		defer c.connectMu.Unlock()
 
-		// Set fields to blank and release old resources.
-		{
-			c.mu.Lock()
-			sc := c.sc
-			scStaleC := c.scStaleC
-			closed := c.closed
-			c.sc = nil
-			c.scStaleC = nil
+		// Reset and release old resources.
+		cfh.Suspend("DurConn.connect:before.reset", c)
+		c.mu.Lock()
+
+		// DurConn is closed. Abort.
+		if c.closed {
 			c.mu.Unlock()
+			cfh.Suspend("DurConn.connect:closed", c)
+			logger.Info().Msg("DurConn closed. connect aborted.")
+			return
+		}
 
-			if sc != nil {
-				sc.Close()
-			}
+		sc := c.sc
+		scStaleC := c.scStaleC
+		c.sc = nil
+		c.scStaleC = nil
 
-			if scStaleC != nil {
-				// Notify stale of sc.
-				close(scStaleC)
-			}
+		c.mu.Unlock()
+		cfh.Suspend("DurConn.connect:after.reset", c)
 
-			// DurConn is closed.
-			if closed {
-				logger.Info().Msg("DurConn closed. connect aborted.")
-				return
-			}
+		if sc != nil {
+			sc.Close()
+		}
 
+		if scStaleC != nil {
+			// Notify stale of sc.
+			close(scStaleC)
 		}
 
 		// Start to connect.
@@ -129,18 +131,21 @@ func (c *DurConn) connect(wait bool) {
 			c.connect(true)
 		}))
 
+		cfh.Suspend("DurConn.connect:before.connect", c)
 		sc, err := stanConnect(c.clusterID, c.id, opts...)
 		if err != nil {
 			// Reconnect when connection failed.
 			logger.Error().Err(err).Msg("Failed to connect.")
+			cfh.Suspend("DurConn.connect:connect.failed", c)
 			c.connect(true)
 			return
 		}
 		logger.Info().Msg("Connected.")
+		cfh.Suspend("DurConn.connect:connect.ok", c)
 
 		// Connected. Update fields and start to re-subscribe.
+		cfh.Suspend("DurConn.connect:before.update", c)
 		c.mu.Lock()
-		defer c.mu.Unlock()
 
 		c.sc = sc
 		c.scStaleC = make(chan struct{})
@@ -148,6 +153,8 @@ func (c *DurConn) connect(wait bool) {
 			c.queueSubscribe(sub, c.sc, c.scStaleC)
 		}
 
+		c.mu.Unlock()
+		cfh.Suspend("DurConn.connect:after.update", c)
 		return
 	})
 
@@ -160,6 +167,7 @@ func (c *DurConn) Close() {
 	defer c.connectMu.Unlock()
 
 	// Set fields to blank. Set closed to true.
+	cfh.Suspend("DurConn.Close:before.reset", c)
 	c.mu.Lock()
 	sc := c.sc
 	scStaleC := c.scStaleC
@@ -167,6 +175,7 @@ func (c *DurConn) Close() {
 	c.scStaleC = nil
 	c.closed = true
 	c.mu.Unlock()
+	cfh.Suspend("DurConn.Close:after.reset", c)
 
 	if sc != nil {
 		// Close old sc.
@@ -225,9 +234,12 @@ func (c *DurConn) QueueSubscribe(subject, group string, cb stan.MsgHandler, opts
 	// Check duplication.
 	key := [2]string{subject, group}
 
+	cfh.Suspend("DurConn.QueueSubscribe:before.subscribe", c)
 	c.mu.Lock()
+
 	if c.subs[key] != nil {
 		c.mu.Unlock()
+		cfh.Suspend("DurConn.QueueSubscribe:duplicate.subscribe", c)
 		return fmt.Errorf("%s.DurConn: subject=%+q group=%+q has already subscribed", pkgName, subject, group)
 	}
 	c.subs[key] = sub
@@ -235,7 +247,9 @@ func (c *DurConn) QueueSubscribe(subject, group string, cb stan.MsgHandler, opts
 		// If sc is not nil, start to subscribe here.
 		c.queueSubscribe(sub, c.sc, c.scStaleC)
 	}
+
 	c.mu.Unlock()
+	cfh.Suspend("DurConn.QueueSubscribe:after.subscribe", c)
 
 	return nil
 
@@ -243,7 +257,7 @@ func (c *DurConn) QueueSubscribe(subject, group string, cb stan.MsgHandler, opts
 
 func (c *DurConn) queueSubscribe(sub *subscription, sc stan.Conn, scStaleC chan struct{}) {
 
-	cfh.Go("queueSubscribe", func() {
+	cfh.Go("DurConn.queueSubscribe", func() {
 		logger := sub.conn.options.logger.With().
 			Str("comp", pkgName+".DurConn.queueSubscribe").
 			Str("subj", sub.subject).
@@ -259,6 +273,7 @@ func (c *DurConn) queueSubscribe(sub *subscription, sc stan.Conn, scStaleC chan 
 		for !stale {
 			_, err := sc.QueueSubscribe(sub.subject, sub.group, sub.cb, opts...)
 			if err == nil {
+				cfh.Suspend("DurConn.queueSubscribe:ok", c)
 				// Normal case.
 				logger.Info().Msg("Subscribed.")
 				return
@@ -276,6 +291,7 @@ func (c *DurConn) queueSubscribe(sub *subscription, sc stan.Conn, scStaleC chan 
 			}
 			t.Stop()
 		}
+		cfh.Suspend("DurConn.queueSubscribe:stale", c)
 
 	})
 
