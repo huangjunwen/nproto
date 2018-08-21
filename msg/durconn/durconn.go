@@ -18,7 +18,9 @@ const (
 )
 
 var (
-	ErrNotConnected   = errors.New(pkgName + ".DurConn: not yet connected to streaming server")
+	// ErrNotConnected is returned when the underly stan.Conn is not ready.
+	ErrNotConnected = errors.New(pkgName + ".DurConn: not yet connected to streaming server")
+	// ErrEmptyGroupName is returned when an empty group name is provided in subscription.
 	ErrEmptyGroupName = errors.New(pkgName + ".DurConn: empty group name")
 )
 

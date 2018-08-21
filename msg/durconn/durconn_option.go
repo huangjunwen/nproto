@@ -8,9 +8,9 @@ import (
 )
 
 var (
-	// Default interval between reconnections.
+	// DefaultReconnectWait is the interval between reconnections.
 	DefaultReconnectWait = 5 * time.Second
-	// Default interval between resubscriptions.
+	// DefaultResubscribeWait is the interval between resubscriptions.
 	DefaultResubscribeWait = 5 * time.Second
 )
 
