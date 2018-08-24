@@ -1,4 +1,4 @@
-package durconn
+package libmsg
 
 import (
 	"errors"
@@ -9,70 +9,78 @@ import (
 	"github.com/nats-io/go-nats"
 	"github.com/nats-io/go-nats-streaming"
 	"github.com/nats-io/nuid"
-
-	"github.com/huangjunwen/nproto/util"
+	"github.com/rs/zerolog"
 )
 
-const (
-	pkgName = "nproto.msg.durconn"
+var (
+	DefaultDurConnReconnectWait  = 5 * time.Second
+	DefaultDurConnSubsResubsWait = 5 * time.Second
 )
 
 var (
 	// ErrNotConnected is returned when the underly stan.Conn is not ready.
-	ErrNotConnected = errors.New(pkgName + ".DurConn: not yet connected to streaming server")
+	ErrNotConnected = errors.New("nproto.libmsg.DurConn: not yet connected to streaming server")
 	// ErrEmptyGroupName is returned when an empty group name is provided in subscription.
-	ErrEmptyGroupName = errors.New(pkgName + ".DurConn: empty group name")
+	ErrEmptyGroupName = errors.New("nproto.libmsg.DurConn: empty group name")
 )
 
-// Can be mocked.
-var (
-	stanConnect                      = stan.Connect
-	cfh         util.ControlFlowHook = util.ProdControlFlowHook{}
-)
-
-// DurConn provides re-connection/re-subscription functions on top of stan.DurConn.
-// It supports Publish/PublishAsync and durable QueueSubscribe (not support Unsubscribe).
+// DurConn provides re-connection/re-subscription functions on top of stan.Conn.
+// It supports Publish/PublishAsync and durable QueueSubscribe (not support Unsubscribing).
 type DurConn struct {
+	// Options.
+	stanOptions   []stan.Option
+	reconnectWait time.Duration
+	logger        zerolog.Logger
+
+	// Immutable fields.
 	id        string
 	nc        *nats.Conn
 	clusterID string
-	options   Options
-	connectMu sync.Mutex // sync between connect(s)/Close
 
+	// Only one connect/Close can be run at any time.
+	connectMu sync.Mutex
+
+	// Mutable fields
 	mu       sync.RWMutex
-	sc       stan.Conn                   // nil if not connected
+	sc       stan.Conn                   // nil if not connected/reconnecting
 	scStaleC chan struct{}               // scStaleC is closed when sc is stale
 	subs     map[[2]string]*subscription // (subject, group)->subscription
-	closed   bool                        // closed or not
+	closed   bool
 }
 
-// subscription is a single subscription. NOTE: Not support Unsubscribe.
+// subscription is a single subscription. NOTE: Not support Unsubscribing.
 type subscription struct {
-	conn *DurConn
+	// Options.
+	stanOptions []stan.SubscriptionOption
+	resubsWait  time.Duration
 
+	// Immutable fields.
+	conn    *DurConn
 	subject string
 	group   string
 	cb      stan.MsgHandler
-
-	options SubscriptionOptions
 }
 
+// DurConnOption is the option in creating DurConn.
+type DurConnOption func(*DurConn)
+
+// DurConnSubsOption is the option in DurConn.QueueSubscribe.
+type DurConnSubsOption func(*subscription)
+
 // NewDurConn creates a new DurConn. nc should have MaxReconnects < 0 set (e.g. Always reconnect).
-func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) *DurConn {
+func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) *DurConn {
 
 	c := &DurConn{
-		id:        nuid.Next(),
-		nc:        nc,
-		clusterID: clusterID,
-		options:   NewOptions(),
-		subs:      make(map[[2]string]*subscription),
+		reconnectWait: DefaultDurConnReconnectWait,
+		logger:        zerolog.Nop(),
+		id:            nuid.Next(), // UUID as client id
+		nc:            nc,
+		clusterID:     clusterID,
+		subs:          make(map[[2]string]*subscription),
 	}
 	for _, opt := range opts {
-		opt(&c.options)
+		opt(c)
 	}
-
-	// Add client id.
-	c.options.logger = c.options.logger.With().Str("client_id", c.id).Logger()
 
 	// Start to connect.
 	c.connect(false)
@@ -84,11 +92,11 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) *DurConn {
 func (c *DurConn) connect(wait bool) {
 	// Start a new routine to run.
 	cfh.Go("DurConn.connect", func() {
-		logger := c.options.logger.With().Str("comp", pkgName+".DurConn.connect").Logger()
+		logger := c.logger.With().Str("fn", "connect").Logger()
 
 		// Wait a while.
 		if wait {
-			time.Sleep(c.options.reconnectWait)
+			time.Sleep(c.reconnectWait)
 		}
 
 		// At most one connect is allowed to run at any time.
@@ -103,7 +111,7 @@ func (c *DurConn) connect(wait bool) {
 		if c.closed {
 			c.mu.Unlock()
 			cfh.Suspend("DurConn.connect:closed", c)
-			logger.Info().Msg("DurConn closed. connect aborted.")
+			logger.Info().Msg("Closed. Abort connection.")
 			return
 		}
 
@@ -126,7 +134,7 @@ func (c *DurConn) connect(wait bool) {
 
 		// Start to connect.
 		opts := []stan.Option{}
-		opts = append(opts, c.options.stanOptions...)
+		opts = append(opts, c.stanOptions...)
 		opts = append(opts, stan.NatsConn(c.nc))
 		opts = append(opts, stan.SetConnectionLostHandler(func(_ stan.Conn, _ error) {
 			// Reconnect when connection lost.
@@ -137,8 +145,8 @@ func (c *DurConn) connect(wait bool) {
 		sc, err := stanConnect(c.clusterID, c.id, opts...)
 		if err != nil {
 			// Reconnect when connection failed.
-			logger.Error().Err(err).Msg("Failed to connect.")
 			cfh.Suspend("DurConn.connect:connect.failed", c)
+			logger.Error().Err(err).Msg("Fail to connect.")
 			c.connect(true)
 			return
 		}
@@ -217,20 +225,20 @@ func (c *DurConn) PublishAsync(subject string, data []byte, ah stan.AckHandler) 
 
 // QueueSubscribe creates a durable queue subscription. Will be re-subscription after reconnection.
 // Can't unsubscribe. This function returns error only when parameter error.
-func (c *DurConn) QueueSubscribe(subject, group string, cb stan.MsgHandler, opts ...SubscriptionOption) error {
+func (c *DurConn) QueueSubscribe(subject, group string, cb stan.MsgHandler, opts ...DurConnSubsOption) error {
 	if group == "" {
 		return ErrEmptyGroupName
 	}
 
 	sub := &subscription{
-		conn:    c,
-		subject: subject,
-		group:   group,
-		cb:      cb,
-		options: NewSubscriptionOptions(),
+		resubsWait: DefaultDurConnSubsResubsWait,
+		conn:       c,
+		subject:    subject,
+		group:      group,
+		cb:         cb,
 	}
 	for _, opt := range opts {
-		opt(&sub.options)
+		opt(sub)
 	}
 
 	// Check duplication.
@@ -242,7 +250,7 @@ func (c *DurConn) QueueSubscribe(subject, group string, cb stan.MsgHandler, opts
 	if c.subs[key] != nil {
 		c.mu.Unlock()
 		cfh.Suspend("DurConn.QueueSubscribe:duplicate.subscribe", c)
-		return fmt.Errorf("%s.DurConn: subject=%+q group=%+q has already subscribed", pkgName, subject, group)
+		return fmt.Errorf("nproto.libmsg.DurConn: subject=%+q group=%+q has already subscribed", subject, group)
 	}
 	c.subs[key] = sub
 	if c.sc != nil {
@@ -260,14 +268,13 @@ func (c *DurConn) QueueSubscribe(subject, group string, cb stan.MsgHandler, opts
 func (c *DurConn) queueSubscribe(sub *subscription, sc stan.Conn, scStaleC chan struct{}) {
 
 	cfh.Go("DurConn.queueSubscribe", func() {
-		logger := sub.conn.options.logger.With().
-			Str("comp", pkgName+".DurConn.queueSubscribe").
+		logger := sub.conn.logger.With().Str("fn", "queueSubscribe").
 			Str("subj", sub.subject).
 			Str("grp", sub.group).Logger()
 
 		// Group as DurableName
 		opts := []stan.SubscriptionOption{}
-		opts = append(opts, sub.options.stanOptions...)
+		opts = append(opts, sub.stanOptions...)
 		opts = append(opts, stan.DurableName(sub.group))
 
 		// Keep re-subscribing util stale become true.
@@ -285,7 +292,7 @@ func (c *DurConn) queueSubscribe(sub *subscription, sc stan.Conn, scStaleC chan 
 			logger.Error().Err(err).Msg("Subscribe error.")
 
 			// Wait a while.
-			t := time.NewTimer(sub.options.resubscribeWait)
+			t := time.NewTimer(sub.resubsWait)
 			select {
 			case <-scStaleC:
 				stale = true
@@ -297,4 +304,71 @@ func (c *DurConn) queueSubscribe(sub *subscription, sc stan.Conn, scStaleC chan 
 
 	})
 
+}
+
+// DurConnOptConnectWait sets connection wait.
+func DurConnOptConnectWait(t time.Duration) DurConnOption {
+	return func(c *DurConn) {
+		c.stanOptions = append(c.stanOptions, stan.ConnectWait(t))
+	}
+}
+
+// DurConnOptPubAckWait sets publish ack time wait.
+func DurConnOptPubAckWait(t time.Duration) DurConnOption {
+	return func(c *DurConn) {
+		c.stanOptions = append(c.stanOptions, stan.PubAckWait(t))
+	}
+}
+
+// DurConnOptPings sets ping
+func DurConnOptPings(interval, maxOut int) DurConnOption {
+	return func(c *DurConn) {
+		c.stanOptions = append(c.stanOptions, stan.Pings(interval, maxOut))
+	}
+}
+
+// DurConnOptReconnectWait sets reconnection wait.
+func DurConnOptReconnectWait(t time.Duration) DurConnOption {
+	return func(c *DurConn) {
+		c.reconnectWait = t
+	}
+}
+
+// DurConnOptLogger sets logger.
+func DurConnOptLogger(logger *zerolog.Logger) DurConnOption {
+	return func(c *DurConn) {
+		if logger == nil {
+			nop := zerolog.Nop()
+			logger = &nop
+		}
+		c.logger = logger.With().Str("comp", "nproto.libmsg.DurConn").Logger()
+	}
+}
+
+// DurConnSubsOptMaxInflight sets max message that can be sent to subscriber before ack
+func DurConnSubsOptMaxInflight(m int) DurConnSubsOption {
+	return func(s *subscription) {
+		s.stanOptions = append(s.stanOptions, stan.MaxInflight(m))
+	}
+}
+
+// DurConnSubsOptAckWait sets server side ack wait.
+func DurConnSubsOptAckWait(t time.Duration) DurConnSubsOption {
+	return func(s *subscription) {
+		s.stanOptions = append(s.stanOptions, stan.AckWait(t))
+	}
+}
+
+// DurConnSubsOptManualAcks sets to manual ack mode.
+func DurConnSubsOptManualAcks() DurConnSubsOption {
+	return func(s *subscription) {
+		s.stanOptions = append(s.stanOptions, stan.SetManualAckMode())
+	}
+}
+
+// DurConnSubsOptResubscribeWait sets resubscriptions wait.
+func DurConnSubsOptResubsWait(t time.Duration) DurConnSubsOption {
+	return func(s *subscription) {
+		s.resubsWait = t
+	}
 }

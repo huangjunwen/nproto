@@ -2,8 +2,10 @@ package libmsg
 
 import (
 	"github.com/huangjunwen/nproto/util"
+	"github.com/nats-io/go-nats-streaming"
 )
 
 var (
-	cfh util.ControlFlowHook = util.ProdControlFlowHook{}
+	stanConnect                      = stan.Connect
+	cfh         util.ControlFlowHook = util.ProdControlFlowHook{}
 )

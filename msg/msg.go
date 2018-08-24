@@ -169,6 +169,10 @@ func MsgConnectorOptFetchInterval(fetchInterval time.Duration) MsgConnectorOptio
 // MsgConnectorOptLogger sets the logger.
 func MsgConnectorOptLogger(logger *zerolog.Logger) MsgConnectorOption {
 	return func(connector *MsgConnector) {
+		if logger == nil {
+			nop := zerolog.Nop()
+			logger = &nop
+		}
 		connector.logger = logger.With().Str("comp", "nproto.libmsg.MsgConnector").Logger()
 	}
 }
