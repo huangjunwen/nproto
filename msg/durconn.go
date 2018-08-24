@@ -25,7 +25,7 @@ var (
 )
 
 // DurConn provides re-connection/re-subscription functions on top of stan.Conn.
-// It supports Publish/PublishAsync and durable QueueSubscribe (not support Unsubscribing).
+// It supports Publish/PublishAsync and durable QueueSubscribe (not support unsubscribing).
 type DurConn struct {
 	// Options.
 	stanOptions   []stan.Option
@@ -37,7 +37,7 @@ type DurConn struct {
 	nc        *nats.Conn
 	clusterID string
 
-	// Only one connect/Close can be run at any time.
+	// At most one connect/Close can be run at any time.
 	connectMu sync.Mutex
 
 	// Mutable fields
@@ -48,7 +48,7 @@ type DurConn struct {
 	closed   bool
 }
 
-// subscription is a single subscription. NOTE: Not support Unsubscribing.
+// subscription is a single subscription. NOTE: Not support unsubscribing.
 type subscription struct {
 	// Options.
 	stanOptions []stan.SubscriptionOption
@@ -179,11 +179,13 @@ func (c *DurConn) Close() {
 	// Set fields to blank. Set closed to true.
 	cfh.Suspend("DurConn.Close:before.reset", c)
 	c.mu.Lock()
+
 	sc := c.sc
 	scStaleC := c.scStaleC
 	c.sc = nil
 	c.scStaleC = nil
 	c.closed = true
+
 	c.mu.Unlock()
 	cfh.Suspend("DurConn.Close:after.reset", c)
 
