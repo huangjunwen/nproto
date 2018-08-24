@@ -67,6 +67,10 @@ type DurConnOption func(*DurConn)
 // DurConnSubsOption is the option in DurConn.QueueSubscribe.
 type DurConnSubsOption func(*subscription)
 
+var (
+	_ MsgSink = (*DurConn)(nil)
+)
+
 // NewDurConn creates a new DurConn. nc should have MaxReconnects < 0 set (e.g. Always reconnect).
 func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) *DurConn {
 
@@ -305,6 +309,54 @@ func (c *DurConn) queueSubscribe(sub *subscription, sc stan.Conn, scStaleC chan 
 		cfh.Suspend("DurConn.queueSubscribe:stale", c)
 
 	})
+
+}
+
+// Deliver implements MsgSink interface.
+func (c *DurConn) Deliver(msgs []Msg, delivered []bool) {
+	logger := c.logger.With().Str("fn", "Deliver").Logger()
+
+	// Use a wait group for message delivery.
+	wg := &sync.WaitGroup{}
+	wg.Add(len(msgs))
+
+	// Ack handler to record successful delivery.
+	mu := &sync.Mutex{}
+	successIds := []string{} // List of successful delivered ids.
+	ackHandler := func(id string, err error) {
+		if err == nil {
+			mu.Lock()
+			successIds = append(successIds, id)
+			mu.Unlock()
+		}
+		wg.Done()
+	}
+
+	// Batch publish.
+	id2i := map[string]int{} // id -> msg index
+	errs := 0
+	for i, msg := range msgs {
+		id, err := c.PublishAsync(msg.Subject(), msg.Data(), ackHandler)
+		if err != nil {
+			errs++
+			logger.Error().Err(err).Msg("")
+		} else {
+			id2i[id] = i
+		}
+	}
+
+	// Subtract errs.
+	if errs > 0 {
+		wg.Add(-errs)
+	}
+
+	// Wait...
+	wg.Wait()
+
+	// Process result.
+	for _, id := range successIds {
+		delivered[id2i[id]] = true
+	}
 
 }
 
