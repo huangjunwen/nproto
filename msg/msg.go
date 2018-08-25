@@ -44,7 +44,7 @@ type MsgConnector struct {
 	stopC chan struct{}
 	kickC chan struct{}
 
-	// options.
+	// Options.
 	batch         int
 	fetchInterval time.Duration
 	logger        zerolog.Logger
