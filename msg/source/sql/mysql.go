@@ -54,7 +54,8 @@ func (dialect *mysqlDialect) DeleteStmt(ids []int) (string, []interface{}) {
 	return fmt.Sprintf("DELETE FROM `%s` WHERE id IN (%s)", dialect.tableName, phs), args
 }
 
-// NewMySQLMsgSource creates a SQLMsgSource backed by MySQL.
+// NewMySQLMsgSource creates a SQLMsgSource backed by MySQL. `tableName` is the mysql table to store messages.
+// It will be created if not exists.
 func NewMySQLMsgSource(db *sql.DB, tableName string, opts ...SQLMsgSourceOption) (*SQLMsgSource, error) {
 	return newSQLMsgSource(newMySQLDialect, db, tableName, opts...)
 }

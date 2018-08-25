@@ -71,7 +71,8 @@ func newSQLMsgSource(dialectFactory func(string) sqlMsgSourceDialect, db *sql.DB
 
 }
 
-// Store stores a message to be delivered.
+// Store stores a message to be delivered. Usually this method is called inside a tx
+// so that the message is committed together with other data.
 func (src *SQLMsgSource) Store(ctx context.Context, q Queryer, subject string, data []byte) error {
 	query, args := src.dialect.InsertStmt(subject, data)
 	_, err := q.ExecContext(ctx, query, args...)
