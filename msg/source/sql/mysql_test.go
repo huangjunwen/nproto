@@ -21,14 +21,10 @@ func TestMySQLDialect(t *testing.T) {
 	assert.Equal("INSERT INTO `_msg_` (subject, data) VALUES (?, ?)", dialect.insertStmt)
 	assert.Equal("SELECT id, subject, data FROM `_msg_` ORDER BY id", dialect.selectStmt)
 	{
-		query, args := dialect.DeleteStmt([]int{})
-		assert.Equal("DELETE FROM `_msg_` WHERE id IN ()", query)
-		assert.Empty(args)
+		assert.Equal("DELETE FROM `_msg_` WHERE id IN ()", dialect.DeleteStmt(0))
 	}
 	{
-		query, args := dialect.DeleteStmt([]int{1, 2, 3})
-		assert.Equal("DELETE FROM `_msg_` WHERE id IN (?, ?, ?)", query)
-		assert.Len(args, 3)
+		assert.Equal("DELETE FROM `_msg_` WHERE id IN (?, ?, ?)", dialect.DeleteStmt(3))
 	}
 
 }

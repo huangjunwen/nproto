@@ -32,26 +32,24 @@ func (dialect *mysqlDialect) CreateStmt() string {
 	return dialect.createStmt
 }
 
-func (dialect *mysqlDialect) InsertStmt(subject string, data []byte) (string, []interface{}) {
-	return dialect.insertStmt, []interface{}{subject, data}
+func (dialect *mysqlDialect) InsertStmt() string {
+	return dialect.insertStmt
 }
 
 func (dialect *mysqlDialect) SelectStmt() string {
 	return dialect.selectStmt
 }
 
-func (dialect *mysqlDialect) DeleteStmt(ids []int) (string, []interface{}) {
-	args := []interface{}{}
+func (dialect *mysqlDialect) DeleteStmt(n int) string {
 	phs := []byte{}
-	for i, id := range ids {
-		args = append(args, id)
+	for i := 0; i < n; i++ {
 		if i != 0 {
 			phs = append(phs, ", "...)
 		}
 		phs = append(phs, '?')
 	}
 
-	return fmt.Sprintf("DELETE FROM `%s` WHERE id IN (%s)", dialect.tableName, phs), args
+	return fmt.Sprintf("DELETE FROM `%s` WHERE id IN (%s)", dialect.tableName, phs)
 }
 
 // NewMySQLMsgSource creates a SQLMsgSource backed by MySQL. `tableName` is the mysql table to store messages.

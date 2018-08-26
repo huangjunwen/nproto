@@ -28,9 +28,9 @@ type Queryer interface {
 
 type sqlMsgSourceDialect interface {
 	CreateStmt() string
-	InsertStmt(subject string, data []byte) (string, []interface{})
+	InsertStmt() string
 	SelectStmt() string
-	DeleteStmt(ids []int) (string, []interface{})
+	DeleteStmt(n int) string
 }
 
 type sqlMsg struct {
@@ -74,8 +74,7 @@ func newSQLMsgSource(dialectFactory func(string) sqlMsgSourceDialect, db *sql.DB
 // Store stores a message to be delivered. Usually this method is called inside a tx
 // so that the message is committed together with other data.
 func (src *SQLMsgSource) Store(ctx context.Context, q Queryer, subject string, data []byte) error {
-	query, args := src.dialect.InsertStmt(subject, data)
-	_, err := q.ExecContext(ctx, query, args...)
+	_, err := q.ExecContext(ctx, src.dialect.InsertStmt(), subject, data)
 	return err
 }
 
@@ -113,7 +112,7 @@ func (src *SQLMsgSource) DeliverResult(msgs []libmsg.Msg, delivered []bool) {
 
 	logger := src.logger.With().Str("fn", "DeliverResult").Logger()
 
-	ids := []int{}
+	ids := []interface{}{}
 	for i, msg := range msgs {
 		if !delivered[i] {
 			continue
@@ -125,8 +124,7 @@ func (src *SQLMsgSource) DeliverResult(msgs []libmsg.Msg, delivered []bool) {
 		return
 	}
 
-	query, args := src.dialect.DeleteStmt(ids)
-	_, err := src.db.Exec(query, args...)
+	_, err := src.db.Exec(src.dialect.DeleteStmt(len(ids)), ids...)
 	if err != nil {
 		logger.Error().Err(err).Msg("")
 	}
