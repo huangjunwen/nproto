@@ -234,8 +234,9 @@ func (c *DurConn) PublishAsync(subject string, data []byte, ah stan.AckHandler) 
 	return sc.PublishAsync(subject, data, ah)
 }
 
-// QueueSubscribe creates a durable queue subscription. Will be re-subscription after reconnection.
-// Can't unsubscribe. This function returns error only when parameter error.
+// QueueSubscribe creates a durable queue subscription with manual ack mode on.
+// Will be re-subscription after reconnection. Can't be unsubscribed.
+// This function returns error only when parameter error.
 func (c *DurConn) QueueSubscribe(subject, group string, cb stan.MsgHandler, opts ...DurConnSubsOption) error {
 	if group == "" {
 		return ErrEmptyGroupName
@@ -288,6 +289,7 @@ func (c *DurConn) queueSubscribe(sub *subscription, sc stan.Conn, scStaleC chan 
 		// Group as DurableName
 		opts := []stan.SubscriptionOption{}
 		opts = append(opts, sub.stanOptions...)
+		opts = append(opts, stan.SetManualAckMode())
 		opts = append(opts, stan.DurableName(sub.group))
 
 		// Keep re-subscribing util stale become true.
@@ -423,14 +425,6 @@ func DurConnSubsOptMaxInflight(m int) DurConnSubsOption {
 func DurConnSubsOptAckWait(t time.Duration) DurConnSubsOption {
 	return func(s *subscription) error {
 		s.stanOptions = append(s.stanOptions, stan.AckWait(t))
-		return nil
-	}
-}
-
-// DurConnSubsOptManualAcks sets to manual ack mode.
-func DurConnSubsOptManualAcks() DurConnSubsOption {
-	return func(s *subscription) error {
-		s.stanOptions = append(s.stanOptions, stan.SetManualAckMode())
 		return nil
 	}
 }
