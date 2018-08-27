@@ -10,7 +10,6 @@ import (
 
   "github.com/golang/protobuf/proto"
   "github.com/huangjunwen/nproto/rpc"
-
   {{ range $file.Dependency -}}
     {{ (. | getProtoFile).GoPkg }}
   {{ end -}}
@@ -26,27 +25,27 @@ import (
     {{ end }}
   }
 
-  // Serve{{ $svc.Name }} use rpc server to serve service {{ $svc.Name }}.
-  func Serve{{ $svc.Name }}(svc {{ $svc.Name }}, server rpc.RPCServer) error {
-    return server.RegistSvc("{{ $svc.Name }}", map[*rpc.RPCMethod]rpc.RPCHandler{
+  // Serve{{ $svc.Name }} use rpc server to serve {{ $svc.Name }} service.
+  func Serve{{ $svc.Name }}(server nprpc.RPCServer, svc {{ $svc.Name }}) error {
+    return server.RegistSvc("{{ $svc.Name }}", map[*nprpc.RPCMethod]nprpc.RPCHandler{
       {{ range $svc.Method -}}
-        method{{ $svc.Name }}_{{ .Name }}: func(ctx context.Context, input proto.Message) (proto.Message, error) {
+        method{{ $svc.Name }}__{{ .Name }}: func(ctx context.Context, input proto.Message) (proto.Message, error) {
           return svc.{{ .Name }}(ctx, input.(*{{ (.InputType | getMessageType $file).GoType $currentPath }}))
         },
       {{ end -}}
     })
   }
 
-  // Client{{ $svc.Name }} use rpc client to create service {{ $svc.Name }}.
-  func Client{{ $svc.Name }}(client rpc.RPCClient) {{ $svc.Name }} {
+  // New{{ $svc.Name }}Client use rpc client to create {{ $svc.Name }} service.
+  func New{{ $svc.Name }}Client(client nprpc.RPCClient) {{ $svc.Name }} {
     return &client{{ $svc.Name }}{
       client: client,
     }
   }
 
   {{ range $svc.Method -}}
-    // method{{ $svc.Name }}_{{ .Name }} is descriptor of method {{ $svc.Name }}.{{ .Name }}.
-    var method{{ $svc.Name }}_{{ .Name }} = &rpc.RPCMethod{
+    // method{{ $svc.Name }}__{{ .Name }} is descriptor of method {{ $svc.Name }}.{{ .Name }}.
+    var method{{ $svc.Name }}__{{ .Name }} = &nprpc.RPCMethod{
       Name: "{{ .Name }}",
       NewInput: func() proto.Message { return &{{ (.InputType | getMessageType $file).GoType $currentPath }}{} },
       NewOutput: func() proto.Message { return &{{ (.OutputType | getMessageType $file).GoType $currentPath }}{} },
@@ -55,9 +54,9 @@ import (
 
   // client{{ $svc.Name }} implements {{ $svc.Name }} interface.
   type client{{ $svc.Name }} struct {
-    client rpc.RPCClient
+    client nprpc.RPCClient
     {{ range $svc.Method -}}
-      handler{{ .Name }} atomic.Value // rpc.RPCHandler
+      handler{{ .Name }} atomic.Value // nprpc.RPCHandler
     {{ end -}}
   }
 
@@ -66,10 +65,11 @@ import (
     func (svc *client{{ $svc.Name }}) {{ .Name }}(ctx context.Context, input *{{ (.InputType | getMessageType $file).GoType $currentPath }}) (*{{ (.OutputType | getMessageType $file).GoType $currentPath }}, error) {
       v := svc.handler{{ .Name }}.Load()
       if v == nil {
-        v = svc.client.MakeHandler("{{ $svc.Name }}", method{{ $svc.Name }}_{{ .Name }})
+        // NOTE: This branch maybe entered several times but ok.
+        v = svc.client.MakeHandler("{{ $svc.Name }}", method{{ $svc.Name }}__{{ .Name }})
         svc.handler{{ .Name }}.Store(v)
       }
-      output, err := v.(rpc.RPCHandler)(ctx, input)
+      output, err := v.(nprpc.RPCHandler)(ctx, input)
       if err != nil {
         return nil, err
       }
@@ -84,6 +84,6 @@ var (
   _ = context.Background
   _ = atomic.AddInt32
   _ = proto.Marshal
-  _ = rpc.Passthru
+  _ = nprpc.Passthru
 )
 
