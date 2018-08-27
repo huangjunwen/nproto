@@ -200,7 +200,7 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*RPCMethod]R
 	prefix := server.nameConv(svcName) + "."
 
 	return func(msg *nats.Msg) {
-		go func() {
+		cfh.Go("NatsRPCServer.msgHandler", func() {
 			// Subject should be in the form of "subj.enc.method".
 			// Extract encoding and method from it.
 			if !strings.HasPrefix(msg.Subject, prefix) {
@@ -256,7 +256,7 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*RPCMethod]R
 				server.replyResult(msg.Reply, result, encoding)
 			}
 
-		}()
+		})
 	}, nil
 }
 
