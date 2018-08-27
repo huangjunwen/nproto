@@ -1,4 +1,5 @@
-// package enc provides server-side/client-side encoders for RPC request (RPCRequest) and reply (RPCReply):
+// Package enc provides server-side/client-side encoders for RPC request (RPCRequest) and reply (RPCReply).
+//
 //   - protobuf
 //     - PBServerEncoder
 //     - PBClientEncoder

@@ -1,4 +1,4 @@
-package rpc
+package librpc
 
 import (
 	"context"
@@ -32,35 +32,42 @@ var (
 
 // NatsRPCServer implements RPCServer.
 type NatsRPCServer struct {
-	// Options
+	// Options.
 	nameConv func(string) string // svcName -> subjName
 	group    string              // server group
 	mws      []RPCMiddleware     // middlewares
 	logger   zerolog.Logger      // logger
 
+	// Mutable fields.
 	mu   sync.RWMutex
-	conn *nats.Conn                    // nil if closed
+	nc   *nats.Conn                    // nil if closed
 	subs map[string]*nats.Subscription // svcName -> Subscription
 }
 
 // NatsRPCClient implements RPCClient.
 type NatsRPCClient struct {
-	// Options
+	// Options.
 	nameConv func(string) string // svcName -> subjName
 	encoding string              // rpc encoding
 	mws      []RPCMiddleware     // middlewares
 
-	mu   sync.RWMutex
-	conn *nats.Conn
+	// Mutable fields.
+	mu sync.RWMutex
+	nc *nats.Conn // nil if closed
 }
+
+// NatsRPCServerOption is option in creating NatsRPCServer.
+type NatsRPCServerOption func(*NatsRPCServer) error
+
+// NatsRPCClientOption is option in creating NatsRPCClient.
+type NatsRPCClientOption func(*NatsRPCClient) error
 
 var (
 	_ RPCServer = (*NatsRPCServer)(nil)
 	_ RPCClient = (*NatsRPCClient)(nil)
 )
 
-// NewNatsRPCServer creates a new NatsRPCServer. `conn` should be a long-lived nats connection.
-// e.g. Always reconnect.
+// NewNatsRPCServer creates a new NatsRPCServer. `nc` should have MaxReconnects < 0 set (e.g. Always reconnect).
 func NewNatsRPCServer(conn *nats.Conn, opts ...NatsRPCServerOption) (*NatsRPCServer, error) {
 	if conn.Opts.MaxReconnect >= 0 {
 		return nil, ErrNatsConnMaxRecon
@@ -69,7 +76,7 @@ func NewNatsRPCServer(conn *nats.Conn, opts ...NatsRPCServerOption) (*NatsRPCSer
 		nameConv: DefaultSvcSubjNameConvertor,
 		group:    DefaultGroup,
 		logger:   zerolog.Nop(),
-		conn:     conn,
+		nc:       conn,
 		subs:     make(map[string]*nats.Subscription),
 	}
 	for _, opt := range opts {
@@ -100,10 +107,10 @@ func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*RPCMethod]RP
 
 	// First (read) lock: get conn and some checks.
 	server.mu.RLock()
-	conn := server.conn
+	nc := server.nc
 	sub := server.subs[svcName]
 	server.mu.RUnlock()
-	if conn == nil {
+	if nc == nil {
 		return ErrServerClosed
 	}
 	if sub != nil {
@@ -111,7 +118,7 @@ func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*RPCMethod]RP
 	}
 
 	// Subscribe.
-	sub2, err := server.conn.QueueSubscribe(
+	sub2, err := server.nc.QueueSubscribe(
 		server.nameConv(svcName)+".>",
 		server.group,
 		h,
@@ -122,13 +129,13 @@ func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*RPCMethod]RP
 
 	// Second (write) lock: set subscription
 	server.mu.Lock()
-	conn = server.conn
+	nc = server.nc
 	sub = server.subs[svcName]
-	if conn != nil && sub == nil {
+	if nc != nil && sub == nil {
 		server.subs[svcName] = sub2
 	}
 	server.mu.Unlock()
-	if conn == nil {
+	if nc == nil {
 		sub2.Unsubscribe()
 		return ErrServerClosed
 	}
@@ -159,9 +166,9 @@ func (server *NatsRPCServer) DeregistSvc(svcName string) error {
 func (server *NatsRPCServer) Close() error {
 	// Set conn to nil to indicate close.
 	server.mu.Lock()
-	conn := server.conn
+	nc := server.nc
 	subs := server.subs
-	server.conn = nil
+	server.nc = nil
 	server.subs = nil
 	server.mu.Unlock()
 
@@ -173,7 +180,7 @@ func (server *NatsRPCServer) Close() error {
 	}
 
 	// Multiple calls to Close.
-	if conn == nil {
+	if nc == nil {
 		return ErrServerClosed
 	}
 	return nil
@@ -273,7 +280,7 @@ func (server *NatsRPCServer) reply(subj string, r *enc.RPCReply, encoding string
 	}
 
 	// Publish reply.
-	err = server.conn.PublishRequest(subj, "", data)
+	err = server.nc.PublishRequest(subj, "", data)
 	if err != nil {
 		goto Err
 	}
@@ -284,16 +291,15 @@ Err:
 	return
 }
 
-// NewNatsRPCClient creates a new NatsRPCClient. `conn` should be a long-lived nats connection.
-// e.g. Always reconnect.
-func NewNatsRPCClient(conn *nats.Conn, opts ...NatsRPCClientOption) (*NatsRPCClient, error) {
-	if conn.Opts.MaxReconnect >= 0 {
+// NewNatsRPCClient creates a new NatsRPCClient. `nc` should have MaxReconnects < 0 set (e.g. Always reconnect).
+func NewNatsRPCClient(nc *nats.Conn, opts ...NatsRPCClientOption) (*NatsRPCClient, error) {
+	if nc.Opts.MaxReconnect >= 0 {
 		return nil, ErrNatsConnMaxRecon
 	}
 	client := &NatsRPCClient{
 		nameConv: DefaultSvcSubjNameConvertor,
 		encoding: DefaultEncoding,
-		conn:     conn,
+		nc:       nc,
 	}
 	for _, opt := range opts {
 		if err := opt(client); err != nil {
@@ -313,9 +319,9 @@ func (client *NatsRPCClient) MakeHandler(svcName string, method *RPCMethod) RPCH
 
 		// Get conn and check closed.
 		client.mu.RLock()
-		conn := client.conn
+		nc := client.nc
 		client.mu.RUnlock()
-		if conn == nil {
+		if nc == nil {
 			return nil, ErrClientClosed
 		}
 
@@ -343,7 +349,7 @@ func (client *NatsRPCClient) MakeHandler(svcName string, method *RPCMethod) RPCH
 		}
 
 		// Send request.
-		msg, err := conn.RequestWithContext(ctx, subj, data)
+		msg, err := nc.RequestWithContext(ctx, subj, data)
 		if err != nil {
 			return nil, err
 		}
@@ -370,8 +376,8 @@ func (client *NatsRPCClient) MakeHandler(svcName string, method *RPCMethod) RPCH
 // Close implements RPCClient interface.
 func (client *NatsRPCClient) Close() error {
 	client.mu.Lock()
-	conn := client.conn
-	client.conn = nil
+	conn := client.nc
+	client.nc = nil
 	client.mu.Unlock()
 
 	if conn == nil {
@@ -395,5 +401,70 @@ func chooseClientEncoder(encoding string) enc.RPCClientEncoder {
 		return enc.JSONClientEncoder{}
 	default:
 		return enc.PBClientEncoder{}
+	}
+}
+
+// ServerOptNameConv sets the convertor to convert svc name to nats subject name.
+func ServerOptNameConv(nameConv func(string) string) NatsRPCServerOption {
+	return func(server *NatsRPCServer) error {
+		server.nameConv = nameConv
+		return nil
+	}
+}
+
+// ServerOptGroup sets the subscription group of the server.
+func ServerOptGroup(group string) NatsRPCServerOption {
+	return func(server *NatsRPCServer) error {
+		server.group = group
+		return nil
+	}
+}
+
+// ServerOptUseMiddleware adds a middleware to middleware stack.
+func ServerOptUseMiddleware(mw RPCMiddleware) NatsRPCServerOption {
+	return func(server *NatsRPCServer) error {
+		server.mws = append(server.mws, mw)
+		return nil
+	}
+}
+
+// ServerOptLogger sets logger.
+func ServerOptLogger(logger *zerolog.Logger) NatsRPCServerOption {
+	return func(server *NatsRPCServer) error {
+		server.logger = logger.With().Str("comp", "nproto.NatsRPCServer").Logger()
+		return nil
+	}
+}
+
+// ClientOptNameConv sets the convertor to convert svc name to nats subject name.
+// Should be the same as ServerOptNameConv.
+func ClientOptNameConv(nameConv func(string) string) NatsRPCClientOption {
+	return func(client *NatsRPCClient) error {
+		client.nameConv = nameConv
+		return nil
+	}
+}
+
+// ClientOptPBEncoding sets rpc encoding to protobuf.
+func ClientOptPBEncoding() NatsRPCClientOption {
+	return func(client *NatsRPCClient) error {
+		client.encoding = "pb"
+		return nil
+	}
+}
+
+// ClientOptJSONEncoding sets rpc encoding to json.
+func ClientOptJSONEncoding() NatsRPCClientOption {
+	return func(client *NatsRPCClient) error {
+		client.encoding = "json"
+		return nil
+	}
+}
+
+// ClientOptUseMiddleware adds a middleware to middleware stack.
+func ClientOptUseMiddleware(mw RPCMiddleware) NatsRPCClientOption {
+	return func(client *NatsRPCClient) error {
+		client.mws = append(client.mws, mw)
+		return nil
 	}
 }

@@ -1,4 +1,4 @@
-package rpc
+package librpc
 
 import (
 	"context"

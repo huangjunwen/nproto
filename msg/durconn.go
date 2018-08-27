@@ -71,7 +71,7 @@ var (
 	_ MsgSink = (*DurConn)(nil)
 )
 
-// NewDurConn creates a new DurConn. nc should have MaxReconnects < 0 set (e.g. Always reconnect).
+// NewDurConn creates a new DurConn. `nc` should have MaxReconnects < 0 set (e.g. Always reconnect).
 func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) *DurConn {
 
 	c := &DurConn{
