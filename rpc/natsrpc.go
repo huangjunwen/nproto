@@ -25,9 +25,9 @@ var (
 )
 
 var (
-	ErrNatsConnMaxRecon = errors.New("natsrpc: nats.Conn should have MaxReconnect < 0")
-	ErrServerClosed     = errors.New("natsrpc: server closed")
-	ErrClientClosed     = errors.New("natsrpc: client closed")
+	ErrMaxReconnect = errors.New("nproto.libmsg.natsrpc: nc should have MaxReconnects < 0")
+	ErrServerClosed = errors.New("nproto.librpc.NatsRPCServer: server closed")
+	ErrClientClosed = errors.New("nproto.librpc.NatsRPCClient: client closed")
 )
 
 // NatsRPCServer implements RPCServer.
@@ -68,15 +68,17 @@ var (
 )
 
 // NewNatsRPCServer creates a new NatsRPCServer. `nc` should have MaxReconnects < 0 set (e.g. Always reconnect).
-func NewNatsRPCServer(conn *nats.Conn, opts ...NatsRPCServerOption) (*NatsRPCServer, error) {
-	if conn.Opts.MaxReconnect >= 0 {
-		return nil, ErrNatsConnMaxRecon
+func NewNatsRPCServer(nc *nats.Conn, opts ...NatsRPCServerOption) (*NatsRPCServer, error) {
+
+	if nc.Opts.MaxReconnect >= 0 {
+		return nil, ErrMaxReconnect
 	}
+
 	server := &NatsRPCServer{
 		nameConv: DefaultSvcSubjNameConvertor,
 		group:    DefaultGroup,
 		logger:   zerolog.Nop(),
-		nc:       conn,
+		nc:       nc,
 		subs:     make(map[string]*nats.Subscription),
 	}
 	for _, opt := range opts {
@@ -114,7 +116,7 @@ func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*RPCMethod]RP
 		return ErrServerClosed
 	}
 	if sub != nil {
-		return fmt.Errorf("natsrpc: duplicated service name %+q", svcName)
+		return fmt.Errorf("nproto.librpc.NatsRPCServer: Duplicated service name %+q", svcName)
 	}
 
 	// Subscribe.
@@ -141,7 +143,7 @@ func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*RPCMethod]RP
 	}
 	if sub != nil {
 		sub2.Unsubscribe()
-		return fmt.Errorf("natsrpc: duplicated service name %+q", svcName)
+		return fmt.Errorf("nproto.librpc.NatsRPCServer: Duplicated service name %+q", svcName)
 	}
 
 	return nil
@@ -191,7 +193,7 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*RPCMethod]R
 	methodNames := make(map[string]*RPCMethod)
 	for method, _ := range methods {
 		if _, found := methodNames[method.Name]; found {
-			return nil, fmt.Errorf("natsrpc: duplicated method name %+q", method.Name)
+			return nil, fmt.Errorf("nproto.librpc.NatsRPCServer: Duplicated method name %+q", method.Name)
 		}
 		methodNames[method.Name] = method
 	}
@@ -225,7 +227,7 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*RPCMethod]R
 			// Check method.
 			method, found := methodNames[methodName]
 			if !found {
-				server.replyError(msg.Reply, fmt.Errorf("natsrpc: method %+q not found", methodName), encoding)
+				server.replyError(msg.Reply, fmt.Errorf("Method %+q not found", methodName), encoding)
 				return
 			}
 			handler := methods[method]
@@ -280,7 +282,7 @@ func (server *NatsRPCServer) reply(subj string, r *enc.RPCReply, encoding string
 	}
 
 	// Publish reply.
-	err = server.nc.PublishRequest(subj, "", data)
+	err = server.nc.Publish(subj, data)
 	if err != nil {
 		goto Err
 	}
@@ -293,9 +295,11 @@ Err:
 
 // NewNatsRPCClient creates a new NatsRPCClient. `nc` should have MaxReconnects < 0 set (e.g. Always reconnect).
 func NewNatsRPCClient(nc *nats.Conn, opts ...NatsRPCClientOption) (*NatsRPCClient, error) {
+
 	if nc.Opts.MaxReconnect >= 0 {
-		return nil, ErrNatsConnMaxRecon
+		return nil, ErrMaxReconnect
 	}
+
 	client := &NatsRPCClient{
 		nameConv: DefaultSvcSubjNameConvertor,
 		encoding: DefaultEncoding,
@@ -376,11 +380,11 @@ func (client *NatsRPCClient) MakeHandler(svcName string, method *RPCMethod) RPCH
 // Close implements RPCClient interface.
 func (client *NatsRPCClient) Close() error {
 	client.mu.Lock()
-	conn := client.nc
+	nc := client.nc
 	client.nc = nil
 	client.mu.Unlock()
 
-	if conn == nil {
+	if nc == nil {
 		return ErrClientClosed
 	}
 	return nil
@@ -431,7 +435,11 @@ func ServerOptUseMiddleware(mw RPCMiddleware) NatsRPCServerOption {
 // ServerOptLogger sets logger.
 func ServerOptLogger(logger *zerolog.Logger) NatsRPCServerOption {
 	return func(server *NatsRPCServer) error {
-		server.logger = logger.With().Str("comp", "nproto.NatsRPCServer").Logger()
+		if logger == nil {
+			nop := zerolog.Nop()
+			logger = &nop
+		}
+		server.logger = logger.With().Str("comp", "nproto.librpc.NatsRPCServer").Logger()
 		return nil
 	}
 }
