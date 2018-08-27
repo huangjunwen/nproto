@@ -118,7 +118,8 @@ func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*RPCMethod]RP
 	server.mu.RUnlock()
 
 	// Subscribe.
-	subs, err := nc.QueueSubscribe(
+	subs, err := natsQueueSubscribe(
+		nc,
 		fmt.Sprintf("%s.%s.>", server.subjPrefix, svcName),
 		server.group,
 		h,
@@ -292,7 +293,7 @@ func (server *NatsRPCServer) reply(subj string, r *enc.RPCReply, encoding string
 	}
 
 	// Publish reply.
-	err = nc.Publish(subj, data)
+	err = natsPublish(nc, subj, data)
 	if err != nil {
 		goto Err
 	}
@@ -363,7 +364,7 @@ func (client *NatsRPCClient) MakeHandler(svcName string, method *RPCMethod) RPCH
 		}
 
 		// Send request.
-		msg, err := nc.RequestWithContext(ctx, subj, data)
+		msg, err := natsRequestWithContext(nc, ctx, subj, data)
 		if err != nil {
 			return nil, err
 		}
