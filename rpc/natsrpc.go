@@ -16,8 +16,8 @@ import (
 )
 
 var (
-	// Default convertor for service name and nats subject name.
-	DefaultSvcSubjNameConvertor = func(name string) string { return fmt.Sprintf("svc.%s", name) }
+	// Default subject prefix.
+	DefaultSubjectPrefix = "nprpc"
 	// Default queue group.
 	DefaultGroup = "def"
 	// Default RPC encoding.
@@ -33,10 +33,10 @@ var (
 // NatsRPCServer implements RPCServer.
 type NatsRPCServer struct {
 	// Options.
-	nameConv func(string) string // svcName -> subjName
-	group    string              // server group
-	mws      []RPCMiddleware     // middlewares
-	logger   zerolog.Logger      // logger
+	subjPrefix string          // subject prefix
+	group      string          // server group
+	mws        []RPCMiddleware // middlewares
+	logger     zerolog.Logger  // logger
 
 	// Mutable fields.
 	mu   sync.RWMutex
@@ -47,9 +47,9 @@ type NatsRPCServer struct {
 // NatsRPCClient implements RPCClient.
 type NatsRPCClient struct {
 	// Options.
-	nameConv func(string) string // svcName -> subjName
-	encoding string              // rpc encoding
-	mws      []RPCMiddleware     // middlewares
+	subjPrefix string          // subject prefix
+	encoding   string          // rpc encoding
+	mws        []RPCMiddleware // middlewares
 
 	// Mutable fields.
 	mu sync.RWMutex
@@ -75,11 +75,11 @@ func NewNatsRPCServer(nc *nats.Conn, opts ...NatsRPCServerOption) (*NatsRPCServe
 	}
 
 	server := &NatsRPCServer{
-		nameConv: DefaultSvcSubjNameConvertor,
-		group:    DefaultGroup,
-		logger:   zerolog.Nop(),
-		nc:       nc,
-		subs:     make(map[string]*nats.Subscription),
+		subjPrefix: DefaultSubjectPrefix,
+		group:      DefaultGroup,
+		logger:     zerolog.Nop(),
+		nc:         nc,
+		subs:       make(map[string]*nats.Subscription),
 	}
 	for _, opt := range opts {
 		if err := opt(server); err != nil {
@@ -107,21 +107,22 @@ func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*RPCMethod]RP
 		return err
 	}
 
-	// First (read) lock: get conn and some checks.
+	// First (read) lock: get nc and do some checks.
 	server.mu.RLock()
-	nc := server.nc
-	sub := server.subs[svcName]
-	server.mu.RUnlock()
-	if nc == nil {
+	if server.nc == nil {
+		server.mu.RUnlock()
 		return ErrServerClosed
 	}
-	if sub != nil {
+	if server.subs[svcName] != nil {
+		server.mu.RUnlock()
 		return fmt.Errorf("nproto.librpc.NatsRPCServer: Duplicated service name %+q", svcName)
 	}
+	nc := server.nc
+	server.mu.RUnlock()
 
 	// Subscribe.
-	sub2, err := server.nc.QueueSubscribe(
-		server.nameConv(svcName)+".>",
+	subs, err := nc.QueueSubscribe(
+		fmt.Sprintf("%s.%s.>", server.subjPrefix, svcName),
 		server.group,
 		h,
 	)
@@ -131,21 +132,18 @@ func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*RPCMethod]RP
 
 	// Second (write) lock: set subscription
 	server.mu.Lock()
-	nc = server.nc
-	sub = server.subs[svcName]
-	if nc != nil && sub == nil {
-		server.subs[svcName] = sub2
-	}
-	server.mu.Unlock()
-	if nc == nil {
-		sub2.Unsubscribe()
+	if server.nc == nil {
+		server.mu.Unlock()
+		subs.Unsubscribe()
 		return ErrServerClosed
 	}
-	if sub != nil {
-		sub2.Unsubscribe()
+	if server.subs[svcName] != nil {
+		server.mu.Unlock()
+		subs.Unsubscribe()
 		return fmt.Errorf("nproto.librpc.NatsRPCServer: Duplicated service name %+q", svcName)
 	}
-
+	server.subs[svcName] = subs
+	server.mu.Unlock()
 	return nil
 }
 
@@ -199,11 +197,11 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*RPCMethod]R
 	}
 
 	// Subject prefix.
-	prefix := server.nameConv(svcName) + "."
+	prefix := server.subjPrefix + "." + svcName + "."
 
 	return func(msg *nats.Msg) {
 		cfh.Go("NatsRPCServer.msgHandler", func() {
-			// Subject should be in the form of "subj.enc.method".
+			// Subject should be in the form of "subjPrefix.svcName.enc.method".
 			// Extract encoding and method from it.
 			if !strings.HasPrefix(msg.Subject, prefix) {
 				server.logger.Error().Err(fmt.Errorf("Unexpected msg with subject: %+q", msg.Subject)).Msg("")
@@ -275,14 +273,29 @@ func (server *NatsRPCServer) replyError(subj string, err error, encoding string)
 }
 
 func (server *NatsRPCServer) reply(subj string, r *enc.RPCReply, encoding string) {
+
+	var (
+		data []byte
+		err  error
+	)
+
+	// Check closed.
+	server.mu.RLock()
+	nc := server.nc
+	server.mu.RUnlock()
+	if nc == nil {
+		err = ErrServerClosed
+		goto Err
+	}
+
 	// Encode reply.
-	data, err := chooseServerEncoder(encoding).EncodeReply(r)
+	data, err = chooseServerEncoder(encoding).EncodeReply(r)
 	if err != nil {
 		goto Err
 	}
 
 	// Publish reply.
-	err = server.nc.Publish(subj, data)
+	err = nc.Publish(subj, data)
 	if err != nil {
 		goto Err
 	}
@@ -301,9 +314,9 @@ func NewNatsRPCClient(nc *nats.Conn, opts ...NatsRPCClientOption) (*NatsRPCClien
 	}
 
 	client := &NatsRPCClient{
-		nameConv: DefaultSvcSubjNameConvertor,
-		encoding: DefaultEncoding,
-		nc:       nc,
+		subjPrefix: DefaultSubjectPrefix,
+		encoding:   DefaultEncoding,
+		nc:         nc,
 	}
 	for _, opt := range opts {
 		if err := opt(client); err != nil {
@@ -318,7 +331,7 @@ func NewNatsRPCClient(nc *nats.Conn, opts ...NatsRPCClientOption) (*NatsRPCClien
 func (client *NatsRPCClient) MakeHandler(svcName string, method *RPCMethod) RPCHandler {
 
 	encoder := chooseClientEncoder(client.encoding)
-	subj := fmt.Sprintf("%s.%s.%s", client.nameConv(svcName), client.encoding, method.Name)
+	subj := strings.Join([]string{client.subjPrefix, svcName, client.encoding, method.Name}, ".")
 	handler := func(ctx context.Context, input proto.Message) (proto.Message, error) {
 
 		// Get conn and check closed.
@@ -408,10 +421,10 @@ func chooseClientEncoder(encoding string) enc.RPCClientEncoder {
 	}
 }
 
-// ServerOptNameConv sets the convertor to convert svc name to nats subject name.
-func ServerOptNameConv(nameConv func(string) string) NatsRPCServerOption {
+// ServerOptSubjectPrefix sets the subject prefix.
+func ServerOptSubjectPrefix(subjPrefix string) NatsRPCServerOption {
 	return func(server *NatsRPCServer) error {
-		server.nameConv = nameConv
+		server.subjPrefix = subjPrefix
 		return nil
 	}
 }
@@ -444,11 +457,10 @@ func ServerOptLogger(logger *zerolog.Logger) NatsRPCServerOption {
 	}
 }
 
-// ClientOptNameConv sets the convertor to convert svc name to nats subject name.
-// Should be the same as ServerOptNameConv.
-func ClientOptNameConv(nameConv func(string) string) NatsRPCClientOption {
+// ClientOptSubjectPrefix sets the subject prefix.
+func ClientOptSubjectPrefix(subjPrefix string) NatsRPCClientOption {
 	return func(client *NatsRPCClient) error {
-		client.nameConv = nameConv
+		client.subjPrefix = subjPrefix
 		return nil
 	}
 }
