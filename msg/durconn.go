@@ -18,12 +18,9 @@ var (
 )
 
 var (
-	// ErrMaxReconnect is returned when nc is not always reconnectable.
-	ErrMaxReconnect = errors.New("nproto.libmsg.DurConn: nc should have MaxReconnects < 0")
-	// ErrNotConnected is returned when the underly stan.Conn is not ready.
-	ErrNotConnected = errors.New("nproto.libmsg.DurConn: not yet connected to streaming server")
-	// ErrEmptyGroupName is returned when an empty group name is provided in subscription.
-	ErrEmptyGroupName = errors.New("nproto.libmsg.DurConn: empty group name")
+	ErrMaxReconnect   = errors.New("nproto.libmsg.DurConn: nc should have MaxReconnects < 0")
+	ErrNotConnected   = errors.New("nproto.libmsg.DurConn: Not connect to streaming server")
+	ErrEmptyGroupName = errors.New("nproto.libmsg.DurConn: Empty group name")
 )
 
 // DurConn provides re-connection/re-subscription functions on top of stan.Conn.
@@ -266,7 +263,7 @@ func (c *DurConn) QueueSubscribe(subject, group string, cb stan.MsgHandler, opts
 	if c.subs[key] != nil {
 		c.mu.Unlock()
 		cfh.Suspend("DurConn.QueueSubscribe:duplicate.subscribe", c)
-		return fmt.Errorf("nproto.libmsg.DurConn: subject=%+q group=%+q has already subscribed", subject, group)
+		return fmt.Errorf("nproto.libmsg.DurConn: Duplicated subscription subject=%+q group=%+q", subject, group)
 	}
 	c.subs[key] = sub
 	if c.sc != nil {

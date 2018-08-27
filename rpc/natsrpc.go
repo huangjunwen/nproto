@@ -16,18 +16,15 @@ import (
 )
 
 var (
-	// Default subject prefix.
 	DefaultSubjectPrefix = "nprpc"
-	// Default queue group.
-	DefaultGroup = "def"
-	// Default RPC encoding.
-	DefaultEncoding = "pb"
+	DefaultGroup         = "def"
+	DefaultEncoding      = "pb"
 )
 
 var (
-	ErrMaxReconnect = errors.New("nproto.libmsg.natsrpc: nc should have MaxReconnects < 0")
-	ErrServerClosed = errors.New("nproto.librpc.NatsRPCServer: server closed")
-	ErrClientClosed = errors.New("nproto.librpc.NatsRPCClient: client closed")
+	ErrMaxReconnect = errors.New("nproto.librpc.natsrpc: nc should have MaxReconnects < 0")
+	ErrServerClosed = errors.New("nproto.librpc.NatsRPCServer: Server closed")
+	ErrClientClosed = errors.New("nproto.librpc.NatsRPCClient: Client closed")
 )
 
 // NatsRPCServer implements RPCServer.
