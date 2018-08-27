@@ -18,6 +18,8 @@ var (
 )
 
 var (
+	// ErrMaxReconnect is returned when nc is not always reconnectable.
+	ErrMaxReconnect = errors.New("nproto.libmsg.DurConn: nc should have MaxReconnects < 0")
 	// ErrNotConnected is returned when the underly stan.Conn is not ready.
 	ErrNotConnected = errors.New("nproto.libmsg.DurConn: not yet connected to streaming server")
 	// ErrEmptyGroupName is returned when an empty group name is provided in subscription.
@@ -73,6 +75,10 @@ var (
 
 // NewDurConn creates a new DurConn. `nc` should have MaxReconnects < 0 set (e.g. Always reconnect).
 func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) (*DurConn, error) {
+
+	if nc.Opts.MaxReconnect >= 0 {
+		return nil, ErrMaxReconnect
+	}
 
 	c := &DurConn{
 		reconnectWait: DefaultDurConnReconnectWait,
