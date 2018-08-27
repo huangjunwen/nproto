@@ -151,7 +151,8 @@ func TestDurConn(t *testing.T) {
 		cfh = oldCfh
 	}()
 
-	c := NewDurConn(nil, "test", DurConnOptReconnectWait(100*time.Millisecond))
+	c, err := NewDurConn(nil, "test", DurConnOptReconnectWait(100*time.Millisecond))
+	assert.NoError(err)
 
 	// ### Connect: emulate connection failure then success.
 	{

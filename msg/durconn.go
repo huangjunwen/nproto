@@ -62,17 +62,17 @@ type subscription struct {
 }
 
 // DurConnOption is the option in creating DurConn.
-type DurConnOption func(*DurConn)
+type DurConnOption func(*DurConn) error
 
 // DurConnSubsOption is the option in DurConn.QueueSubscribe.
-type DurConnSubsOption func(*subscription)
+type DurConnSubsOption func(*subscription) error
 
 var (
 	_ MsgSink = (*DurConn)(nil)
 )
 
 // NewDurConn creates a new DurConn. `nc` should have MaxReconnects < 0 set (e.g. Always reconnect).
-func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) *DurConn {
+func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) (*DurConn, error) {
 
 	c := &DurConn{
 		reconnectWait: DefaultDurConnReconnectWait,
@@ -83,12 +83,14 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) *DurConn
 		subs:          make(map[[2]string]*subscription),
 	}
 	for _, opt := range opts {
-		opt(c)
+		if err := opt(c); err != nil {
+			return nil, err
+		}
 	}
 
 	// Start to connect.
 	c.connect(false)
-	return c
+	return c, nil
 }
 
 // connect is used to close old connection (if any), release old resouces then
@@ -244,7 +246,9 @@ func (c *DurConn) QueueSubscribe(subject, group string, cb stan.MsgHandler, opts
 		cb:         cb,
 	}
 	for _, opt := range opts {
-		opt(sub)
+		if err := opt(sub); err != nil {
+			return err
+		}
 	}
 
 	// Check duplication.
@@ -362,67 +366,76 @@ func (c *DurConn) Deliver(msgs []Msg, delivered []bool) {
 
 // DurConnOptConnectWait sets connection wait.
 func DurConnOptConnectWait(t time.Duration) DurConnOption {
-	return func(c *DurConn) {
+	return func(c *DurConn) error {
 		c.stanOptions = append(c.stanOptions, stan.ConnectWait(t))
+		return nil
 	}
 }
 
 // DurConnOptPubAckWait sets publish ack time wait.
 func DurConnOptPubAckWait(t time.Duration) DurConnOption {
-	return func(c *DurConn) {
+	return func(c *DurConn) error {
 		c.stanOptions = append(c.stanOptions, stan.PubAckWait(t))
+		return nil
 	}
 }
 
 // DurConnOptPings sets ping
 func DurConnOptPings(interval, maxOut int) DurConnOption {
-	return func(c *DurConn) {
+	return func(c *DurConn) error {
 		c.stanOptions = append(c.stanOptions, stan.Pings(interval, maxOut))
+		return nil
 	}
 }
 
 // DurConnOptReconnectWait sets reconnection wait.
 func DurConnOptReconnectWait(t time.Duration) DurConnOption {
-	return func(c *DurConn) {
+	return func(c *DurConn) error {
 		c.reconnectWait = t
+		return nil
 	}
 }
 
 // DurConnOptLogger sets logger.
 func DurConnOptLogger(logger *zerolog.Logger) DurConnOption {
-	return func(c *DurConn) {
+	return func(c *DurConn) error {
 		if logger == nil {
 			nop := zerolog.Nop()
 			logger = &nop
 		}
 		c.logger = logger.With().Str("comp", "nproto.libmsg.DurConn").Logger()
+		return nil
 	}
 }
 
 // DurConnSubsOptMaxInflight sets max message that can be sent to subscriber before ack
 func DurConnSubsOptMaxInflight(m int) DurConnSubsOption {
-	return func(s *subscription) {
+	return func(s *subscription) error {
 		s.stanOptions = append(s.stanOptions, stan.MaxInflight(m))
+		return nil
 	}
 }
 
 // DurConnSubsOptAckWait sets server side ack wait.
 func DurConnSubsOptAckWait(t time.Duration) DurConnSubsOption {
-	return func(s *subscription) {
+	return func(s *subscription) error {
 		s.stanOptions = append(s.stanOptions, stan.AckWait(t))
+		return nil
 	}
 }
 
 // DurConnSubsOptManualAcks sets to manual ack mode.
 func DurConnSubsOptManualAcks() DurConnSubsOption {
-	return func(s *subscription) {
+	return func(s *subscription) error {
 		s.stanOptions = append(s.stanOptions, stan.SetManualAckMode())
+		return nil
 	}
 }
 
 // DurConnSubsOptResubscribeWait sets resubscriptions wait.
 func DurConnSubsOptResubsWait(t time.Duration) DurConnSubsOption {
-	return func(s *subscription) {
+	return func(s *subscription) error {
 		s.resubsWait = t
+		return nil
 	}
 }

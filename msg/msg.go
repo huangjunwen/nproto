@@ -51,10 +51,10 @@ type MsgConnector struct {
 }
 
 // MsgConnectorOption is the option in creating MsgConnector.
-type MsgConnectorOption func(*MsgConnector)
+type MsgConnectorOption func(*MsgConnector) error
 
 // NewMsgConnector creates a new MsgConnector.
-func NewMsgConnector(src MsgSource, sink MsgSink, opts ...MsgConnectorOption) *MsgConnector {
+func NewMsgConnector(src MsgSource, sink MsgSink, opts ...MsgConnectorOption) (*MsgConnector, error) {
 	ret := &MsgConnector{
 		src:           src,
 		sink:          sink,
@@ -65,10 +65,12 @@ func NewMsgConnector(src MsgSource, sink MsgSink, opts ...MsgConnectorOption) *M
 		logger:        zerolog.Nop(),
 	}
 	for _, opt := range opts {
-		opt(ret)
+		if err := opt(ret); err != nil {
+			return nil, err
+		}
 	}
 	ret.loop()
-	return ret
+	return ret, nil
 }
 
 func (connector *MsgConnector) loop() {
@@ -154,25 +156,28 @@ func (connector *MsgConnector) Stop() {
 
 // MsgConnectorOptBatch sets the maximum in flight messages.
 func MsgConnectorOptBatch(batch int) MsgConnectorOption {
-	return func(connector *MsgConnector) {
+	return func(connector *MsgConnector) error {
 		connector.batch = batch
+		return nil
 	}
 }
 
 // MsgConnectorOptFetchInterval sets the interval connector fetch messages from source.
 func MsgConnectorOptFetchInterval(fetchInterval time.Duration) MsgConnectorOption {
-	return func(connector *MsgConnector) {
+	return func(connector *MsgConnector) error {
 		connector.fetchInterval = fetchInterval
+		return nil
 	}
 }
 
 // MsgConnectorOptLogger sets the logger.
 func MsgConnectorOptLogger(logger *zerolog.Logger) MsgConnectorOption {
-	return func(connector *MsgConnector) {
+	return func(connector *MsgConnector) error {
 		if logger == nil {
 			nop := zerolog.Nop()
 			logger = &nop
 		}
 		connector.logger = logger.With().Str("comp", "nproto.libmsg.MsgConnector").Logger()
+		return nil
 	}
 }
