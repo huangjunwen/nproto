@@ -1,4 +1,4 @@
-package libmsg
+package npmsg
 
 import (
 	"time"
@@ -177,7 +177,7 @@ func MsgConnectorOptLogger(logger *zerolog.Logger) MsgConnectorOption {
 			nop := zerolog.Nop()
 			logger = &nop
 		}
-		connector.logger = logger.With().Str("comp", "nproto.libmsg.MsgConnector").Logger()
+		connector.logger = logger.With().Str("comp", "nproto.npmsg.MsgConnector").Logger()
 		return nil
 	}
 }

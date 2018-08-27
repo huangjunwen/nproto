@@ -1,4 +1,4 @@
-package libmsg
+package npmsg
 
 import (
 	"errors"
@@ -18,9 +18,9 @@ var (
 )
 
 var (
-	ErrMaxReconnect   = errors.New("nproto.libmsg.DurConn: nc should have MaxReconnects < 0")
-	ErrNotConnected   = errors.New("nproto.libmsg.DurConn: Not connect to streaming server")
-	ErrEmptyGroupName = errors.New("nproto.libmsg.DurConn: Empty group name")
+	ErrMaxReconnect   = errors.New("nproto.npmsg.DurConn: nc should have MaxReconnects < 0")
+	ErrNotConnected   = errors.New("nproto.npmsg.DurConn: Not connect to streaming server")
+	ErrEmptyGroupName = errors.New("nproto.npmsg.DurConn: Empty group name")
 )
 
 // DurConn provides re-connection/re-subscription functions on top of stan.Conn.
@@ -263,7 +263,7 @@ func (c *DurConn) QueueSubscribe(subject, group string, cb stan.MsgHandler, opts
 	if c.subs[key] != nil {
 		c.mu.Unlock()
 		cfh.Suspend("DurConn.QueueSubscribe:duplicate.subscribe", c)
-		return fmt.Errorf("nproto.libmsg.DurConn: Duplicated subscription subject=%+q group=%+q", subject, group)
+		return fmt.Errorf("nproto.npmsg.DurConn: Duplicated subscription subject=%+q group=%+q", subject, group)
 	}
 	c.subs[key] = sub
 	if c.sc != nil {
@@ -406,7 +406,7 @@ func DurConnOptLogger(logger *zerolog.Logger) DurConnOption {
 			nop := zerolog.Nop()
 			logger = &nop
 		}
-		c.logger = logger.With().Str("comp", "nproto.libmsg.DurConn").Logger()
+		c.logger = logger.With().Str("comp", "nproto.npmsg.DurConn").Logger()
 		return nil
 	}
 }

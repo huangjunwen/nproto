@@ -43,11 +43,11 @@ type sqlMsg struct {
 type SQLMsgSourceOption func(*SQLMsgSource)
 
 var (
-	_ libmsg.MsgSource = (*SQLMsgSource)(nil)
-	_ libmsg.Msg       = (*sqlMsg)(nil)
-	_ Queryer          = (*sql.DB)(nil)
-	_ Queryer          = (*sql.Conn)(nil)
-	_ Queryer          = (*sql.Tx)(nil)
+	_ npmsg.MsgSource = (*SQLMsgSource)(nil)
+	_ npmsg.Msg       = (*sqlMsg)(nil)
+	_ Queryer         = (*sql.DB)(nil)
+	_ Queryer         = (*sql.Conn)(nil)
+	_ Queryer         = (*sql.Tx)(nil)
 )
 
 func newSQLMsgSource(dialectFactory func(string) sqlMsgSourceDialect, db *sql.DB, tableName string, opts ...SQLMsgSourceOption) (*SQLMsgSource, error) {
@@ -78,12 +78,12 @@ func (src *SQLMsgSource) Store(ctx context.Context, q Queryer, subject string, d
 	return err
 }
 
-// Fetch implements libmsg.MsgSource interface.
-func (src *SQLMsgSource) Fetch() <-chan libmsg.Msg {
+// Fetch implements npmsg.MsgSource interface.
+func (src *SQLMsgSource) Fetch() <-chan npmsg.Msg {
 
 	logger := src.logger.With().Str("fn", "Fetch").Logger()
 
-	ret := make(chan libmsg.Msg)
+	ret := make(chan npmsg.Msg)
 	rows, err := src.db.Query(src.dialect.SelectStmt())
 	if err != nil {
 		logger.Error().Err(err).Msg("")
@@ -107,8 +107,8 @@ func (src *SQLMsgSource) Fetch() <-chan libmsg.Msg {
 	return ret
 }
 
-// DeliverResult implements libmsg.MsgSource interface.
-func (src *SQLMsgSource) DeliverResult(msgs []libmsg.Msg, delivered []bool) {
+// DeliverResult implements npmsg.MsgSource interface.
+func (src *SQLMsgSource) DeliverResult(msgs []npmsg.Msg, delivered []bool) {
 
 	logger := src.logger.With().Str("fn", "DeliverResult").Logger()
 
@@ -131,12 +131,12 @@ func (src *SQLMsgSource) DeliverResult(msgs []libmsg.Msg, delivered []bool) {
 
 }
 
-// Subject implements libmsg.Msg interface.
+// Subject implements npmsg.Msg interface.
 func (m *sqlMsg) Subject() string {
 	return m.subject
 }
 
-// Data implements libmsg.Msg interface.
+// Data implements npmsg.Msg interface.
 func (m *sqlMsg) Data() []byte {
 	return m.data
 }
@@ -147,6 +147,6 @@ func SQLMsgSourceOptLogger(logger *zerolog.Logger) SQLMsgSourceOption {
 			nop := zerolog.Nop()
 			logger = &nop
 		}
-		src.logger = logger.With().Str("comp", "nproto.libmsg.source.sql.SQLMsgSource").Logger()
+		src.logger = logger.With().Str("comp", "nproto.npmsg.source.sql.SQLMsgSource").Logger()
 	}
 }

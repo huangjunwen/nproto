@@ -1,4 +1,4 @@
-package libmsg
+package npmsg
 
 import (
 	"errors"
@@ -147,10 +147,11 @@ func TestDurConn(t *testing.T) {
 	cfh = tcfh
 	stanConnect = MakeMockConnect(tcfh)
 	defer func() {
-		stanConnect = oldStanConnect
 		cfh = oldCfh
+		stanConnect = oldStanConnect
 	}()
 
+	// Create DurConn.
 	nc := &nats.Conn{}
 	nc.Opts.MaxReconnect = -1
 	c, err := NewDurConn(nc, "test", DurConnOptReconnectWait(100*time.Millisecond))

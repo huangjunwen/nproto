@@ -1,4 +1,4 @@
-package libmsg
+package npmsg
 
 import (
 	"github.com/huangjunwen/nproto/util"
