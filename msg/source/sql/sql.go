@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/rs/zerolog"
 
 	"github.com/huangjunwen/nproto/msg"
@@ -76,6 +77,15 @@ func newSQLMsgSource(dialectFactory func(string) sqlMsgSourceDialect, db *sql.DB
 func (src *SQLMsgSource) Store(ctx context.Context, q Queryer, subject string, data []byte) error {
 	_, err := q.ExecContext(ctx, src.dialect.InsertStmt(), subject, data)
 	return err
+}
+
+// StoreProto stores a protobuf message to be delivered.
+func (src *SQLMsgSource) StoreProto(ctx context.Context, q Queryer, subject string, m proto.Message) error {
+	data, err := proto.Marshal(m)
+	if err != nil {
+		return err
+	}
+	return src.Store(ctx, q, subject, data)
 }
 
 // Fetch implements npmsg.MsgSource interface.
