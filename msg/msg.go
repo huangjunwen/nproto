@@ -50,6 +50,9 @@ type MsgConnector struct {
 	logger        zerolog.Logger
 }
 
+// MsgHandler handles Msg.
+type MsgHandler func(Msg) error
+
 // MsgConnectorOption is the option in creating MsgConnector.
 type MsgConnectorOption func(*MsgConnector) error
 

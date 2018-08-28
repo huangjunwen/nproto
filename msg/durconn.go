@@ -57,7 +57,7 @@ type subscription struct {
 	conn    *DurConn
 	subject string
 	group   string
-	cb      stan.MsgHandler
+	cb      MsgHandler
 }
 
 // DurConnOption is the option in creating DurConn.
@@ -65,6 +65,9 @@ type DurConnOption func(*DurConn) error
 
 // DurConnSubsOption is the option in DurConn.QueueSubscribe.
 type DurConnSubsOption func(*subscription) error
+
+// stanMsg implements Msg interface.
+type stanMsg stan.Msg
 
 var (
 	_ MsgSink = (*DurConn)(nil)
@@ -237,7 +240,7 @@ func (c *DurConn) PublishAsync(subject string, data []byte, ah stan.AckHandler) 
 // QueueSubscribe creates a durable queue subscription with manual ack mode on.
 // Will be re-subscription after reconnection. Can't be unsubscribed.
 // This function returns error only when parameter error.
-func (c *DurConn) QueueSubscribe(subject, group string, cb stan.MsgHandler, opts ...DurConnSubsOption) error {
+func (c *DurConn) QueueSubscribe(subject, group string, cb MsgHandler, opts ...DurConnSubsOption) error {
 	if group == "" {
 		return ErrEmptyGroupName
 	}
@@ -281,6 +284,16 @@ func (c *DurConn) QueueSubscribe(subject, group string, cb stan.MsgHandler, opts
 
 func (c *DurConn) queueSubscribe(sub *subscription, sc stan.Conn, scStaleC chan struct{}) {
 
+	cb := func(msg *stan.Msg) {
+		if err := sub.cb((*stanMsg)(msg)); err != nil {
+			sub.conn.logger.Error().Str("fn", "subsMsgHandler").
+				Str("subj", sub.subject).
+				Str("grp", sub.group).Err(err).Msg("")
+		} else {
+			msg.Ack()
+		}
+	}
+
 	cfh.Go("DurConn.queueSubscribe", func() {
 		logger := sub.conn.logger.With().Str("fn", "queueSubscribe").
 			Str("subj", sub.subject).
@@ -295,7 +308,7 @@ func (c *DurConn) queueSubscribe(sub *subscription, sc stan.Conn, scStaleC chan 
 		// Keep re-subscribing util stale become true.
 		stale := false
 		for !stale {
-			_, err := sc.QueueSubscribe(sub.subject, sub.group, sub.cb, opts...)
+			_, err := sc.QueueSubscribe(sub.subject, sub.group, cb, opts...)
 			if err == nil {
 				cfh.Suspend("DurConn.queueSubscribe:ok", c)
 				// Normal case.
@@ -435,4 +448,14 @@ func DurConnSubsOptResubsWait(t time.Duration) DurConnSubsOption {
 		s.resubsWait = t
 		return nil
 	}
+}
+
+// Subject implements Msg interface.
+func (m *stanMsg) Subject() string {
+	return (*stan.Msg)(m).Subject
+}
+
+// Data implements Msg interface.
+func (m *stanMsg) Data() []byte {
+	return (*stan.Msg)(m).Data
 }
