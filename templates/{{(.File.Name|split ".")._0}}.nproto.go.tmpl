@@ -9,7 +9,8 @@ import (
   "sync/atomic"
 
   "github.com/golang/protobuf/proto"
-  "github.com/huangjunwen/nproto/rpc"
+  nprpc "github.com/huangjunwen/nproto/rpc"
+  npmsg "github.com/huangjunwen/nproto/msg"
   {{ range $file.Dependency -}}
     {{ (. | getProtoFile).GoPkg }}
   {{ end -}}
@@ -79,11 +80,27 @@ import (
 
 {{ end }}
 
+{{ range $msg := .File.MessageType }}
+  {{ if regexMatch "<npmsg>" (leadingComment $msg) }}
+    // {{ $msg.Name }}MsgHandler creates MsgHandler. The same message will be resend if handler returns error.
+    func {{ $msg.Name }}MsgHandler(handler func(*{{ $msg.Name }}) error) npmsg.MsgHandler {
+      return func(msg npmsg.Msg) error {
+        m := &{{ $msg.Name }}{}
+        if err := proto.Unmarshal(msg.Data(), m); err != nil {
+          return err
+        }
+        return handler(m)
+      }
+    }
+  {{ end }}
+{{ end }}
+
 // Avoid import and not used errors.
 var (
   _ = context.Background
   _ = atomic.AddInt32
   _ = proto.Marshal
   _ = nprpc.Passthru
+  _ = npmsg.NewDurConn
 )
 
