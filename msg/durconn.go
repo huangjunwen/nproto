@@ -13,6 +13,7 @@ import (
 )
 
 var (
+	DefaultSubjectPrefix         = "npmsg"
 	DefaultDurConnReconnectWait  = 5 * time.Second
 	DefaultDurConnSubsResubsWait = 5 * time.Second
 )
@@ -28,6 +29,7 @@ var (
 type DurConn struct {
 	// Options.
 	stanOptions   []stan.Option
+	subjPrefix    string
 	reconnectWait time.Duration
 	logger        zerolog.Logger
 
@@ -81,6 +83,7 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) (*DurCon
 	}
 
 	c := &DurConn{
+		subjPrefix:    DefaultSubjectPrefix,
 		reconnectWait: DefaultDurConnReconnectWait,
 		logger:        zerolog.Nop(),
 		id:            nuid.Next(), // UUID as client id
@@ -223,7 +226,7 @@ func (c *DurConn) Publish(subject string, data []byte) error {
 	if sc == nil {
 		return ErrNotConnected
 	}
-	return sc.Publish(subject, data)
+	return sc.Publish(c.makeSubject(subject), data)
 }
 
 // PublishAsync == stan.Conn.PublishAsync
@@ -234,7 +237,7 @@ func (c *DurConn) PublishAsync(subject string, data []byte, ah stan.AckHandler) 
 	if sc == nil {
 		return "", ErrNotConnected
 	}
-	return sc.PublishAsync(subject, data, ah)
+	return sc.PublishAsync(c.makeSubject(subject), data, ah)
 }
 
 // QueueSubscribe creates a durable queue subscription with manual ack mode on.
@@ -308,7 +311,7 @@ func (c *DurConn) queueSubscribe(sub *subscription, sc stan.Conn, scStaleC chan 
 		// Keep re-subscribing util stale become true.
 		stale := false
 		for !stale {
-			_, err := sc.QueueSubscribe(sub.subject, sub.group, cb, opts...)
+			_, err := sc.QueueSubscribe(c.makeSubject(sub.subject), sub.group, cb, opts...)
 			if err == nil {
 				cfh.Suspend("DurConn.queueSubscribe:ok", c)
 				// Normal case.
@@ -382,6 +385,10 @@ func (c *DurConn) Deliver(msgs []Msg, delivered []bool) {
 
 }
 
+func (c *DurConn) makeSubject(subject string) string {
+	return fmt.Sprintf("%s.%s", c.subjPrefix, subject)
+}
+
 // DurConnOptConnectWait sets connection wait.
 func DurConnOptConnectWait(t time.Duration) DurConnOption {
 	return func(c *DurConn) error {
@@ -402,6 +409,14 @@ func DurConnOptPubAckWait(t time.Duration) DurConnOption {
 func DurConnOptPings(interval, maxOut int) DurConnOption {
 	return func(c *DurConn) error {
 		c.stanOptions = append(c.stanOptions, stan.Pings(interval, maxOut))
+		return nil
+	}
+}
+
+// DurConnOptSubjectPrefix sets the subject prefix.
+func DurConnOptSubjectPrefix(subjPrefix string) DurConnOption {
+	return func(c *DurConn) error {
+		c.subjPrefix = subjPrefix
 		return nil
 	}
 }
