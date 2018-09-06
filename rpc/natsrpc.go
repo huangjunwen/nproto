@@ -30,10 +30,9 @@ var (
 // NatsRPCServer implements RPCServer.
 type NatsRPCServer struct {
 	// Options.
-	subjPrefix string          // subject prefix
-	group      string          // server group
-	mws        []RPCMiddleware // middlewares
-	logger     zerolog.Logger  // logger
+	subjPrefix string         // subject prefix
+	group      string         // server group
+	logger     zerolog.Logger // logger
 
 	// Mutable fields.
 	mu   sync.RWMutex
@@ -44,9 +43,8 @@ type NatsRPCServer struct {
 // NatsRPCClient implements RPCClient.
 type NatsRPCClient struct {
 	// Options.
-	subjPrefix string          // subject prefix
-	encoding   string          // rpc encoding
-	mws        []RPCMiddleware // middlewares
+	subjPrefix string // subject prefix
+	encoding   string // rpc encoding
 
 	// Mutable fields.
 	mu sync.RWMutex
@@ -89,17 +87,8 @@ func NewNatsRPCServer(nc *nats.Conn, opts ...NatsRPCServerOption) (*NatsRPCServe
 
 // RegistSvc implements RPCServer interface.
 func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*RPCMethod]RPCHandler) error {
-	// Decorate rpc handlers with middlewares.
-	ms := make(map[*RPCMethod]RPCHandler)
-	for method, handler := range methods {
-		for i := len(server.mws) - 1; i >= 0; i-- {
-			handler = server.mws[i](handler)
-		}
-		ms[method] = handler
-	}
-
 	// Create msg handler.
-	h, err := server.msgHandler(svcName, ms)
+	h, err := server.msgHandler(svcName, methods)
 	if err != nil {
 		return err
 	}
@@ -330,7 +319,7 @@ func (client *NatsRPCClient) MakeHandler(svcName string, method *RPCMethod) RPCH
 
 	encoder := chooseClientEncoder(client.encoding)
 	subj := strings.Join([]string{client.subjPrefix, svcName, client.encoding, method.Name}, ".")
-	handler := func(ctx context.Context, input proto.Message) (proto.Message, error) {
+	return func(ctx context.Context, input proto.Message) (proto.Message, error) {
 
 		// Get conn and check closed.
 		client.mu.RLock()
@@ -380,12 +369,6 @@ func (client *NatsRPCClient) MakeHandler(svcName string, method *RPCMethod) RPCH
 		// Return.
 		return rep.Result, rep.Error
 	}
-
-	// Decorate handler with middlewares.
-	for i := len(client.mws) - 1; i >= 0; i-- {
-		handler = client.mws[i](handler)
-	}
-	return handler
 }
 
 // Close implements RPCClient interface.
@@ -435,14 +418,6 @@ func ServerOptGroup(group string) NatsRPCServerOption {
 	}
 }
 
-// ServerOptUseMiddleware adds a middleware to middleware stack.
-func ServerOptUseMiddleware(mw RPCMiddleware) NatsRPCServerOption {
-	return func(server *NatsRPCServer) error {
-		server.mws = append(server.mws, mw)
-		return nil
-	}
-}
-
 // ServerOptLogger sets logger.
 func ServerOptLogger(logger *zerolog.Logger) NatsRPCServerOption {
 	return func(server *NatsRPCServer) error {
@@ -475,14 +450,6 @@ func ClientOptPBEncoding() NatsRPCClientOption {
 func ClientOptJSONEncoding() NatsRPCClientOption {
 	return func(client *NatsRPCClient) error {
 		client.encoding = "json"
-		return nil
-	}
-}
-
-// ClientOptUseMiddleware adds a middleware to middleware stack.
-func ClientOptUseMiddleware(mw RPCMiddleware) NatsRPCClientOption {
-	return func(client *NatsRPCClient) error {
-		client.mws = append(client.mws, mw)
 		return nil
 	}
 }
