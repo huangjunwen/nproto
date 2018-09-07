@@ -101,7 +101,7 @@ func (src *SQLMsgSource) Fetch() <-chan npmsg.Msg {
 		return ret
 	}
 
-	go func() {
+	cfh.Go("SQLMsgSource.Fetch", func() {
 		defer close(ret)
 		defer rows.Close()
 		for rows.Next() {
@@ -112,19 +112,17 @@ func (src *SQLMsgSource) Fetch() <-chan npmsg.Msg {
 			}
 			ret <- m
 		}
-	}()
+	})
 
 	return ret
 }
 
-// DeliverResult implements npmsg.MsgSource interface.
-func (src *SQLMsgSource) DeliverResult(msgs []npmsg.Msg, delivered []bool) {
-
-	logger := src.logger.With().Str("fn", "DeliverResult").Logger()
+// ProcessPublishBatchResult implements npmsg.MsgSource interface.
+func (src *SQLMsgSource) ProcessPublishBatchResult(msgs []npmsg.Msg, errors []error) {
 
 	ids := []interface{}{}
 	for i, msg := range msgs {
-		if !delivered[i] {
+		if errors[i] != nil {
 			continue
 		}
 		ids = append(ids, msg.(*sqlMsg).id)
@@ -136,7 +134,7 @@ func (src *SQLMsgSource) DeliverResult(msgs []npmsg.Msg, delivered []bool) {
 
 	_, err := src.db.Exec(src.dialect.DeleteStmt(len(ids)), ids...)
 	if err != nil {
-		logger.Error().Err(err).Msg("")
+		src.logger.Error().Str("fn", "ProcessPublishBatchResult").Err(err).Msg("")
 	}
 
 }
@@ -157,6 +155,6 @@ func SQLMsgSourceOptLogger(logger *zerolog.Logger) SQLMsgSourceOption {
 			nop := zerolog.Nop()
 			logger = &nop
 		}
-		src.logger = logger.With().Str("comp", "nproto.npmsg.source.sql.SQLMsgSource").Logger()
+		src.logger = logger.With().Str("comp", "nproto.npmsg.sqlsrc.SQLMsgSource").Logger()
 	}
 }
