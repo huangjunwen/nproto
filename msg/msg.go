@@ -26,7 +26,7 @@ type MsgPublisher interface {
 // MsgSubscriber is used to subscribe to subjects.
 type MsgSubscriber interface {
 	// Subscribe to a subject. Each message of the subject will be delivered to one
-	// subscriber in the group.
+	// subscriber in the group. `opts` are implement specific options.
 	Subscribe(subject, group string, handler MsgHandler, opts ...interface{}) error
 }
 

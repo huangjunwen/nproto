@@ -28,7 +28,7 @@ var (
 )
 
 // DurConn provides re-connection/re-subscription functions on top of stan.Conn.
-// It supports Publish/PublishAsync and durable QueueSubscribe (not support unsubscribing).
+// It implements npmsg.MsgPublisher and npmsg.MsgSubscriber interfaces.
 type DurConn struct {
 	// Options.
 	stanOptions   []stan.Option
@@ -437,7 +437,7 @@ func DurConnOptLogger(logger *zerolog.Logger) DurConnOption {
 			nop := zerolog.Nop()
 			logger = &nop
 		}
-		c.logger = logger.With().Str("comp", "nproto.npmsg.DurConn").Logger()
+		c.logger = logger.With().Str("comp", "nproto.npmsg.durconn.DurConn").Logger()
 		return nil
 	}
 }
