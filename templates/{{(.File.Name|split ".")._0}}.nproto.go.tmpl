@@ -85,13 +85,13 @@ import (
 {{ range $msg := .File.MessageType }}
   {{ if regexMatch "<npmsg>" (leadingComment $msg) }}
     // {{ $msg.Name }}MsgHandler creates MsgHandler. The same message will be resend if handler returns error.
-    func {{ $msg.Name }}MsgHandler(handler func(*{{ $msg.Name }}) error) npmsg.MsgHandler {
-      return func(msg npmsg.Msg) error {
+    func {{ $msg.Name }}MsgHandler(handler func(context.Context, *{{ $msg.Name }}) error) npmsg.MsgHandler {
+      return func(ctx context.Context, msg npmsg.Msg) error {
         m := &{{ $msg.Name }}{}
         if err := proto.Unmarshal(msg.Data(), m); err != nil {
           return err
         }
-        return handler(m)
+        return handler(ctx, m)
       }
     }
   {{ end }}
@@ -103,6 +103,6 @@ var (
   _ = atomic.AddInt32
   _ = proto.Marshal
   _ = nprpc.Passthru
-  _ = npmsg.NewDurConn
+  _ = npmsg.NewMsgConnector
 )
 
