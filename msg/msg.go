@@ -15,12 +15,15 @@ type Msg interface {
 
 // MsgPublisher is used to publish messages.
 type MsgPublisher interface {
-	// Publish a single message. It return nil if msg has been delivered successfully.
-	Publish(msg Msg) error
+	// PublishMsg a single message. It return nil if msg has been delivered successfully.
+	Publish(subject string, data []byte) error
 
-	// PublishBatch publish a batch of messages. `len(errors) == len(msgs)` and
+	// PublishMsg a single message. It return nil if msg has been delivered successfully.
+	PublishMsg(msg Msg) error
+
+	// PublishMsgs publish a batch of messages. `len(errors) == len(msgs)` and
 	// `errors[i]` is nil if `msgs[i]` has been delivered successfully.
-	PublishBatch(msgs []Msg) (errors []error)
+	PublishMsgs(msgs []Msg) (errors []error)
 }
 
 // MsgSubscriber is used to subscribe to subjects.

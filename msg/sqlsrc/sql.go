@@ -117,8 +117,8 @@ func (src *SQLMsgSource) Fetch() <-chan npmsg.Msg {
 	return ret
 }
 
-// ProcessPublishBatchResult implements npmsg.MsgSource interface.
-func (src *SQLMsgSource) ProcessPublishBatchResult(msgs []npmsg.Msg, errors []error) {
+// ProcessPublishMsgsResult implements npmsg.MsgSource interface.
+func (src *SQLMsgSource) ProcessPublishMsgsResult(msgs []npmsg.Msg, errors []error) {
 
 	ids := []interface{}{}
 	for i, msg := range msgs {

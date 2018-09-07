@@ -223,18 +223,23 @@ func (c *DurConn) Close() {
 }
 
 // Publish implements MsgPublisher interface.
-func (c *DurConn) Publish(msg npmsg.Msg) error {
+func (c *DurConn) Publish(subject string, data []byte) error {
 	c.mu.RLock()
 	sc := c.sc
 	c.mu.RUnlock()
 	if sc == nil {
 		return ErrNotConnected
 	}
-	return sc.Publish(c.makeSubject(msg.Subject()), msg.Data())
+	return sc.Publish(c.makeSubject(subject), data)
 }
 
-// PublishBatch implements MsgPublisher interface.
-func (c *DurConn) PublishBatch(msgs []npmsg.Msg) (errors []error) {
+// PublishMsg implements MsgPublisher interface.
+func (c *DurConn) PublishMsg(msg npmsg.Msg) error {
+	return c.Publish(msg.Subject(), msg.Data())
+}
+
+// PublishMsgs implements MsgPublisher interface.
+func (c *DurConn) PublishMsgs(msgs []npmsg.Msg) (errors []error) {
 
 	errors = make([]error, len(msgs))
 

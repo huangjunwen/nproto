@@ -16,10 +16,10 @@ type MsgSource interface {
 	// Fetch returns a channel to get messages from the source.
 	Fetch() <-chan Msg
 
-	// ProcessPublishBatchResult is called after publish a batch of messages.
+	// ProcessPublishMsgsResult is called after publish a batch of messages.
 	// `errors[i]` is nil if `msgs[i]` has been delivered successfully so that the
 	// message can be deleted.
-	ProcessPublishBatchResult(msgs []Msg, errors []error)
+	ProcessPublishMsgsResult(msgs []Msg, errors []error)
 }
 
 // MsgConnector deliver messages from source to a publisher.
@@ -89,10 +89,10 @@ func (connector *MsgConnector) loop() {
 				}
 
 				// Deliver.
-				errors := connector.publisher.PublishBatch(msgs)
+				errors := connector.publisher.PublishMsgs(msgs)
 
 				// Process deliver result.
-				connector.src.ProcessPublishBatchResult(msgs, errors)
+				connector.src.ProcessPublishMsgsResult(msgs, errors)
 
 				// Update statistics.
 				nMsgs += len(msgs)
