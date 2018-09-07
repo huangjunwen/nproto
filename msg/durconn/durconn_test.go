@@ -1,4 +1,4 @@
-package npmsg
+package durconn
 
 import (
 	"errors"
@@ -202,21 +202,21 @@ func TestDurConn(t *testing.T) {
 		tcfh.Wait()
 	}
 
-	// ### Subscribe: emulate normal subscribe.
+	// ### Subscribe: emulate normal subscription.
 	{
-		tcfh.Go("QueueSubscribe#1", func() {
-			c.QueueSubscribe("subj", "g1", nil, DurConnSubsOptResubsWait(100*time.Millisecond))
+		tcfh.Go("Subscribe#1", func() {
+			c.Subscribe("subj", "g1", nil, DurConnSubsOptResubsWait(100*time.Millisecond))
 		})
 
-		tcfh.Capture("QueueSubscribe#1").
-			Expect("DurConn.QueueSubscribe:before.subscribe").
+		tcfh.Capture("Subscribe#1").
+			Expect("DurConn.Subscribe:before.subscribe").
 			Do(func(_ interface{}) {
 				assert.NotNil(c.sc)
 				assert.NotNil(c.scStaleC)
 				assert.Empty(c.subs)
 				assert.False(c.closed)
 			}).
-			Expect("DurConn.QueueSubscribe:after.subscribe").
+			Expect("DurConn.Subscribe:after.subscribe").
 			Do(func(_ interface{}) {
 				assert.NotNil(c.sc)
 				assert.NotNil(c.scStaleC)
@@ -224,30 +224,30 @@ func TestDurConn(t *testing.T) {
 				assert.False(c.closed)
 			}).Resume(nil)
 
-		tcfh.Capture("DurConn.queueSubscribe").
+		tcfh.Capture("DurConn.subscribe").
 			Expect("MockConn.QueueSubscribe").
 			Resume(nil).
-			Expect("DurConn.queueSubscribe:ok").
+			Expect("DurConn.subscribe:ok").
 			Resume(nil)
 
 		tcfh.Wait()
 	}
 
-	// ### Subscribe: emulate duplicate subscribe.
+	// ### Subscribe: emulate duplicate subscription.
 	{
-		tcfh.Go("QueueSubscribe#2", func() {
-			c.QueueSubscribe("subj", "g1", nil, DurConnSubsOptResubsWait(100*time.Millisecond))
+		tcfh.Go("Subscribe#2", func() {
+			c.Subscribe("subj", "g1", nil, DurConnSubsOptResubsWait(100*time.Millisecond))
 		})
 
-		tcfh.Capture("QueueSubscribe#2").
-			Expect("DurConn.QueueSubscribe:before.subscribe").
+		tcfh.Capture("Subscribe#2").
+			Expect("DurConn.Subscribe:before.subscribe").
 			Do(func(_ interface{}) {
 				assert.NotNil(c.sc)
 				assert.NotNil(c.scStaleC)
 				assert.Len(c.subs, 1)
 				assert.False(c.closed)
 			}).
-			Expect("DurConn.QueueSubscribe:duplicate.subscribe").
+			Expect("DurConn.Subscribe:duplicate.subscribe").
 			Do(func(_ interface{}) {
 				assert.NotNil(c.sc)
 				assert.NotNil(c.scStaleC)
@@ -261,23 +261,23 @@ func TestDurConn(t *testing.T) {
 
 	// ### Subscribe before/after connection is lost.
 	{
-		tcfh.Go("QueueSubscribe#3", func() {
-			c.QueueSubscribe("subj", "g3", nil, DurConnSubsOptResubsWait(100*time.Millisecond))
+		tcfh.Go("Subscribe#3", func() {
+			c.Subscribe("subj", "g3", nil, DurConnSubsOptResubsWait(100*time.Millisecond))
 		})
-		tcfh.Go("QueueSubscribe#4", func() {
-			c.QueueSubscribe("subj", "g4", nil, DurConnSubsOptResubsWait(100*time.Millisecond))
+		tcfh.Go("Subscribe#4", func() {
+			c.Subscribe("subj", "g4", nil, DurConnSubsOptResubsWait(100*time.Millisecond))
 		})
 		c.sc.(*MockConn).Options.ConnectionLostCB(c.sc, errors.New("Mock conn lost")) // Emulate connection lost.
 
 		// The first half of subscription 3.
-		tcfh.Capture("QueueSubscribe#3").
-			Expect("DurConn.QueueSubscribe:before.subscribe").
+		tcfh.Capture("Subscribe#3").
+			Expect("DurConn.Subscribe:before.subscribe").
 			Do(func(_ interface{}) {
 				assert.Len(c.subs, 1)
 				assert.NotNil(c.sc)
 				assert.NotNil(c.scStaleC)
 			}).
-			Expect("DurConn.QueueSubscribe:after.subscribe").
+			Expect("DurConn.Subscribe:after.subscribe").
 			Do(func(_ interface{}) {
 				assert.Len(c.subs, 2)
 				assert.NotNil(c.sc)
@@ -304,21 +304,21 @@ func TestDurConn(t *testing.T) {
 			Expect("DurConn.connect:before.connect")
 
 		// The second half of subscription 3 failed since stale.
-		tcfh.Capture("DurConn.queueSubscribe").
+		tcfh.Capture("DurConn.subscribe").
 			Expect("MockConn.QueueSubscribe").
 			Resume(errors.New("MockConn stale")).
-			Expect("DurConn.queueSubscribe:stale").
+			Expect("DurConn.subscribe:stale").
 			Resume(nil)
 
 		// Subscription 4 starts now.
-		tcfh.Capture("QueueSubscribe#4").
-			Expect("DurConn.QueueSubscribe:before.subscribe").
+		tcfh.Capture("Subscribe#4").
+			Expect("DurConn.Subscribe:before.subscribe").
 			Do(func(_ interface{}) {
 				assert.Len(c.subs, 2)
 				assert.Nil(c.sc)
 				assert.Nil(c.scStaleC)
 			}).
-			Expect("DurConn.QueueSubscribe:after.subscribe").
+			Expect("DurConn.Subscribe:after.subscribe").
 			Do(func(_ interface{}) {
 				assert.Len(c.subs, 3)
 				assert.Nil(c.sc)
@@ -335,19 +335,19 @@ func TestDurConn(t *testing.T) {
 			Resume(nil)
 
 		// Re subscription 3 times.
-		tcfh.Capture("DurConn.queueSubscribe").
+		tcfh.Capture("DurConn.subscribe").
 			Expect("MockConn.QueueSubscribe").
-			Expect("DurConn.queueSubscribe:ok").
+			Expect("DurConn.subscribe:ok").
 			Resume(nil)
 
-		tcfh.Capture("DurConn.queueSubscribe").
+		tcfh.Capture("DurConn.subscribe").
 			Expect("MockConn.QueueSubscribe").
-			Expect("DurConn.queueSubscribe:ok").
+			Expect("DurConn.subscribe:ok").
 			Resume(nil)
 
-		tcfh.Capture("DurConn.queueSubscribe").
+		tcfh.Capture("DurConn.subscribe").
 			Expect("MockConn.QueueSubscribe").
-			Expect("DurConn.queueSubscribe:ok").
+			Expect("DurConn.subscribe:ok").
 			Resume(nil)
 
 		tcfh.Wait()

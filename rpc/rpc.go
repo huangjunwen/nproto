@@ -53,8 +53,8 @@ type decRPCClient struct {
 	mws []RPCMiddleware
 }
 
-// NewDecoratedRPCServer decorates a RPCServer with RPCMiddlewares and returns a new RPCServer.
-func NewDecoratedRPCServer(server RPCServer, mws ...RPCMiddleware) RPCServer {
+// DecorateRPCServer decorates a RPCServer with RPCMiddlewares.
+func DecorateRPCServer(server RPCServer, mws ...RPCMiddleware) RPCServer {
 	return &decRPCServer{
 		RPCServer: server,
 		mws:       mws,
@@ -63,7 +63,7 @@ func NewDecoratedRPCServer(server RPCServer, mws ...RPCMiddleware) RPCServer {
 
 // RegistSvc implements RPCServer interface.
 func (server *decRPCServer) RegistSvc(svcName string, methods map[*RPCMethod]RPCHandler) error {
-	// Decorate handlersr.
+	// Decorate handler.
 	ms := make(map[*RPCMethod]RPCHandler)
 	for method, handler := range methods {
 		for i := len(server.mws) - 1; i >= 0; i-- {
@@ -75,8 +75,8 @@ func (server *decRPCServer) RegistSvc(svcName string, methods map[*RPCMethod]RPC
 	return server.RPCServer.RegistSvc(svcName, ms)
 }
 
-// NewDecoratedRPCClient decorates a RPCClient with RPCMiddlewares and returns a new RPCClient.
-func NewDecoratedRPCClient(client RPCClient, mws ...RPCMiddleware) RPCClient {
+// DecorateRPCClient decorates a RPCClient with RPCMiddlewares.
+func DecorateRPCClient(client RPCClient, mws ...RPCMiddleware) RPCClient {
 	return &decRPCClient{
 		RPCClient: client,
 		mws:       mws,
@@ -87,7 +87,7 @@ func NewDecoratedRPCClient(client RPCClient, mws ...RPCMiddleware) RPCClient {
 func (client *decRPCClient) MakeHandler(svcName string, method *RPCMethod) RPCHandler {
 	handler := client.RPCClient.MakeHandler(svcName, method)
 
-	// Decorate handlersr.
+	// Decorate handler.
 	for i := len(client.mws) - 1; i >= 0; i-- {
 		handler = client.mws[i](handler)
 	}
