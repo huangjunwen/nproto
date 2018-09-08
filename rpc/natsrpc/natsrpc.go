@@ -228,14 +228,17 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nprpc.RPCMe
 			}
 
 			// Setup context.
-			ctx := context.Background()
+			ctx := nprpc.SetCurRPCCtx(context.Background(), &nprpc.RPCContext{
+				SvcName: svcName,
+				Method:  method,
+			})
+			if len(req.Passthru) != 0 {
+				ctx = nprpc.SetPassthru(ctx, req.Passthru)
+			}
 			if req.Timeout != nil {
 				var cancel context.CancelFunc
 				ctx, cancel = context.WithTimeout(ctx, *req.Timeout)
 				defer cancel()
-			}
-			if len(req.Passthru) != 0 {
-				ctx = nprpc.WithPassthru(ctx, req.Passthru)
 			}
 
 			// Handle.
