@@ -72,20 +72,20 @@ func newSQLMsgSource(dialectFactory func(string) sqlMsgSourceDialect, db *sql.DB
 
 }
 
-// Store stores a message to be delivered. Usually this method is called inside a tx
+// Publish stores a message to be delivered. Usually this method is called inside a tx
 // so that the message is committed together with other data.
-func (src *SQLMsgSource) Store(ctx context.Context, q Queryer, subject string, data []byte) error {
+func (src *SQLMsgSource) Publish(ctx context.Context, q Queryer, subject string, data []byte) error {
 	_, err := q.ExecContext(ctx, src.dialect.InsertStmt(), subject, data)
 	return err
 }
 
-// StoreProto stores a protobuf message to be delivered.
-func (src *SQLMsgSource) StoreProto(ctx context.Context, q Queryer, subject string, m proto.Message) error {
+// PublishProto stores a protobuf message to be delivered.
+func (src *SQLMsgSource) PublishProto(ctx context.Context, q Queryer, subject string, m proto.Message) error {
 	data, err := proto.Marshal(m)
 	if err != nil {
 		return err
 	}
-	return src.Store(ctx, q, subject, data)
+	return src.Publish(ctx, q, subject, data)
 }
 
 // Fetch implements npmsg.MsgSource interface.
