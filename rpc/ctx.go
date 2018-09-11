@@ -10,7 +10,7 @@ type RPCContext struct {
 	Method  *RPCMethod
 }
 
-// Passthru extracts passthru dict from context.
+// Passthru extracts passthru dict from context. This dict is used to pass context through rpc calls.
 func Passthru(ctx context.Context) map[string]string {
 	v := ctx.Value(passthruKey)
 	if v == nil {

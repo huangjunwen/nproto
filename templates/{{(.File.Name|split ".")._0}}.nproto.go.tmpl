@@ -84,16 +84,18 @@ import (
 
 {{ range $msg := .File.MessageType }}
   {{ if regexMatch "<npmsg>" (leadingComment $msg) }}
-    // {{ $msg.Name }}MsgHandler creates MsgHandler. The same message will be resend if handler returns error.
-    func {{ $msg.Name }}MsgHandler(handler func(context.Context, *{{ $msg.Name }}) error) npmsg.MsgHandler {
-      return func(ctx context.Context, msg npmsg.Msg) error {
+
+    // Subscribe{{ $msg.Name }} subscribe to the given subject. The same message will be resend if handler returns error.
+    func Subscribe{{ $msg.Name }}(subscriber npmsg.MsgSubscriber, subject, group string, handler func(context.Context, string, *{{ $msg.Name }}) error, opts ...interface{}) {
+      subscriber.Subscribe(subject, group, func(ctx context.Context, subject string, data []byte) error {
         m := &{{ $msg.Name }}{}
-        if err := proto.Unmarshal(msg.Data(), m); err != nil {
+        if err := proto.Unmarshal(data, m); err != nil {
           return err
         }
-        return handler(ctx, m)
-      }
+        return handler(ctx, subject, m)
+      }, opts...)
     }
+
   {{ end }}
 {{ end }}
 

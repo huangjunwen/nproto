@@ -342,7 +342,7 @@ func (c *DurConn) Subscribe(subject, group string, handler npmsg.MsgHandler, opt
 func (c *DurConn) subscribe(sub *subscription, sc stan.Conn, scStaleC chan struct{}) {
 
 	handler := func(msg *stan.Msg) {
-		if err := sub.handler(context.Background(), (*stanMsg)(msg)); err != nil {
+		if err := sub.handler(context.Background(), msg.Subject, msg.Data); err != nil {
 			sub.conn.logger.Error().Str("fn", "subscribe.MsgHandler").
 				Str("subj", sub.subject).
 				Str("grp", sub.group).Err(err).Msg("")

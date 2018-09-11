@@ -29,13 +29,13 @@ type MsgPublisher interface {
 // MsgSubscriber is used to subscribe to subjects.
 type MsgSubscriber interface {
 	// Subscribe to a subject. Each message of the subject will be delivered to one
-	// subscriber in the group. `opts` are implement specific options.
+	// subscriber in the group. `opts` are implementation specific options.
 	Subscribe(subject, group string, handler MsgHandler, opts ...interface{}) error
 }
 
 // MsgHandler handles Msg. The message should be re-deliver if the handler returns
 // a not nil error.
-type MsgHandler func(context.Context, Msg) error
+type MsgHandler func(context.Context, string, []byte) error
 
 // MsgMiddleware is used to decorate MsgHandler.
 type MsgMiddleware func(MsgHandler) MsgHandler
