@@ -12,7 +12,7 @@ import (
   nprpc "github.com/huangjunwen/nproto/rpc"
   npmsg "github.com/huangjunwen/nproto/msg"
   {{ range $file.Dependency -}}
-    {{ (. | getProtoFile).GoPkg }}
+    // {{ (. | getProtoFile).GoPkg }}
   {{ end -}}
 )
 
