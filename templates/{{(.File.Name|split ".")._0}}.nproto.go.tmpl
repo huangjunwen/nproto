@@ -18,10 +18,10 @@ import (
 
 {{ range $svc := .File.Service }}
 
-  /* {{""}}{{- leadingComment $svc }}{{""}} */
+  //{{ leadingComment $svc | trimAll "\n" | replace "\n" "\n//" }}
   type {{ $svc.Name }} interface {
     {{ range $svc.Method -}}
-      /* {{""}}{{- leadingComment . | trim -}}{{""}} */
+      //{{ leadingComment . | trimAll "\n" | replace "\n" "\n//" }}
       {{ .Name }}(ctx context.Context, input *{{ (.InputType | getMessageType $file).GoType $currentPath }}) (output *{{ (.OutputType | getMessageType $file).GoType $currentPath }}, err error)
     {{ end }}
   }
@@ -37,8 +37,8 @@ import (
     })
   }
 
-  // New{{ $svc.Name }}Client use rpc client to create {{ $svc.Name }} service.
-  func New{{ $svc.Name }}Client(client nprpc.RPCClient, svcName string) {{ $svc.Name }} {
+  // Invoke{{ $svc.Name }} use rpc client to invoke {{ $svc.Name }} service.
+  func Invoke{{ $svc.Name }}(client nprpc.RPCClient, svcName string) {{ $svc.Name }} {
     return &client{{ $svc.Name }}{
       svcName: svcName,
       client: client,
