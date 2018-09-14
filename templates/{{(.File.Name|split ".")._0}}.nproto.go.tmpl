@@ -11,9 +11,14 @@ import (
   "github.com/golang/protobuf/proto"
   nprpc "github.com/huangjunwen/nproto/rpc"
   npmsg "github.com/huangjunwen/nproto/msg"
-  {{ range $file.Dependency -}}
-    // {{ (. | getProtoFile).GoPkg }}
-  {{ end -}}
+  {{ range .File.Service }}
+    {{ range .Method }}
+      {{- $inputPkg := (.InputType | getMessageType $file).File.GoPkg }}
+      {{ if ne $inputPkg.Path "." }}{{ $inputPkg }}{{ end }}
+      {{- $outputPkg := (.OutputType | getMessageType $file).File.GoPkg }}
+      {{ if ne $outputPkg.Path "." }}{{ $outputPkg }}{{ end }}
+    {{ end }}
+  {{ end }}
 )
 
 {{ range $svc := .File.Service }}
