@@ -233,7 +233,7 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nprpc.RPCMe
 				Method:  method,
 			})
 			if len(req.Passthru) != 0 {
-				ctx = nprpc.SetPassthru(ctx, req.Passthru)
+				ctx = nprpc.AddPassthru(ctx, req.Passthru)
 			}
 			if req.Timeout != nil {
 				var cancel context.CancelFunc

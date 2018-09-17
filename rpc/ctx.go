@@ -19,8 +19,8 @@ func Passthru(ctx context.Context) map[string]string {
 	return v.(map[string]string)
 }
 
-// SetPassthru merges passthru dict into context and returns a new context.
-func SetPassthru(ctx context.Context, passthru map[string]string) context.Context {
+// AddPassthru merges passthru dict into context and returns a new context.
+func AddPassthru(ctx context.Context, passthru map[string]string) context.Context {
 	p := map[string]string{}
 	// Adds exists values first.
 	for k, v := range Passthru(ctx) {
