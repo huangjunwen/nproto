@@ -11,9 +11,10 @@ nats (nats.io) + protobuf
 
 Depends on protobuf and [protoc-gen-gotemplate](https://github.com/moul/protoc-gen-gotemplate)
 
-- Install protobuf: https://github.com/protocolbuffers/protobuf/releases
+- Install protobuf: https://github.com/protocolbuffers/protobuf/releases and make sure `protoc` is in `$PATH`
 - Install protoc-gen-go: `go get -u github.com/golang/protobuf/protoc-gen-go`
 - Install my fork (with some modification but still not merged) of protoc-gen-gotemplate: `go get -u github.com/huangjunwen/protoc-gen-gotemplate`
+- Install nproto: `go get -u github.com/huangjunwen/nproto/...`
 
 ## Usage
 
