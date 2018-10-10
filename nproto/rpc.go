@@ -1,4 +1,4 @@
-package nprpc
+package nproto
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"github.com/golang/protobuf/proto"
 )
 
-// RPCServer is the server side of service.
+// RPCServer is used to serve rpc services.
 type RPCServer interface {
 	// RegistSvc regist a service with given method set and associated handlers.
 	RegistSvc(svcName string, methods map[*RPCMethod]RPCHandler) error
@@ -18,7 +18,7 @@ type RPCServer interface {
 	Close() error
 }
 
-// RPCClient is the client side of service.
+// RPCClient is used to invoke rpc services.
 type RPCClient interface {
 	// MakeHandler creates a RPCHandler for a given method of a service.
 	MakeHandler(svcName string, method *RPCMethod) RPCHandler
