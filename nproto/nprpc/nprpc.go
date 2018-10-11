@@ -228,7 +228,7 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nproto.RPCM
 			}
 
 			// Setup context.
-			ctx := nproto.NewRPCCtx(svcName, method, req.Passthru)
+			ctx := nproto.NewRPCCtx(context.Background(), svcName, method, req.Passthru)
 			if req.Timeout != nil {
 				var cancel context.CancelFunc
 				ctx, cancel = context.WithTimeout(ctx, *req.Timeout)
