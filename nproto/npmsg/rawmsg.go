@@ -15,8 +15,8 @@ type RawMsgPublisher interface {
 	Publish(ctx context.Context, subject string, data []byte) error
 }
 
-// RawMsgBatchPublisher can publish a batch of messages at once.
-type RawMsgBatchPublisher interface {
+// RawBatchMsgPublisher can publish a batch of messages at once.
+type RawBatchMsgPublisher interface {
 	RawMsgPublisher
 
 	// PublishBatch publishes a batch of messages.
