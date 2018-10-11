@@ -13,11 +13,6 @@ import (
 type RawMsgPublisher interface {
 	// Publish publishes a message to the given subject. It returns nil when succeeded.
 	Publish(ctx context.Context, subject string, data []byte) error
-}
-
-// RawBatchMsgPublisher can publish a batch of messages at once.
-type RawBatchMsgPublisher interface {
-	RawMsgPublisher
 
 	// PublishBatch publishes a batch of messages.
 	PublishBatch(ctx context.Context, subjects []string, datas [][]byte) (errors []error)
@@ -64,7 +59,7 @@ func (p *defaultMsgPublisher) Publish(ctx context.Context, subject string, msg p
 		Passthru: nproto.Passthru(ctx),
 	})
 	if err != nil {
-		return err
+		panic(err)
 	}
 
 	// Publish.

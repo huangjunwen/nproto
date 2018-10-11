@@ -75,9 +75,8 @@ type DurConnSubsOption func(*subscription) error
 type stanMsg stan.Msg
 
 var (
-	_ npmsg.RawMsgPublisher      = (*DurConn)(nil)
-	_ npmsg.RawBatchMsgPublisher = (*DurConn)(nil)
-	_ npmsg.RawMsgSubscriber     = (*DurConn)(nil)
+	_ npmsg.RawMsgPublisher  = (*DurConn)(nil)
+	_ npmsg.RawMsgSubscriber = (*DurConn)(nil)
 )
 
 // NewDurConn creates a new DurConn. `nc` should have MaxReconnects < 0 set (e.g. Always reconnect).
@@ -234,7 +233,7 @@ func (c *DurConn) Publish(_ context.Context, subject string, data []byte) error 
 	return sc.Publish(c.makeSubject(subject), data)
 }
 
-// PublishMsgs implements RawBatchMsgPublisher interface.
+// PublishMsgs implements RawMsgPublisher interface.
 func (c *DurConn) PublishBatch(_ context.Context, subjects []string, datas [][]byte) (errors []error) {
 
 	n := len(subjects)
