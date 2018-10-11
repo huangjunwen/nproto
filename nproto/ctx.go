@@ -24,7 +24,8 @@ type msgCtxSubjectKey struct{}
 
 type passthruKey struct{}
 
-// CurrRPCSvcName returns the service name of in current rpc handler or "" if not found.
+// CurrRPCSvcName returns the service name of current rpc handler or "" if not found.
+// See NewRPCCtx for more detail.
 func CurrRPCSvcName(ctx context.Context) string {
 	v := ctx.Value(rpcCtxSvcNameKey{})
 	if v == nil {
@@ -33,7 +34,8 @@ func CurrRPCSvcName(ctx context.Context) string {
 	return v.(string)
 }
 
-// CurrRPCMethod returns the method of in current rpc handler or nil if not found.
+// CurrRPCMethod returns the method of current rpc handler or nil if not found.
+// See NewRPCCtx for more detail.
 func CurrRPCMethod(ctx context.Context) *RPCMethod {
 	v := ctx.Value(rpcCtxMethodKey{})
 	if v == nil {
@@ -42,13 +44,22 @@ func CurrRPCMethod(ctx context.Context) *RPCMethod {
 	return v.(*RPCMethod)
 }
 
-// NewRPCCtx creates a new rpc context.
-func NewRPCCtx(svcName string, method *RPCMethod, passthru map[string]string) context.Context {
-	return &rpcCtx{
+// NewRPCCtx creates a new rpc context. This function is mainly used by RPCServer implementation
+// to setup context for RPCHandler.
+//   svcName: Current rpc's service name. Use CurrRPCSvcName to get it inside RPCHandler.
+//   method: Current rpc's method. Use CurrRPCMethod to get it inside RPCHandler.
+//   passthru(optional): Passthru context dict. Use Passthru to get it inside RPCHandler.
+//   timeout(optional): Set the timeout of the context if > 0.
+func NewRPCCtx(svcName string, method *RPCMethod, passthru map[string]string, timeout time.Duration) context.Context {
+	ret := &rpcCtx{
 		svcName:  svcName,
 		method:   method,
 		passthru: passthru,
 	}
+	if timeout > 0 {
+		return context.WithTimeout(ret, timeout)
+	}
+	return ret
 }
 
 func (ctx *rpcCtx) Deadline() (deadline time.Time, ok bool) {
@@ -77,6 +88,7 @@ func (ctx *rpcCtx) Value(key interface{}) interface{} {
 }
 
 // CurrMsgSubject returns the subject of in current msg handler or "" if not found.
+// See NewMsgCtx for more detail.
 func CurrMsgSubject(ctx context.Context) string {
 	v := ctx.Value(msgCtxSubjectKey{})
 	if v == nil {
@@ -85,7 +97,10 @@ func CurrMsgSubject(ctx context.Context) string {
 	return v.(string)
 }
 
-// NewMsgCtx creates a new msg context.
+// NewMsgCtx creates a new msg context. This function is mainly used by MsgSubscriber implementation
+// to setup context for MsgHandler.
+//   subject: Current msg's subject. Use CurrMsgSubjec to get it inside MsgHandler.
+//   passthru(optional): Passthru context dict. Use Passthru to get it inside MsgHandler.
 func NewMsgCtx(subject string, passthru map[string]string) context.Context {
 	return &msgCtx{
 		subject:  subject,
