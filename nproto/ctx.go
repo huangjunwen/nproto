@@ -49,17 +49,12 @@ func CurrRPCMethod(ctx context.Context) *RPCMethod {
 //   svcName: Current rpc's service name. Use CurrRPCSvcName to get it inside RPCHandler.
 //   method: Current rpc's method. Use CurrRPCMethod to get it inside RPCHandler.
 //   passthru(optional): Passthru context dict. Use Passthru to get it inside RPCHandler.
-//   timeout(optional): Set the timeout of the context if > 0.
-func NewRPCCtx(svcName string, method *RPCMethod, passthru map[string]string, timeout time.Duration) context.Context {
-	ret := &rpcCtx{
+func NewRPCCtx(svcName string, method *RPCMethod, passthru map[string]string) context.Context {
+	return &rpcCtx{
 		svcName:  svcName,
 		method:   method,
 		passthru: passthru,
 	}
-	if timeout > 0 {
-		return context.WithTimeout(ret, timeout)
-	}
-	return ret
 }
 
 func (ctx *rpcCtx) Deadline() (deadline time.Time, ok bool) {
