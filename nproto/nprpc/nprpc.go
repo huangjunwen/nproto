@@ -1,4 +1,4 @@
-package natsrpc
+package nprpc
 
 import (
 	"context"
@@ -12,8 +12,8 @@ import (
 	"github.com/nats-io/go-nats"
 	"github.com/rs/zerolog"
 
-	"github.com/huangjunwen/nproto/rpc"
-	"github.com/huangjunwen/nproto/rpc/enc"
+	"github.com/huangjunwen/nproto/nproto"
+	"github.com/huangjunwen/nproto/nproto/nprpc/enc"
 )
 
 var (
@@ -23,9 +23,9 @@ var (
 )
 
 var (
-	ErrMaxReconnect = errors.New("nproto.nprpc.natsrpc: nc should have MaxReconnects < 0")
-	ErrServerClosed = errors.New("nproto.nprpc.natsrpc.NatsRPCServer: Server closed")
-	ErrClientClosed = errors.New("nproto.nprpc.natsrpc.NatsRPCClient: Client closed")
+	ErrMaxReconnect = errors.New("nproto.nprpc: nc should have MaxReconnects < 0")
+	ErrServerClosed = errors.New("nproto.nprpc.NatsRPCServer: Server closed")
+	ErrClientClosed = errors.New("nproto.nprpc.NatsRPCClient: Client closed")
 )
 
 // NatsRPCServer implements RPCServer.
@@ -59,8 +59,8 @@ type NatsRPCServerOption func(*NatsRPCServer) error
 type NatsRPCClientOption func(*NatsRPCClient) error
 
 var (
-	_ nprpc.RPCServer = (*NatsRPCServer)(nil)
-	_ nprpc.RPCClient = (*NatsRPCClient)(nil)
+	_ nproto.RPCServer = (*NatsRPCServer)(nil)
+	_ nproto.RPCClient = (*NatsRPCClient)(nil)
 )
 
 // NewNatsRPCServer creates a new NatsRPCServer. `nc` should have MaxReconnects < 0 set (e.g. Always reconnect).
@@ -87,7 +87,7 @@ func NewNatsRPCServer(nc *nats.Conn, opts ...NatsRPCServerOption) (*NatsRPCServe
 }
 
 // RegistSvc implements RPCServer interface.
-func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*nprpc.RPCMethod]nprpc.RPCHandler) error {
+func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*nproto.RPCMethod]nproto.RPCHandler) error {
 	// Create msg handler.
 	handler, err := server.msgHandler(svcName, methods)
 	if err != nil {
@@ -102,7 +102,7 @@ func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*nprpc.RPCMet
 	}
 	if server.svcs[svcName] != nil {
 		server.mu.RUnlock()
-		return fmt.Errorf("nproto.nprpc.natsrpc.NatsRPCServer: Duplicated service %+q", svcName)
+		return fmt.Errorf("nproto.nprpc.NatsRPCServer: Duplicated service %+q", svcName)
 	}
 	nc := server.nc
 	server.mu.RUnlock()
@@ -128,7 +128,7 @@ func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*nprpc.RPCMet
 	if server.svcs[svcName] != nil {
 		server.mu.Unlock()
 		subs.Unsubscribe()
-		return fmt.Errorf("nproto.nprpc.natsrpc.NatsRPCServer: Duplicated service name %+q", svcName)
+		return fmt.Errorf("nproto.nprpc.NatsRPCServer: Duplicated service name %+q", svcName)
 	}
 	server.svcs[svcName] = subs
 	server.mu.Unlock()
@@ -174,12 +174,12 @@ func (server *NatsRPCServer) Close() error {
 	return nil
 }
 
-func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nprpc.RPCMethod]nprpc.RPCHandler) (nats.MsgHandler, error) {
+func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nproto.RPCMethod]nproto.RPCHandler) (nats.MsgHandler, error) {
 	// Method name -> method
-	methodNames := make(map[string]*nprpc.RPCMethod)
+	methodNames := make(map[string]*nproto.RPCMethod)
 	for method, _ := range methods {
 		if _, found := methodNames[method.Name]; found {
-			return nil, fmt.Errorf("nproto.nprpc.natsrpc.NatsRPCServer: Duplicated method %+q", method.Name)
+			return nil, fmt.Errorf("nproto.nprpc.NatsRPCServer: Duplicated method %+q", method.Name)
 		}
 		methodNames[method.Name] = method
 	}
@@ -228,13 +228,7 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nprpc.RPCMe
 			}
 
 			// Setup context.
-			ctx := nprpc.SetCurRPCCtx(context.Background(), &nprpc.RPCContext{
-				SvcName: svcName,
-				Method:  method,
-			})
-			if len(req.Passthru) != 0 {
-				ctx = nprpc.AddPassthru(ctx, req.Passthru)
-			}
+			ctx := nproto.NewRPCCtx(svcName, method, req.Passthru)
 			if req.Timeout != nil {
 				var cancel context.CancelFunc
 				ctx, cancel = context.WithTimeout(ctx, *req.Timeout)
@@ -321,7 +315,7 @@ func NewNatsRPCClient(nc *nats.Conn, opts ...NatsRPCClientOption) (*NatsRPCClien
 }
 
 // MakeHandler implements RPCClient interface.
-func (client *NatsRPCClient) MakeHandler(svcName string, method *nprpc.RPCMethod) nprpc.RPCHandler {
+func (client *NatsRPCClient) MakeHandler(svcName string, method *nproto.RPCMethod) nproto.RPCHandler {
 
 	encoder := chooseClientEncoder(client.encoding)
 	subj := strings.Join([]string{client.subjPrefix, svcName, client.encoding, method.Name}, ".")
@@ -347,7 +341,7 @@ func (client *NatsRPCClient) MakeHandler(svcName string, method *nprpc.RPCMethod
 				req.Timeout = &dur
 			}
 		}
-		passthru := nprpc.Passthru(ctx)
+		passthru := nproto.Passthru(ctx)
 		if len(passthru) > 0 {
 			req.Passthru = passthru
 		}
@@ -431,7 +425,7 @@ func ServerOptLogger(logger *zerolog.Logger) NatsRPCServerOption {
 			nop := zerolog.Nop()
 			logger = &nop
 		}
-		server.logger = logger.With().Str("comp", "nproto.nprpc.natsrpc.NatsRPCServer").Logger()
+		server.logger = logger.With().Str("component", "nproto.nprpc.NatsRPCServer").Logger()
 		return nil
 	}
 }

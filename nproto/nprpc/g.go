@@ -1,4 +1,4 @@
-package natsrpc
+package nprpc
 
 import (
 	"context"
