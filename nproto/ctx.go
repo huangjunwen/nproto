@@ -2,16 +2,17 @@ package nproto
 
 import (
 	"context"
-	"time"
 )
 
 type rpcCtx struct {
+	context.Context
 	svcName  string
 	method   *RPCMethod
 	passthru map[string]string
 }
 
 type msgCtx struct {
+	context.Context
 	subject  string
 	passthru map[string]string
 }
@@ -46,27 +47,17 @@ func CurrRPCMethod(ctx context.Context) *RPCMethod {
 
 // NewRPCCtx creates a new rpc context. This function is mainly used by RPCServer implementation
 // to setup context for RPCHandler.
+//   parent: Parent context.
 //   svcName: Current rpc's service name. Use CurrRPCSvcName to get it inside RPCHandler.
 //   method: Current rpc's method. Use CurrRPCMethod to get it inside RPCHandler.
 //   passthru(optional): Passthru context dict. Use Passthru to get it inside RPCHandler.
-func NewRPCCtx(svcName string, method *RPCMethod, passthru map[string]string) context.Context {
+func NewRPCCtx(parent context.Context, svcName string, method *RPCMethod, passthru map[string]string) context.Context {
 	return &rpcCtx{
+		Context:  parent,
 		svcName:  svcName,
 		method:   method,
 		passthru: passthru,
 	}
-}
-
-func (ctx *rpcCtx) Deadline() (deadline time.Time, ok bool) {
-	return
-}
-
-func (ctx *rpcCtx) Done() <-chan struct{} {
-	return nil
-}
-
-func (ctx *rpcCtx) Err() error {
-	return nil
 }
 
 func (ctx *rpcCtx) Value(key interface{}) interface{} {
@@ -78,7 +69,7 @@ func (ctx *rpcCtx) Value(key interface{}) interface{} {
 	case passthruKey:
 		return ctx.passthru
 	default:
-		return nil
+		return ctx.Context.Value(key)
 	}
 }
 
@@ -94,25 +85,15 @@ func CurrMsgSubject(ctx context.Context) string {
 
 // NewMsgCtx creates a new msg context. This function is mainly used by MsgSubscriber implementation
 // to setup context for MsgHandler.
+//   parent: Parent context.
 //   subject: Current msg's subject. Use CurrMsgSubjec to get it inside MsgHandler.
 //   passthru(optional): Passthru context dict. Use Passthru to get it inside MsgHandler.
-func NewMsgCtx(subject string, passthru map[string]string) context.Context {
+func NewMsgCtx(parent context.Context, subject string, passthru map[string]string) context.Context {
 	return &msgCtx{
+		Context:  parent,
 		subject:  subject,
 		passthru: passthru,
 	}
-}
-
-func (ctx *msgCtx) Deadline() (deadline time.Time, ok bool) {
-	return
-}
-
-func (ctx *msgCtx) Done() <-chan struct{} {
-	return nil
-}
-
-func (ctx *msgCtx) Err() error {
-	return nil
 }
 
 func (ctx *msgCtx) Value(key interface{}) interface{} {
@@ -122,7 +103,7 @@ func (ctx *msgCtx) Value(key interface{}) interface{} {
 	case passthruKey:
 		return ctx.passthru
 	default:
-		return nil
+		return ctx.Context.Value(key)
 	}
 }
 
