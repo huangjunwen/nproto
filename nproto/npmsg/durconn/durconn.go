@@ -75,8 +75,9 @@ type DurConnSubsOption func(*subscription) error
 type stanMsg stan.Msg
 
 var (
-	_ npmsg.RawMsgPublisher  = (*DurConn)(nil)
-	_ npmsg.RawMsgSubscriber = (*DurConn)(nil)
+	_ npmsg.RawMsgPublisher      = (*DurConn)(nil)
+	_ npmsg.RawBatchMsgPublisher = (*DurConn)(nil)
+	_ npmsg.RawMsgSubscriber     = (*DurConn)(nil)
 )
 
 // NewDurConn creates a new DurConn. `nc` should have MaxReconnects < 0 set (e.g. Always reconnect).
