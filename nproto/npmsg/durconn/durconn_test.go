@@ -111,7 +111,7 @@ func (mc *MockConn) NatsConn() *nats.Conn {
 
 // ----------- Mock ends -----------
 
-// Test reset/subscribe/close_ .
+// Test reset/addSub/close_ .
 // They are the 'atomic' methods of DurConn since they all use:
 //
 //   dc.mu.Lock()
@@ -172,7 +172,7 @@ func TestLockMethods(t *testing.T) {
 
 	// Add subscription 1 without stan connection.
 	{
-		sc, scStaleC, err := dc.subscribe(sub1)
+		sc, scStaleC, err := dc.addSub(sub1)
 		assert.Nil(sc)
 		assert.Nil(scStaleC)
 		assert.Nil(err)
@@ -191,7 +191,7 @@ func TestLockMethods(t *testing.T) {
 
 	// Add subscription 2 with stan connection.
 	{
-		sc, scStaleC, err := dc.subscribe(sub2)
+		sc, scStaleC, err := dc.addSub(sub2)
 		assert.Equal(sc1, sc)
 		assert.NotNil(scStaleC)
 		assert.Nil(err)
@@ -200,7 +200,7 @@ func TestLockMethods(t *testing.T) {
 
 	// Add subscription 1 again should result an error.
 	{
-		sc, scStaleC, err := dc.subscribe(sub1)
+		sc, scStaleC, err := dc.addSub(sub1)
 		assert.Nil(sc)
 		assert.Nil(scStaleC)
 		assert.NotNil(err)
@@ -235,7 +235,7 @@ func TestLockMethods(t *testing.T) {
 		assert.Error(err)
 	}
 	{
-		sc, scStaleC, err := dc.subscribe(sub3)
+		sc, scStaleC, err := dc.addSub(sub3)
 		assert.Nil(sc)
 		assert.Nil(scStaleC)
 		assert.Error(err)
@@ -247,4 +247,8 @@ func TestLockMethods(t *testing.T) {
 		assert.Error(err)
 	}
 	expect(true, nil, 2)
+}
+
+func TestConnect(t *testing.T) {
+	//assert := assert.New(t)
 }

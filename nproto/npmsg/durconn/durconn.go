@@ -136,13 +136,13 @@ func (dc *DurConn) Subscribe(subject, queue string, handler npmsg.RawMsgHandler,
 	}
 
 	// Add to subscription list and subscribe.
-	sc, scStaleC, err := dc.subscribe(sub)
+	sc, scStaleC, err := dc.addSub(sub)
 	if err != nil {
 		return err
 	}
 
 	if sc != nil {
-		dc.subscribeLoop(sub, sc, scStaleC)
+		dc.subscribe(sub, sc, scStaleC)
 	}
 	return nil
 }
@@ -285,7 +285,7 @@ func (dc *DurConn) connect(wait bool) {
 
 			// Re-subscribe.
 			for _, sub := range subs {
-				dc.subscribeLoop(sub, sc, scStaleC)
+				dc.subscribe(sub, sc, scStaleC)
 			}
 		}
 
@@ -294,9 +294,9 @@ func (dc *DurConn) connect(wait bool) {
 
 }
 
-// subscribeLoop keeps subscribing unless success or the stan connection is stale
+// subscribe keeps subscribing unless success or the stan connection is stale
 // (e.g. disconnected or closed).
-func (dc *DurConn) subscribeLoop(sub *subscription, sc stan.Conn, scStaleC chan struct{}) {
+func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, scStaleC chan struct{}) {
 	// Use a seperated go routine.
 	go func() {
 		// Wrap sub.handler to stan.MsgHandler.
@@ -355,9 +355,9 @@ func (dc *DurConn) reset(sc stan.Conn, scStaleC chan struct{}) (
 	return
 }
 
-// subscribe gets lock then adds subscription to DurConn.
+// addSub gets lock then adds subscription to DurConn.
 // It returns current stan connection.
-func (dc *DurConn) subscribe(sub *subscription) (sc stan.Conn, scStaleC chan struct{}, err error) {
+func (dc *DurConn) addSub(sub *subscription) (sc stan.Conn, scStaleC chan struct{}, err error) {
 	key := [2]string{sub.subject, sub.queue}
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
