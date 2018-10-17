@@ -40,6 +40,12 @@ var (
 		_, err := sc.QueueSubscribe(subject, queue, handler, opts...)
 		return err
 	}
+	stanPublish = func(sc stan.Conn, subject string, data []byte) error {
+		return sc.Publish(subject, data)
+	}
+	stanPublishAsync = func(sc stan.Conn, subject string, data []byte, ah stan.AckHandler) (string, error) {
+		return sc.PublishAsync(subject, data, ah)
+	}
 )
 
 var (
@@ -163,7 +169,7 @@ func (dc *DurConn) Publish(_ context.Context, subject string, data []byte) error
 	if sc == nil {
 		return ErrNotConnected
 	}
-	return sc.Publish(dc.makeSubject(subject), data)
+	return stanPublish(sc, dc.makeSubject(subject), data)
 
 }
 
@@ -207,7 +213,7 @@ func (dc *DurConn) PublishBatch(_ context.Context, subjects []string, datas [][]
 	id2i := map[string]int{} // id -> msg index
 	nErrs := 0
 	for i, subject := range subjects {
-		id, err := sc.PublishAsync(dc.makeSubject(subject), datas[i], ackHandler)
+		id, err := stanPublishAsync(sc, dc.makeSubject(subject), datas[i], ackHandler)
 		if err != nil {
 			nErrs++
 			errors[i] = err
