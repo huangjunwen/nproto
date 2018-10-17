@@ -11,68 +11,36 @@ import (
 
 	"github.com/nats-io/go-nats"
 	"github.com/nats-io/go-nats-streaming"
-	"github.com/nats-io/nuid"
-	"github.com/rs/zerolog"
+	"github.com/rs/xid"
 )
 
 var (
-	DefaultSubjectPrefix         = "npmsg"
-	DefaultDurConnReconnectWait  = 5 * time.Second
-	DefaultDurConnSubsResubsWait = 5 * time.Second
+	DefaultConnectWait   = 5 * time.Second
+	DefaultSubRetryWait  = 5 * time.Second
+	DefaultSubjectPreifx = "npmsg"
 )
 
 var (
-	ErrMaxReconnect         = errors.New("nproto.npmsg.durconn.DurConn: nc should have MaxReconnects < 0")
-	ErrNotConnected         = errors.New("nproto.npmsg.durconn.DurConn: Not connect to streaming server")
-	ErrNotDurConnSubsOption = errors.New("nproto.npmsg.durconn.DurConn: Expect DurConnSubsOption")
+	ErrNCMaxReconnect     = errors.New("nproto.npmsg.durconn.NewDurConn: nats.Conn should have MaxReconnects < 0")
+	ErrClosed             = errors.New("nproto.npmsg.durconn.DurConn: DurConn closed.")
+	ErrNotConnected       = errors.New("nproto.npmsg.durconn.DurConn: Not connected.")
+	ErrBadSubscriptionOpt = errors.New("nproto.npmsg.durconn.DurConn: Expect SubscriptionOption.")
+	ErrDupSubscription    = func(subject, queue string) error {
+		return fmt.Errorf(
+			"nproto.npmsg.durconn.DurConn: Duplicated subscription (%q, %q)",
+			subject,
+			queue,
+		)
+	}
 )
 
-// DurConn provides re-connection/re-subscription functions on top of stan.Conn.
-// It implements npmsg.RawMsgPublisher and npmsg.RawMsgSubscriber interfaces.
-type DurConn struct {
-	// Options.
-	stanOptions   []stan.Option
-	subjPrefix    string
-	reconnectWait time.Duration
-	logger        zerolog.Logger
-
-	// Immutable fields.
-	id        string
-	nc        *nats.Conn
-	clusterID string
-
-	// At most one connect/Close can be run at any time.
-	connectMu sync.Mutex
-
-	// Mutable fields
-	mu       sync.RWMutex
-	sc       stan.Conn                   // nil if not connected/reconnecting
-	scStaleC chan struct{}               // scStaleC is closed when sc is stale
-	subs     map[[2]string]*subscription // (subject, group)->subscription
-	closed   bool
-}
-
-// subscription is a single subscription. NOTE: Not support unsubscribing.
-type subscription struct {
-	// Options.
-	stanOptions []stan.SubscriptionOption
-	resubsWait  time.Duration
-
-	// Immutable fields.
-	conn    *DurConn
-	subject string
-	queue   string
-	handler npmsg.RawMsgHandler
-}
-
-// DurConnOption is the option in creating DurConn.
-type DurConnOption func(*DurConn) error
-
-// DurConnSubsOption is the option in DurConn.QueueSubscribe.
-type DurConnSubsOption func(*subscription) error
-
-// stanMsg implements Msg interface.
-type stanMsg stan.Msg
+var (
+	stanConnect        = stan.Connect
+	stanQueueSubscribe = func(sc stan.Conn, subject, queue string, handler stan.MsgHandler, opts ...stan.SubscriptionOption) error {
+		_, err := sc.QueueSubscribe(subject, queue, handler, opts...)
+		return err
+	}
+)
 
 var (
 	_ npmsg.RawMsgPublisher      = (*DurConn)(nil)
@@ -80,173 +48,143 @@ var (
 	_ npmsg.RawMsgSubscriber     = (*DurConn)(nil)
 )
 
-// NewDurConn creates a new DurConn. `nc` should have MaxReconnects < 0 set (e.g. Always reconnect).
+type DurConn struct {
+	// Options.
+	stanOptions   []stan.Option
+	connectWait   time.Duration
+	subjectPrefix string
+
+	// Immutable fields.
+	clusterID string
+	nc        *nats.Conn
+
+	// At most one connect can be run at any time.
+	connectMu sync.Mutex
+
+	// Mutable fields.
+	// mu is used to protect the following fields.
+	mu       sync.RWMutex
+	closed   bool              // true if the DurConn is closed.
+	sc       stan.Conn         // nil if not connected/reconnecting
+	scStaleC chan struct{}     // scStaleC is closed when sc is stale
+	subs     []*subscription   // list of subscription, append-only (since no Unsubscribe)
+	subNames map[[2]string]int // (subject, queue) -> subscription index
+}
+
+type subscription struct {
+	// Options.
+	stanOptions []stan.SubscriptionOption
+	retryWait   time.Duration
+
+	// Immutable fields.
+	dc      *DurConn
+	subject string
+	queue   string
+	handler npmsg.RawMsgHandler
+}
+
+type DurConnOption func(*DurConn) error
+
+type SubscriptionOption func(*subscription) error
+
 func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) (*DurConn, error) {
 
 	if nc.Opts.MaxReconnect >= 0 {
-		return nil, ErrMaxReconnect
+		return nil, ErrNCMaxReconnect
 	}
 
-	c := &DurConn{
-		subjPrefix:    DefaultSubjectPrefix,
-		reconnectWait: DefaultDurConnReconnectWait,
-		logger:        zerolog.Nop(),
-		id:            nuid.Next(), // UUID as client id
-		nc:            nc,
+	dc := &DurConn{
+		connectWait:   DefaultConnectWait,
+		subjectPrefix: DefaultSubjectPreifx,
 		clusterID:     clusterID,
-		subs:          make(map[[2]string]*subscription),
+		nc:            nc,
+		subNames:      make(map[[2]string]int),
 	}
 	for _, opt := range opts {
-		if err := opt(c); err != nil {
+		if err := opt(dc); err != nil {
 			return nil, err
 		}
 	}
 
-	// Start to connect.
-	c.connect(false)
-	return c, nil
-}
-
-// connect is used to close old connection (if any), release old resouces then
-// reconnect and resubscribe.
-func (c *DurConn) connect(wait bool) {
-	// Start a new routine to run.
-	cfh.Go("DurConn.connect", func() {
-		logger := c.logger.With().Str("fn", "connect").Logger()
-
-		// Wait a while.
-		if wait {
-			time.Sleep(c.reconnectWait)
-		}
-
-		// At most one connect is allowed to run at any time.
-		c.connectMu.Lock()
-		defer c.connectMu.Unlock()
-
-		// Reset and release old resources.
-		cfh.Suspend("DurConn.connect:before.reset", c)
-		c.mu.Lock()
-
-		// DurConn is closed. Abort.
-		if c.closed {
-			c.mu.Unlock()
-			cfh.Suspend("DurConn.connect:closed", c)
-			logger.Info().Msg("Closed. Abort connection.")
-			return
-		}
-
-		sc := c.sc
-		scStaleC := c.scStaleC
-		c.sc = nil
-		c.scStaleC = nil
-
-		c.mu.Unlock()
-		cfh.Suspend("DurConn.connect:after.reset", c)
-
-		if sc != nil {
-			sc.Close()
-		}
-
-		if scStaleC != nil {
-			// Notify stale of sc.
-			close(scStaleC)
-		}
-
-		// Start to connect.
-		opts := []stan.Option{}
-		opts = append(opts, c.stanOptions...)
-		opts = append(opts, stan.NatsConn(c.nc))
-		opts = append(opts, stan.SetConnectionLostHandler(func(_ stan.Conn, _ error) {
-			// Reconnect when connection lost.
-			c.connect(true)
-		}))
-
-		cfh.Suspend("DurConn.connect:before.connect", c)
-		sc, err := stanConnect(c.clusterID, c.id, opts...)
-		if err != nil {
-			// Reconnect when connection failed.
-			cfh.Suspend("DurConn.connect:connect.failed", c)
-			logger.Error().Err(err).Msg("Fail to connect.")
-			c.connect(true)
-			return
-		}
-		logger.Info().Msg("Connected.")
-		cfh.Suspend("DurConn.connect:connect.ok", c)
-
-		// Connected. Update fields and start to re-subscribe.
-		cfh.Suspend("DurConn.connect:before.update", c)
-		c.mu.Lock()
-
-		c.sc = sc
-		c.scStaleC = make(chan struct{})
-		for _, sub := range c.subs {
-			c.subscribe(sub, c.sc, c.scStaleC)
-		}
-
-		c.mu.Unlock()
-		cfh.Suspend("DurConn.connect:after.update", c)
-		return
-	})
+	dc.connect(false)
+	return dc, nil
 
 }
 
-// Close DurConn.
-func (c *DurConn) Close() {
-	// Guarantee no connect is running.
-	c.connectMu.Lock()
-	defer c.connectMu.Unlock()
+func (dc *DurConn) Close() error {
+	oldSc, oldScStaleC, err := dc.close_()
+	if oldSc != nil {
+		oldSc.Close()
+		close(oldScStaleC)
+	}
+	return err
+}
 
-	// Set fields to blank. Set closed to true.
-	cfh.Suspend("DurConn.Close:before.reset", c)
-	c.mu.Lock()
+func (dc *DurConn) Subscribe(subject, queue string, handler npmsg.RawMsgHandler, opts ...interface{}) error {
 
-	sc := c.sc
-	scStaleC := c.scStaleC
-	c.sc = nil
-	c.scStaleC = nil
-	c.closed = true
+	sub := &subscription{
+		retryWait: DefaultSubRetryWait,
+		dc:        dc,
+		subject:   subject,
+		queue:     queue,
+		handler:   handler,
+	}
+	for _, opt := range opts {
+		option, ok := opt.(SubscriptionOption)
+		if !ok {
+			return ErrBadSubscriptionOpt
+		}
+		if err := option(sub); err != nil {
+			return err
+		}
+	}
 
-	c.mu.Unlock()
-	cfh.Suspend("DurConn.Close:after.reset", c)
+	// Add to subscription list and subscribe.
+	sc, scStaleC, err := dc.subscribe(sub)
+	if err != nil {
+		return err
+	}
 
 	if sc != nil {
-		// Close old sc.
-		// NOTE: The callback (SetConnectionLostHandler) will not be invoked on normal Conn.Close().
-		sc.Close()
+		dc.subscribeLoop(sub, sc, scStaleC)
 	}
-
-	if scStaleC != nil {
-		// Close scStaleC.
-		close(scStaleC)
-	}
-
-	return
+	return nil
 }
 
-// Publish implements RawMsgPublisher interface.
-func (c *DurConn) Publish(_ context.Context, subject string, data []byte) error {
-	c.mu.RLock()
-	sc := c.sc
-	c.mu.RUnlock()
+func (dc *DurConn) Publish(_ context.Context, subject string, data []byte) error {
+	dc.mu.RLock()
+	closed := dc.closed
+	sc := dc.sc
+	dc.mu.RUnlock()
+
+	if closed {
+		return ErrClosed
+	}
 	if sc == nil {
 		return ErrNotConnected
 	}
-	return sc.Publish(c.makeSubject(subject), data)
+	return sc.Publish(dc.makeSubject(subject), data)
+
 }
 
-// PublishMsgs implements RawMsgPublisher interface.
-func (c *DurConn) PublishBatch(_ context.Context, subjects []string, datas [][]byte) (errors []error) {
-
+func (dc *DurConn) PublishBatch(_ context.Context, subjects []string, datas [][]byte) (errors []error) {
 	n := len(subjects)
 	errors = make([]error, n)
 
-	// Check sc.
-	c.mu.RLock()
-	sc := c.sc
-	c.mu.RUnlock()
-	if sc == nil {
+	dc.mu.RLock()
+	closed := dc.closed
+	sc := dc.sc
+	dc.mu.RUnlock()
+
+	if closed || sc == nil {
+		var err error
+		if closed {
+			err = ErrClosed
+		} else {
+			err = ErrNotConnected
+		}
 		for i, _ := range subjects {
-			errors[i] = ErrNotConnected
+			errors[i] = err
 		}
 		return
 	}
@@ -269,7 +207,7 @@ func (c *DurConn) PublishBatch(_ context.Context, subjects []string, datas [][]b
 	id2i := map[string]int{} // id -> msg index
 	nErrs := 0
 	for i, subject := range subjects {
-		id, err := sc.PublishAsync(c.makeSubject(subject), datas[i], ackHandler)
+		id, err := sc.PublishAsync(dc.makeSubject(subject), datas[i], ackHandler)
 		if err != nil {
 			nErrs++
 			errors[i] = err
@@ -291,187 +229,176 @@ func (c *DurConn) PublishBatch(_ context.Context, subjects []string, datas [][]b
 	return
 }
 
-// Subscribe implements npmsg.RawMsgSubscriber interface.
-func (c *DurConn) Subscribe(subject, queue string, handler npmsg.RawMsgHandler, opts ...interface{}) error {
+// connect is used to make a new stan connection.
+func (dc *DurConn) connect(wait bool) {
 
-	for _, opt := range opts {
-		if _, ok := opt.(DurConnSubsOption); !ok {
-			return ErrNotDurConnSubsOption
+	go func() {
+		if wait {
+			time.Sleep(dc.connectWait)
 		}
-	}
 
-	sub := &subscription{
-		resubsWait: DefaultDurConnSubsResubsWait,
-		conn:       c,
-		subject:    subject,
-		queue:      queue,
-		handler:    handler,
-	}
-	for _, opt := range opts {
-		if err := opt.(DurConnSubsOption)(sub); err != nil {
-			return err
+		dc.connectMu.Lock()
+		defer dc.connectMu.Unlock()
+
+		// Release old sc and reset to nil.
+		{
+			oldSc, oldScStaleC, _, err := dc.reset(nil, nil)
+			if oldSc != nil {
+				oldSc.Close()
+				close(oldScStaleC)
+			}
+			if err != nil {
+				if err == ErrClosed {
+					return
+				}
+				panic(err)
+			}
 		}
-	}
 
-	key := [2]string{subject, queue}
+		// Connect.
+		opts := []stan.Option{}
+		opts = append(opts, dc.stanOptions...)
+		opts = append(opts, stan.NatsConn(dc.nc))
+		opts = append(opts, stan.SetConnectionLostHandler(func(_ stan.Conn, _ error) {
+			// Reconnect when connection lost.
+			// NOTE: This callback will no be invoked in normal close.
+			dc.connect(true)
+		}))
 
-	cfh.Suspend("DurConn.Subscribe:before.subscribe", c)
-	c.mu.Lock()
+		// NOTE: Use a UUID-like id as client id sine we only use durable queue subscription.
+		// See: https://groups.google.com/d/msg/natsio/SkWAdSU1AgU/tCX9f3ONBQAJ
+		sc, err := stanConnect(dc.clusterID, xid.New().String(), opts...)
+		if err != nil {
+			// Reconnect immediately.
+			dc.connect(true)
+			return
+		}
 
-	// Check duplication.
-	if c.subs[key] != nil {
-		c.mu.Unlock()
-		cfh.Suspend("DurConn.Subscribe:duplicate.subscribe", c)
-		return fmt.Errorf("nproto.npmsg.durconn.DurConn: Duplicated subscription subject=%+q queue=%+q", subject, queue)
-	}
+		// Update to the new connection.
+		{
+			scStaleC := make(chan struct{})
+			_, _, subs, err := dc.reset(sc, scStaleC)
+			if err != nil {
+				sc.Close() // Release the new one.
+				close(scStaleC)
+				if err == ErrClosed {
+					return
+				}
+				panic(err)
+			}
 
-	c.subs[key] = sub
-	if c.sc != nil {
-		// If sc is not nil, start to subscribe here.
-		c.subscribe(sub, c.sc, c.scStaleC)
-	}
+			// Re-subscribe.
+			for _, sub := range subs {
+				dc.subscribeLoop(sub, sc, scStaleC)
+			}
+		}
 
-	c.mu.Unlock()
-	cfh.Suspend("DurConn.Subscribe:after.subscribe", c)
-
-	return nil
+		return
+	}()
 
 }
 
-func (c *DurConn) subscribe(sub *subscription, sc stan.Conn, scStaleC chan struct{}) {
-
-	handler := func(msg *stan.Msg) {
-		if err := sub.handler(context.Background(), msg.Subject, msg.Data); err == nil {
-			msg.Ack()
+// subscribeLoop keeps subscribing unless success or the stan connection is stale
+// (e.g. disconnected or closed).
+func (dc *DurConn) subscribeLoop(sub *subscription, sc stan.Conn, scStaleC chan struct{}) {
+	// Use a seperated go routine.
+	go func() {
+		// Wrap sub.handler to stan.MsgHandler.
+		handler := func(m *stan.Msg) {
+			// Ack when no error.
+			if err := sub.handler(context.Background(), m.Subject, m.Data); err == nil {
+				m.Ack()
+			}
 		}
-	}
 
-	cfh.Go("DurConn.subscribe", func() {
-		logger := sub.conn.logger.With().Str("fn", "subscribe").
-			Str("subject", sub.subject).
-			Str("queue", sub.queue).Logger()
-
-		// Group as DurableName
 		opts := []stan.SubscriptionOption{}
 		opts = append(opts, sub.stanOptions...)
-		opts = append(opts, stan.SetManualAckMode())
-		opts = append(opts, stan.DurableName(sub.queue))
+		opts = append(opts, stan.SetManualAckMode())     // Use manual ack mode. See above handler.
+		opts = append(opts, stan.DurableName(sub.queue)) // Queue as durable name.
 
-		// Keep re-subscribing util stale become true.
-		stale := false
-		for !stale {
-			_, err := sc.QueueSubscribe(c.makeSubject(sub.subject), sub.queue, handler, opts...)
+		// Loop until success or the stan connection is stale (e.g. scStaleC is closed).
+		for {
+			err := stanQueueSubscribe(sc, dc.makeSubject(sub.subject), sub.queue, handler, opts...)
 			if err == nil {
-				cfh.Suspend("DurConn.subscribe:ok", c)
-				// Normal case.
-				logger.Info().Msg("Subscribed.")
 				return
 			}
-
-			// Error case.
-			logger.Error().Err(err).Msg("Subscribe error.")
-
-			// Wait a while.
-			t := time.NewTimer(sub.resubsWait)
 			select {
 			case <-scStaleC:
-				stale = true
-			case <-t.C:
+				return
+			case <-time.After(sub.retryWait):
 			}
-			t.Stop()
 		}
-		cfh.Suspend("DurConn.subscribe:stale", c)
 
-	})
-
+	}()
 }
 
-func (c *DurConn) makeSubject(subject string) string {
-	return fmt.Sprintf("%s.%s", c.subjPrefix, subject)
-}
+// reset gets lock then reset stan connection.
+// It returns the old stan connection to be released (if not nil) and current subscriptions.
+// It returns an error only when closed.
+func (dc *DurConn) reset(sc stan.Conn, scStaleC chan struct{}) (
+	oldSc stan.Conn,
+	oldScStaleC chan struct{},
+	subs []*subscription,
+	err error) {
 
-// DurConnOptConnectWait sets connection wait.
-func DurConnOptConnectWait(t time.Duration) DurConnOption {
-	return func(c *DurConn) error {
-		c.stanOptions = append(c.stanOptions, stan.ConnectWait(t))
-		return nil
+	dc.mu.Lock()
+	defer dc.mu.Unlock()
+
+	if dc.closed {
+		return nil, nil, nil, ErrClosed
 	}
+
+	oldSc = dc.sc
+	oldScStaleC = dc.scStaleC
+	dc.sc = sc
+	dc.scStaleC = scStaleC
+
+	// NOTE: Since subs is append-only, we can simply get the full slice as a snapshot for resubscribing.
+	subs = dc.subs[:]
+	return
 }
 
-// DurConnOptPubAckWait sets publish ack time wait.
-func DurConnOptPubAckWait(t time.Duration) DurConnOption {
-	return func(c *DurConn) error {
-		c.stanOptions = append(c.stanOptions, stan.PubAckWait(t))
-		return nil
+// subscribe gets lock then adds subscription to DurConn.
+// It returns current stan connection.
+func (dc *DurConn) subscribe(sub *subscription) (sc stan.Conn, scStaleC chan struct{}, err error) {
+	key := [2]string{sub.subject, sub.queue}
+	dc.mu.Lock()
+	defer dc.mu.Unlock()
+
+	if dc.closed {
+		return nil, nil, ErrClosed
 	}
-}
 
-// DurConnOptPings sets ping
-func DurConnOptPings(interval, maxOut int) DurConnOption {
-	return func(c *DurConn) error {
-		c.stanOptions = append(c.stanOptions, stan.Pings(interval, maxOut))
-		return nil
+	if _, found := dc.subNames[key]; found {
+		return nil, nil, ErrDupSubscription(sub.subject, sub.queue)
 	}
+
+	dc.subs = append(dc.subs, sub)
+	dc.subNames[key] = len(dc.subs) - 1
+	sc = dc.sc
+	scStaleC = dc.scStaleC
+	return
 }
 
-// DurConnOptSubjectPrefix sets the subject prefix.
-func DurConnOptSubjectPrefix(subjPrefix string) DurConnOption {
-	return func(c *DurConn) error {
-		c.subjPrefix = subjPrefix
-		return nil
+// close_ gets lock then sets closed to true.
+// It returns the old stan connection to be released (if not nil).
+func (dc *DurConn) close_() (oldSc stan.Conn, oldScStaleC chan struct{}, err error) {
+	dc.mu.Lock()
+	defer dc.mu.Unlock()
+
+	if dc.closed {
+		return nil, nil, ErrClosed
 	}
+
+	oldSc = dc.sc
+	oldScStaleC = dc.scStaleC
+	dc.sc = nil
+	dc.scStaleC = nil
+
+	dc.closed = true
+	return
 }
 
-// DurConnOptReconnectWait sets reconnection wait.
-func DurConnOptReconnectWait(t time.Duration) DurConnOption {
-	return func(c *DurConn) error {
-		c.reconnectWait = t
-		return nil
-	}
-}
-
-// DurConnOptLogger sets logger.
-func DurConnOptLogger(logger *zerolog.Logger) DurConnOption {
-	return func(c *DurConn) error {
-		if logger == nil {
-			nop := zerolog.Nop()
-			logger = &nop
-		}
-		c.logger = logger.With().Str("component", "nproto.npmsg.durconn.DurConn").Logger()
-		return nil
-	}
-}
-
-// DurConnSubsOptMaxInflight sets max message that can be sent to subscriber before ack
-func DurConnSubsOptMaxInflight(m int) DurConnSubsOption {
-	return func(s *subscription) error {
-		s.stanOptions = append(s.stanOptions, stan.MaxInflight(m))
-		return nil
-	}
-}
-
-// DurConnSubsOptAckWait sets server side ack wait.
-func DurConnSubsOptAckWait(t time.Duration) DurConnSubsOption {
-	return func(s *subscription) error {
-		s.stanOptions = append(s.stanOptions, stan.AckWait(t))
-		return nil
-	}
-}
-
-// DurConnSubsOptResubscribeWait sets resubscriptions wait.
-func DurConnSubsOptResubsWait(t time.Duration) DurConnSubsOption {
-	return func(s *subscription) error {
-		s.resubsWait = t
-		return nil
-	}
-}
-
-// Subject implements Msg interface.
-func (m *stanMsg) Subject() string {
-	return (*stan.Msg)(m).Subject
-}
-
-// Data implements Msg interface.
-func (m *stanMsg) Data() []byte {
-	return (*stan.Msg)(m).Data
+func (dc *DurConn) makeSubject(subject string) string {
+	return fmt.Sprintf("%s.%s", dc.subjectPrefix, subject)
 }
