@@ -35,17 +35,7 @@ var (
 )
 
 var (
-	stanConnect        = stan.Connect
-	stanQueueSubscribe = func(sc stan.Conn, subject, queue string, handler stan.MsgHandler, opts ...stan.SubscriptionOption) error {
-		_, err := sc.QueueSubscribe(subject, queue, handler, opts...)
-		return err
-	}
-	stanPublish = func(sc stan.Conn, subject string, data []byte) error {
-		return sc.Publish(subject, data)
-	}
-	stanPublishAsync = func(sc stan.Conn, subject string, data []byte, ah stan.AckHandler) (string, error) {
-		return sc.PublishAsync(subject, data, ah)
-	}
+	stanConnect = stan.Connect
 )
 
 var (
@@ -169,7 +159,7 @@ func (dc *DurConn) Publish(_ context.Context, subject string, data []byte) error
 	if sc == nil {
 		return ErrNotConnected
 	}
-	return stanPublish(sc, dc.makeSubject(subject), data)
+	return sc.Publish(dc.makeSubject(subject), data)
 
 }
 
@@ -213,7 +203,7 @@ func (dc *DurConn) PublishBatch(_ context.Context, subjects []string, datas [][]
 	id2i := map[string]int{} // id -> msg index
 	nErrs := 0
 	for i, subject := range subjects {
-		id, err := stanPublishAsync(sc, dc.makeSubject(subject), datas[i], ackHandler)
+		id, err := sc.PublishAsync(dc.makeSubject(subject), datas[i], ackHandler)
 		if err != nil {
 			nErrs++
 			errors[i] = err
@@ -324,7 +314,8 @@ func (dc *DurConn) subscribeLoop(sub *subscription, sc stan.Conn, scStaleC chan 
 
 		// Loop until success or the stan connection is stale (e.g. scStaleC is closed).
 		for {
-			err := stanQueueSubscribe(sc, dc.makeSubject(sub.subject), sub.queue, handler, opts...)
+			// We don't need the returned stan.Subscription object since no Unsubscribe.
+			_, err := sc.QueueSubscribe(dc.makeSubject(sub.subject), sub.queue, handler, opts...)
 			if err == nil {
 				return
 			}
