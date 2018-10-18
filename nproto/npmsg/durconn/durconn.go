@@ -61,8 +61,8 @@ type DurConn struct {
 	// mu is used to protect the following fields.
 	mu       sync.RWMutex
 	closed   bool              // true if the DurConn is closed.
-	sc       stan.Conn         // nil if not connected/reconnecting
-	scStaleC chan struct{}     // scStaleC is closed when sc is stale
+	sc       stan.Conn         // nil if not connected/reconnecting.
+	stalec   chan struct{}     // stalec is pair with sc, it is closed when sc is stale.
 	subs     []*subscription   // list of subscription, append-only (since no Unsubscribe)
 	subNames map[[2]string]int // (subject, queue) -> subscription index
 }
@@ -108,10 +108,10 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) (*DurCon
 }
 
 func (dc *DurConn) Close() error {
-	oldSc, oldScStaleC, err := dc.close_()
+	oldSc, oldStalec, err := dc.close_()
 	if oldSc != nil {
 		oldSc.Close()
-		close(oldScStaleC)
+		close(oldStalec)
 	}
 	return err
 }
@@ -136,13 +136,13 @@ func (dc *DurConn) Subscribe(subject, queue string, handler npmsg.RawMsgHandler,
 	}
 
 	// Add to subscription list and subscribe.
-	sc, scStaleC, err := dc.addSub(sub)
+	sc, stalec, err := dc.addSub(sub)
 	if err != nil {
 		return err
 	}
 
 	if sc != nil {
-		dc.subscribe(sub, sc, scStaleC)
+		dc.subscribe(sub, sc, stalec)
 	}
 	return nil
 }
@@ -238,10 +238,10 @@ func (dc *DurConn) connect(wait bool) {
 
 		// Release old sc and reset to nil.
 		{
-			oldSc, oldScStaleC, _, err := dc.reset(nil, nil)
+			oldSc, oldStalec, _, err := dc.reset(nil, nil)
 			if oldSc != nil {
 				oldSc.Close()
-				close(oldScStaleC)
+				close(oldStalec)
 			}
 			if err != nil {
 				if err == ErrClosed {
@@ -272,11 +272,11 @@ func (dc *DurConn) connect(wait bool) {
 
 		// Update to the new connection.
 		{
-			scStaleC := make(chan struct{})
-			_, _, subs, err := dc.reset(sc, scStaleC)
+			stalec := make(chan struct{})
+			_, _, subs, err := dc.reset(sc, stalec)
 			if err != nil {
 				sc.Close() // Release the new one.
-				close(scStaleC)
+				close(stalec)
 				if err == ErrClosed {
 					return
 				}
@@ -285,7 +285,7 @@ func (dc *DurConn) connect(wait bool) {
 
 			// Re-subscribe.
 			for _, sub := range subs {
-				dc.subscribe(sub, sc, scStaleC)
+				dc.subscribe(sub, sc, stalec)
 			}
 		}
 
@@ -296,7 +296,7 @@ func (dc *DurConn) connect(wait bool) {
 
 // subscribe keeps subscribing unless success or the stan connection is stale
 // (e.g. disconnected or closed).
-func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, scStaleC chan struct{}) {
+func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, stalec chan struct{}) {
 	// Use a seperated go routine.
 	go func() {
 		// Wrap sub.handler to stan.MsgHandler.
@@ -320,7 +320,7 @@ func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, scStaleC chan stru
 				return
 			}
 			select {
-			case <-scStaleC:
+			case <-stalec:
 				return
 			case <-time.After(sub.retryWait):
 			}
@@ -332,9 +332,9 @@ func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, scStaleC chan stru
 // reset gets lock then reset stan connection.
 // It returns the old stan connection to be released (if not nil) and current subscriptions.
 // It returns an error only when closed.
-func (dc *DurConn) reset(sc stan.Conn, scStaleC chan struct{}) (
+func (dc *DurConn) reset(sc stan.Conn, stalec chan struct{}) (
 	oldSc stan.Conn,
-	oldScStaleC chan struct{},
+	oldStalec chan struct{},
 	subs []*subscription,
 	err error) {
 
@@ -346,9 +346,9 @@ func (dc *DurConn) reset(sc stan.Conn, scStaleC chan struct{}) (
 	}
 
 	oldSc = dc.sc
-	oldScStaleC = dc.scStaleC
+	oldStalec = dc.stalec
 	dc.sc = sc
-	dc.scStaleC = scStaleC
+	dc.stalec = stalec
 
 	// NOTE: Since subs is append-only, we can simply get the full slice as a snapshot for resubscribing.
 	subs = dc.subs[:]
@@ -357,7 +357,7 @@ func (dc *DurConn) reset(sc stan.Conn, scStaleC chan struct{}) (
 
 // addSub gets lock then adds subscription to DurConn.
 // It returns current stan connection.
-func (dc *DurConn) addSub(sub *subscription) (sc stan.Conn, scStaleC chan struct{}, err error) {
+func (dc *DurConn) addSub(sub *subscription) (sc stan.Conn, stalec chan struct{}, err error) {
 	key := [2]string{sub.subject, sub.queue}
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
@@ -373,13 +373,13 @@ func (dc *DurConn) addSub(sub *subscription) (sc stan.Conn, scStaleC chan struct
 	dc.subs = append(dc.subs, sub)
 	dc.subNames[key] = len(dc.subs) - 1
 	sc = dc.sc
-	scStaleC = dc.scStaleC
+	stalec = dc.stalec
 	return
 }
 
 // close_ gets lock then sets closed to true.
 // It returns the old stan connection to be released (if not nil).
-func (dc *DurConn) close_() (oldSc stan.Conn, oldScStaleC chan struct{}, err error) {
+func (dc *DurConn) close_() (oldSc stan.Conn, oldStalec chan struct{}, err error) {
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 
@@ -388,9 +388,9 @@ func (dc *DurConn) close_() (oldSc stan.Conn, oldScStaleC chan struct{}, err err
 	}
 
 	oldSc = dc.sc
-	oldScStaleC = dc.scStaleC
+	oldStalec = dc.stalec
 	dc.sc = nil
-	dc.scStaleC = nil
+	dc.stalec = nil
 
 	dc.closed = true
 	return
