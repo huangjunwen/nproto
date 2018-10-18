@@ -1,10 +1,18 @@
 package durconn
 
 import (
+	//"context"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/nats-io/go-nats"
 	"github.com/nats-io/go-nats-streaming"
+	"github.com/ory/dockertest"
+	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -234,4 +242,116 @@ func TestLockMethods(t *testing.T) {
 			true, nil, []*subscription{sub1, sub2}},
 	})
 
+}
+
+const (
+	stanClusterId = "durconn_test"
+	stanTag       = "0.11.0-linux"
+)
+
+func TestReconnect(t *testing.T) {
+	tmpdir, err := ioutil.TempDir("/tmp", "durconn")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer os.RemoveAll(tmpdir)
+	log.Printf("tmpdir: %s\n", tmpdir)
+
+	pool, err := dockertest.NewPool("")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	natsURL := func(res *dockertest.Resource) string {
+		return fmt.Sprintf("nats://localhost:%s", res.GetPort("4222/tcp"))
+	}
+
+	runTestServer := func() (*dockertest.Resource, error) {
+		// Start the container.
+		res, err := pool.RunWithOptions(&dockertest.RunOptions{
+			Repository: "nats-streaming",
+			Tag:        stanTag,
+			Mounts:     []string{fmt.Sprintf("%s:/data", tmpdir)},
+			Cmd: []string{
+				"-cid", stanClusterId,
+				"-st", "FILE",
+				"--dir", "/data",
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+		//res.Expire(60)
+
+		// Wait.
+		if err := pool.Retry(func() error {
+			sc, err := stan.Connect(stanClusterId, xid.New().String(),
+				stan.NatsURL(natsURL(res)))
+			if err != nil {
+				return err
+			}
+			sc.Close()
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+
+		return res, nil
+	}
+
+	// -- test begins --
+	res, err := runTestServer()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer res.Close()
+	log.Printf("Streaming server ready.\n")
+
+	// Creates a plain nats connection with infinite reconnection.
+	nc, err := nats.Connect(natsURL(res), nats.MaxReconnects(-1))
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer nc.Close()
+	log.Printf("nats.Conn ready.\n")
+
+	// Creates DurConn.
+	dc, err := NewDurConn(nc, stanClusterId)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer dc.Close()
+
+	// Wait a while for connect.
+	for {
+		dc.mu.RLock()
+		sc := dc.sc
+		dc.mu.RUnlock()
+		if sc != nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	log.Printf("DurConn ready.\n")
+
+	// TODO
+	/*
+		// Publish should ok.
+		{
+			err := dc.Publish(context.Background(), "subj", []byte("hello"))
+			assert.NoError(err)
+		}
+		log.Printf("A messsage published.\n")
+
+		// Stop the server.
+		res.Close()
+		log.Printf("Streaming server stopped.\n")
+
+		// Publish should not ok.
+		{
+			err := dc.Publish(context.Background(), "subj", []byte("hello"))
+			assert.NoError(err)
+		}
+		log.Printf("A messsage is not published.\n")
+	*/
 }
