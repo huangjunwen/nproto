@@ -1,111 +1,46 @@
 package durconn
 
 import (
-	"bytes"
-	"errors"
-	"math/rand"
 	"testing"
-	"time"
 
 	"github.com/nats-io/go-nats"
 	"github.com/nats-io/go-nats-streaming"
-	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
 )
 
 // ----------- Mock begins -----------
 
-type MockConn struct {
-	calls []mockCall
-}
-
-type mockCall struct {
-	Method string
-	Args   []interface{}
-}
+type MockConn int
 
 var (
-	_ stan.Conn = (*MockConn)(nil)
+	_ stan.Conn = MockConn(0)
 )
 
-var (
-	evilErr   = errors.New("Evil error")
-	evilData  = []byte("evil")
-	evil2Data = []byte("evil2")
-)
-
-func randWait() {
-	// Wait 1ms~10ms
-	time.Sleep(time.Duration(rand.Intn(10)+1) * time.Millisecond)
+func newMockConn(i int) MockConn {
+	return MockConn(i)
 }
 
-func newMockConn() *MockConn {
-	return &MockConn{}
-}
-
-func (mc *MockConn) Publish(subject string, data []byte) error {
-	mc.calls = append(mc.calls, mockCall{
-		Method: "Publish",
-		Args:   []interface{}{subject, data},
-	})
-	randWait()
-	if bytes.Equal(data, evilData) {
-		return evilErr
-	}
-	return nil
-}
-
-func (mc *MockConn) PublishAsync(subject string, data []byte, ah stan.AckHandler) (string, error) {
-	mc.calls = append(mc.calls, mockCall{
-		Method: "PublishAsync",
-		Args:   []interface{}{subject, data, ah},
-	})
-	if bytes.Equal(data, evilData) {
-		return "", evilErr
-	}
-	id := xid.New().String()
-	go func() {
-		randWait()
-		if bytes.Equal(data, evil2Data) {
-			ah(id, evilErr)
-		} else {
-			ah(id, nil)
-		}
-	}()
-	return id, nil
-}
-
-func (mc *MockConn) Subscribe(subject string, cb stan.MsgHandler, opts ...stan.SubscriptionOption) (stan.Subscription, error) {
+func (mc MockConn) Publish(subject string, data []byte) error {
 	panic("Not implemented")
 }
 
-func (mc *MockConn) QueueSubscribe(subject, queue string, cb stan.MsgHandler, opts ...stan.SubscriptionOption) (stan.Subscription, error) {
-	mc.calls = append(mc.calls, mockCall{
-		Method: "QueueSubscribe",
-		Args:   []interface{}{subject, queue, cb, opts},
-	})
-	randWait()
-	if queue == string(evilData) {
-		return nil, evilErr
-	} else if queue == string(evil2Data) {
-		if len(mc.calls) > 3 {
-			return nil, nil
-		}
-		return nil, evilErr
-	} else {
-		return nil, nil
-	}
+func (mc MockConn) PublishAsync(subject string, data []byte, ah stan.AckHandler) (string, error) {
+	panic("Not implemented")
 }
 
-func (mc *MockConn) Close() error {
-	mc.calls = append(mc.calls, mockCall{
-		Method: "Close",
-		Args:   []interface{}{},
-	})
-	return nil
+func (mc MockConn) Subscribe(subject string, cb stan.MsgHandler, opts ...stan.SubscriptionOption) (stan.Subscription, error) {
+	panic("Not implemented")
 }
 
-func (mc *MockConn) NatsConn() *nats.Conn {
+func (mc MockConn) QueueSubscribe(subject, queue string, cb stan.MsgHandler, opts ...stan.SubscriptionOption) (stan.Subscription, error) {
+	panic("Not implemented")
+}
+
+func (mc MockConn) Close() error {
+	panic("Not implemented")
+}
+
+func (mc MockConn) NatsConn() *nats.Conn {
 	panic("Not implemented")
 }
 
@@ -124,6 +59,10 @@ func TestLockMethods(t *testing.T) {
 	dc := &DurConn{
 		subNames: map[[2]string]int{},
 	}
+	sc1 := newMockConn(1)
+	stalec1 := make(chan struct{})
+	sc2 := newMockConn(2)
+	stalec2 := make(chan struct{})
 	sub1 := &subscription{
 		subject: "subject",
 		queue:   "good1",
@@ -136,119 +75,163 @@ func TestLockMethods(t *testing.T) {
 		subject: "subject",
 		queue:   "good3",
 	}
-	sc1 := newMockConn()
-	sc2 := newMockConn()
-	expect := func(closed bool, sc stan.Conn, subsLen int) {
-		if closed {
-			assert.True(dc.closed)
-		} else {
-			assert.False(dc.closed)
+
+	type testCase struct {
+		Method       string
+		Args         []interface{}
+		ExpectResult []interface{}
+		Closed       bool
+		Sc           stan.Conn
+		Subs         []*subscription
+	}
+
+	runTestCase := func(cases []testCase) {
+		for i, c := range cases {
+			i += 1
+			args := c.Args
+			result := c.ExpectResult
+
+			switch c.Method {
+			case "reset":
+				var (
+					sc     stan.Conn
+					stalec chan struct{}
+				)
+				if args[0] != nil {
+					sc = args[0].(stan.Conn)
+				}
+				if args[1] != nil {
+					stalec = args[1].(chan struct{})
+				}
+
+				oldSc, oldStalec, subs, err := dc.reset(sc, stalec)
+
+				if result[0] == nil {
+					assert.Nil(oldSc, "#%d", i)
+				} else {
+					assert.Equal(result[0], oldSc, "#%d", i)
+				}
+				if result[1] == nil {
+					assert.Nil(oldStalec, "#%d", i)
+				} else {
+					assert.Equal(result[1], oldStalec, "#%d", i)
+				}
+				if result[2] == nil {
+					assert.Nil(subs, "#%d", i)
+				} else {
+					assert.Equal(result[2], subs, "#%d", i)
+				}
+				if result[3] == nil {
+					assert.Nil(err, "#%d", i)
+				} else {
+					assert.Equal(result[3], err, "#%d", i)
+				}
+
+			case "addSub":
+				var (
+					sub *subscription
+				)
+				if args[0] != nil {
+					sub = args[0].(*subscription)
+				}
+
+				sc, stalec, err := dc.addSub(sub)
+
+				if result[0] == nil {
+					assert.Nil(sc, "#%d", i)
+				} else {
+					assert.Equal(result[0], sc, "#%d", i)
+				}
+				if result[1] == nil {
+					assert.Nil(stalec, "#%d", i)
+				} else {
+					assert.Equal(result[1], stalec, "#%d", i)
+				}
+				if result[2] == nil {
+					assert.Nil(err, "#%d", i)
+				} else {
+					assert.Equal(result[2], err, "#%d", i)
+				}
+
+			case "close":
+				oldSc, oldStalec, err := dc.close_()
+
+				if result[0] == nil {
+					assert.Nil(oldSc, "#%d", i)
+				} else {
+					assert.Equal(result[0], oldSc, "#%d", i)
+				}
+				if result[1] == nil {
+					assert.Nil(oldStalec, "#%d", i)
+				} else {
+					assert.Equal(result[1], oldStalec, "#%d", i)
+				}
+				if result[2] == nil {
+					assert.Nil(err, "#%d", i)
+				} else {
+					assert.Equal(result[2], err, "#%d", i)
+				}
+
+			default:
+			}
+
+			assert.Equal(c.Closed, dc.closed, "#%d", i)
+			assert.Equal(c.Sc, dc.sc, "#%d", i)
+			assert.Equal(c.Subs, dc.subs, "#%d", i)
 		}
-		if sc != nil {
-			assert.Equal(sc, dc.sc)
-			assert.NotNil(dc.scStaleC)
-		} else {
-			assert.Nil(dc.sc)
-			assert.Nil(dc.scStaleC)
-		}
-		assert.Len(dc.subs, subsLen)
-		assert.Len(dc.subNames, subsLen)
 	}
 
-	// Init state.
-	{
-		expect(false, nil, 0)
-	}
+	runTestCase([]testCase{
+		// Init state.
+		testCase{"", nil, nil, false, nil, nil},
+		// Reset to nil. Nothing changed.
+		testCase{"reset",
+			[]interface{}{nil, nil},
+			[]interface{}{nil, nil, nil, nil},
+			false, nil, nil},
+		// Add subscription 1 (without connection).
+		testCase{"addSub",
+			[]interface{}{sub1},
+			[]interface{}{nil, nil, nil},
+			false, nil, []*subscription{sub1}},
+		// Reset to connection 1.
+		testCase{"reset",
+			[]interface{}{sc1, stalec1},
+			[]interface{}{nil, nil, []*subscription{sub1}, nil},
+			false, sc1, []*subscription{sub1}},
+		// Add subscription 2 (with connection).
+		testCase{"addSub",
+			[]interface{}{sub2},
+			[]interface{}{sc1, stalec1, nil},
+			false, sc1, []*subscription{sub1, sub2}},
+		// Add subscription 1 again (with connection) should result an error.
+		testCase{"addSub",
+			[]interface{}{sub1},
+			[]interface{}{nil, nil, ErrDupSubscription(sub1.subject, sub1.queue)},
+			false, sc1, []*subscription{sub1, sub2}},
+		// Reset to connection 2.
+		testCase{"reset",
+			[]interface{}{sc2, stalec2},
+			[]interface{}{sc1, stalec1, []*subscription{sub1, sub2}, nil},
+			false, sc2, []*subscription{sub1, sub2}},
+		// Now close.
+		testCase{"close",
+			nil,
+			[]interface{}{sc2, stalec2, nil},
+			true, nil, []*subscription{sub1, sub2}},
+		// Further calls should result ErrClosed.
+		testCase{"reset",
+			[]interface{}{sc1, stalec1},
+			[]interface{}{nil, nil, nil, ErrClosed},
+			true, nil, []*subscription{sub1, sub2}},
+		testCase{"addSub",
+			[]interface{}{sub3},
+			[]interface{}{nil, nil, ErrClosed},
+			true, nil, []*subscription{sub1, sub2}},
+		testCase{"close",
+			nil,
+			[]interface{}{nil, nil, ErrClosed},
+			true, nil, []*subscription{sub1, sub2}},
+	})
 
-	// Reset to nil. Nothing changed.
-	{
-		sc, scStaleC, subs, err := dc.reset(nil, nil)
-		assert.Nil(sc)
-		assert.Nil(scStaleC)
-		assert.Len(subs, 0)
-		assert.Nil(err)
-		expect(false, nil, 0)
-	}
-
-	// Add subscription 1 without stan connection.
-	{
-		sc, scStaleC, err := dc.addSub(sub1)
-		assert.Nil(sc)
-		assert.Nil(scStaleC)
-		assert.Nil(err)
-		expect(false, nil, 1)
-	}
-
-	// Reset to stan connection 1.
-	{
-		sc, scStaleC, subs, err := dc.reset(sc1, make(chan struct{}))
-		assert.Nil(sc)
-		assert.Nil(scStaleC)
-		assert.Len(subs, 1)
-		assert.Nil(err)
-		expect(false, sc1, 1)
-	}
-
-	// Add subscription 2 with stan connection.
-	{
-		sc, scStaleC, err := dc.addSub(sub2)
-		assert.Equal(sc1, sc)
-		assert.NotNil(scStaleC)
-		assert.Nil(err)
-		expect(false, sc1, 2)
-	}
-
-	// Add subscription 1 again should result an error.
-	{
-		sc, scStaleC, err := dc.addSub(sub1)
-		assert.Nil(sc)
-		assert.Nil(scStaleC)
-		assert.NotNil(err)
-		expect(false, sc2, 2)
-	}
-
-	// Reset to stan connection 2.
-	{
-		sc, scStaleC, subs, err := dc.reset(sc2, make(chan struct{}))
-		assert.Equal(sc1, sc)
-		assert.NotNil(scStaleC)
-		assert.Len(subs, 2)
-		assert.Nil(err)
-		expect(false, sc2, 2)
-	}
-
-	// Now close.
-	{
-		sc, scStaleC, err := dc.close_()
-		assert.Equal(sc2, sc)
-		assert.NotNil(scStaleC)
-		assert.Nil(err)
-		expect(true, nil, 2)
-	}
-
-	// Further calls should result errors.
-	{
-		sc, scStaleC, subs, err := dc.reset(sc1, make(chan struct{}))
-		assert.Nil(sc)
-		assert.Nil(scStaleC)
-		assert.Nil(subs)
-		assert.Error(err)
-	}
-	{
-		sc, scStaleC, err := dc.addSub(sub3)
-		assert.Nil(sc)
-		assert.Nil(scStaleC)
-		assert.Error(err)
-	}
-	{
-		sc, scStaleC, err := dc.close_()
-		assert.Nil(sc)
-		assert.Nil(scStaleC)
-		assert.Error(err)
-	}
-	expect(true, nil, 2)
-}
-
-func TestConnect(t *testing.T) {
-	//assert := assert.New(t)
 }
