@@ -11,6 +11,7 @@ import (
 	"github.com/nats-io/go-nats"
 	"github.com/nats-io/go-nats-streaming"
 	"github.com/ory/dockertest"
+	docker "github.com/ory/dockertest/docker"
 	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
 )
@@ -260,8 +261,8 @@ func init() {
 	}
 }
 
-func natsURL(res *dockertest.Resource) string {
-	return fmt.Sprintf("nats://localhost:%s", res.GetPort("4222/tcp"))
+func natsURL() string {
+	return "nats://localhost:42222"
 }
 
 func runTestServer(dataDir string) (*dockertest.Resource, error) {
@@ -273,6 +274,14 @@ func runTestServer(dataDir string) (*dockertest.Resource, error) {
 			"-cid", stanClusterId,
 			"-st", "FILE",
 			"--dir", "/data",
+		},
+		PortBindings: map[docker.Port][]docker.PortBinding{
+			"4222/tcp": []docker.PortBinding{
+				docker.PortBinding{
+					HostIP:   "127.0.0.1",
+					HostPort: "42222",
+				},
+			},
 		},
 	}
 	if dataDir != "" {
@@ -291,7 +300,7 @@ func runTestServer(dataDir string) (*dockertest.Resource, error) {
 	// Wait.
 	if err := pool.Retry(func() error {
 		sc, err := stan.Connect(stanClusterId, xid.New().String(),
-			stan.NatsURL(natsURL(res)))
+			stan.NatsURL(natsURL()))
 		if err != nil {
 			return err
 		}
@@ -325,7 +334,7 @@ func TestBasicPubSub(t *testing.T) {
 
 	var nc *nats.Conn
 	{
-		nc, err = nats.Connect(natsURL(res),
+		nc, err = nats.Connect(natsURL(),
 			nats.MaxReconnects(-1),
 		)
 		if err != nil {
@@ -414,9 +423,9 @@ func TestReconnect(t *testing.T) {
 
 	var nc *nats.Conn
 	{
-		nc, err = nats.Connect(natsURL(res1),
+		nc, err = nats.Connect(natsURL(),
 			nats.MaxReconnects(-1),
-			nats.ReconnectWait(50*time.Millisecond), // A short reconnect wait.
+			//nats.ReconnectWait(50*time.Millisecond), // A short reconnect wait.
 		)
 		if err != nil {
 			log.Fatal(err)
@@ -433,10 +442,10 @@ func TestReconnect(t *testing.T) {
 		disconnectCb := func(_ stan.Conn) { disconnectc <- struct{}{} }
 
 		dc, err = NewDurConn(nc, stanClusterId,
-			DurConnOptConnectCb(connectCb),               // Use the callback to notify connection establish.
-			DurConnOptDisconnectCb(disconnectCb),         // Use the callback to notify disconnection.
-			DurConnOptReconnectWait(50*time.Millisecond), // A short reconnect wait.
-			DurConnOptPings(1, 3),                        // Minimal pings.
+			DurConnOptConnectCb(connectCb),       // Use the callback to notify connection establish.
+			DurConnOptDisconnectCb(disconnectCb), // Use the callback to notify disconnection.
+			DurConnOptReconnectWait(time.Second), // A short reconnect wait.
+			DurConnOptPings(1, 3),                // Minimal pings.
 		)
 		if err != nil {
 			log.Fatal(err)
