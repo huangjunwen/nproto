@@ -13,10 +13,11 @@ import (
 	"github.com/nats-io/go-nats"
 	"github.com/nats-io/go-nats-streaming"
 	"github.com/rs/xid"
+	"github.com/rs/zerolog"
 )
 
 var (
-	DefaultConnectWait   = 5 * time.Second
+	DefaultReconnectWait = 5 * time.Second
 	DefaultSubRetryWait  = 5 * time.Second
 	DefaultSubjectPreifx = "npmsg"
 )
@@ -25,7 +26,7 @@ var (
 	ErrNCMaxReconnect     = errors.New("nproto.npmsg.durconn.NewDurConn: nats.Conn should have MaxReconnects < 0")
 	ErrClosed             = errors.New("nproto.npmsg.durconn.DurConn: DurConn closed.")
 	ErrNotConnected       = errors.New("nproto.npmsg.durconn.DurConn: Not connected.")
-	ErrBadSubscriptionOpt = errors.New("nproto.npmsg.durconn.DurConn: Expect SubscriptionOption.")
+	ErrBadSubscriptionOpt = errors.New("nproto.npmsg.durconn.DurConn: Expect durconn.SubOption.")
 	ErrDupSubscription    = func(subject, queue string) error {
 		return fmt.Errorf(
 			"nproto.npmsg.durconn.DurConn: Duplicated subscription (%q, %q)",
@@ -35,6 +36,7 @@ var (
 	}
 )
 
+// For mocking.
 var (
 	stanConnect = stan.Connect
 )
@@ -48,8 +50,10 @@ var (
 type DurConn struct {
 	// Options.
 	stanOptions   []stan.Option
+	logger        zerolog.Logger
 	reconnectWait time.Duration
 	subjectPrefix string
+	connectCb     func(sc stan.Conn)
 
 	// Immutable fields.
 	clusterID string
@@ -72,6 +76,7 @@ type subscription struct {
 	// Options.
 	stanOptions []stan.SubscriptionOption
 	retryWait   time.Duration
+	subscribeCb func(sc stan.Conn, subject, queue string)
 
 	// Immutable fields.
 	dc      *DurConn
@@ -82,7 +87,7 @@ type subscription struct {
 
 type DurConnOption func(*DurConn) error
 
-type SubscriptionOption func(*subscription) error
+type SubOption func(*subscription) error
 
 func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) (*DurConn, error) {
 
@@ -91,7 +96,9 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) (*DurCon
 	}
 
 	dc := &DurConn{
-		reconnectWait: DefaultConnectWait,
+		logger:        zerolog.Nop(),
+		reconnectWait: DefaultReconnectWait,
+		connectCb:     func(_ stan.Conn) {},
 		clusterID:     clusterID,
 		nc:            nc,
 		subNames:      make(map[[2]string]int),
@@ -121,14 +128,15 @@ func (dc *DurConn) Close() error {
 func (dc *DurConn) Subscribe(subject, queue string, handler npmsg.RawMsgHandler, opts ...interface{}) error {
 
 	sub := &subscription{
-		retryWait: DefaultSubRetryWait,
-		dc:        dc,
-		subject:   subject,
-		queue:     queue,
-		handler:   handler,
+		retryWait:   DefaultSubRetryWait,
+		subscribeCb: func(_ stan.Conn, _, _ string) {},
+		dc:          dc,
+		subject:     subject,
+		queue:       queue,
+		handler:     handler,
 	}
 	for _, opt := range opts {
-		option, ok := opt.(SubscriptionOption)
+		option, ok := opt.(SubOption)
 		if !ok {
 			return ErrBadSubscriptionOpt
 		}
@@ -266,6 +274,8 @@ func (dc *DurConn) PublishBatch(ctx context.Context, subjects []string, datas []
 func (dc *DurConn) connect(wait bool) {
 
 	go func() {
+		logger := dc.logger.With().Str("fn", "connect").Logger()
+
 		if wait {
 			time.Sleep(dc.reconnectWait)
 		}
@@ -282,6 +292,7 @@ func (dc *DurConn) connect(wait bool) {
 			}
 			if err != nil {
 				if err == ErrClosed {
+					logger.Info().Msg("closed")
 					return
 				}
 				panic(err)
@@ -303,9 +314,12 @@ func (dc *DurConn) connect(wait bool) {
 		sc, err := stanConnect(dc.clusterID, xid.New().String(), opts...)
 		if err != nil {
 			// Reconnect immediately.
+			logger.Error().Err(err).Msg("connect failed")
 			dc.connect(true)
 			return
 		}
+		logger.Info().Msg("connected")
+		dc.connectCb(sc)
 
 		// Update to the new connection.
 		{
@@ -315,6 +329,7 @@ func (dc *DurConn) connect(wait bool) {
 				sc.Close() // Release the new one.
 				close(stalec)
 				if err == ErrClosed {
+					logger.Info().Msg("closed")
 					return
 				}
 				panic(err)
@@ -336,6 +351,12 @@ func (dc *DurConn) connect(wait bool) {
 func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, stalec chan struct{}) {
 	// Use a seperated go routine.
 	go func() {
+		logger := dc.logger.With().
+			Str("fn", "subscribe").
+			Str("subject", sub.subject).
+			Str("queue", sub.queue).
+			Logger()
+
 		// Wrap sub.handler to stan.MsgHandler.
 		handler := func(m *stan.Msg) {
 			// Ack when no error.
@@ -354,10 +375,15 @@ func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, stalec chan struct
 			// We don't need the returned stan.Subscription object since no Unsubscribe.
 			_, err := sc.QueueSubscribe(dc.addSubjectPrefix(sub.subject), sub.queue, handler, opts...)
 			if err == nil {
+				logger.Info().Msg("subscribed")
+				sub.subscribeCb(sc, sub.subject, sub.queue)
 				return
 			}
+			logger.Error().Err(err).Msg("subscribe failed")
+
 			select {
 			case <-stalec:
+				logger.Info().Msg("stale")
 				return
 			case <-time.After(sub.retryWait):
 			}

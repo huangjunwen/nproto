@@ -4,14 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/nats-io/go-nats"
 	"github.com/nats-io/go-nats-streaming"
 	"github.com/ory/dockertest"
 	"github.com/rs/xid"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -304,47 +305,54 @@ func runTestServer(dataDir string) (*dockertest.Resource, error) {
 	return res, nil
 }
 
-func waitStanConnection(dc *DurConn) {
-	for {
-		dc.mu.RLock()
-		sc := dc.sc
-		dc.mu.RUnlock()
-		if sc != nil {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-}
-
 func TestBasicPubSub(t *testing.T) {
+	log.Printf(">>> TestBasicPubSub.\n")
 	assert := assert.New(t)
+	var err error
 
-	log.Printf("Starting streaming server\n")
-	res, err := runTestServer("")
-	if err != nil {
-		log.Fatal(err)
+	var res *dockertest.Resource
+	{
+		log.Printf("Starting streaming server.\n")
+		res, err = runTestServer("")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer res.Close()
+		log.Printf("Streaming server started.\n")
 	}
-	defer res.Close()
-	log.Printf("Streaming server started\n")
 
-	nc, err := nats.Connect(natsURL(res),
-		nats.MaxReconnects(-1),
-	)
-	if err != nil {
-		log.Fatal(err)
+	var nc *nats.Conn
+	{
+		nc, err = nats.Connect(natsURL(res),
+			nats.MaxReconnects(-1),
+		)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer nc.Close()
+		log.Printf("Nats connection created.\n")
 	}
-	defer nc.Close()
-	log.Printf("Nats connection created\n")
 
-	dc, err := NewDurConn(nc, stanClusterId)
-	if err != nil {
-		log.Fatal(err)
+	var dc *DurConn
+	{
+		logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
+		connectc := make(chan struct{})
+		connectCb := func(_ stan.Conn) { connectc <- struct{}{} }
+
+		dc, err = NewDurConn(nc, stanClusterId,
+			DurConnOptLogger(&logger),
+			DurConnOptConnectCb(connectCb), // Use the callback to notify connection establish.
+		)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer dc.Close()
+		log.Printf("DurConn created.\n")
+
+		// Wait connection.
+		<-connectc
+		log.Printf("DurConn connected.\n")
 	}
-	defer dc.Close()
-	log.Printf("DurConn created\n")
-
-	log.Printf("Wait a while for stan connection\n")
-	waitStanConnection(dc)
 
 	const (
 		testSubject = "subsub"
@@ -355,19 +363,26 @@ func TestBasicPubSub(t *testing.T) {
 	wg := &sync.WaitGroup{}
 
 	{
-		err := dc.Subscribe(testSubject, testQueue, func(ctx context.Context, subject string, data []byte) error {
-			log.Printf("Handler called\n")
-			assert.Equal(testSubject, subject)
-			assert.Equal(testData, string(data))
-			wg.Done()
-			return nil
-		})
-		log.Printf("Subscribed: %v\n", err)
-		assert.NoError(err)
-	}
+		subc := make(chan struct{})
+		subCb := func(_ stan.Conn, _, _ string) { subc <- struct{}{} }
 
-	log.Printf("Wait a while for subscription")
-	time.Sleep(2 * time.Second)
+		err := dc.Subscribe(
+			testSubject,
+			testQueue,
+			func(ctx context.Context, subject string, data []byte) error {
+				log.Printf("Handler called\n")
+				assert.Equal(testSubject, subject)
+				assert.Equal(testData, string(data))
+				wg.Done()
+				return nil
+			},
+			SubOptSubscribeCb(subCb),
+		)
+		assert.NoError(err)
+
+		<-subc
+		log.Printf("Subscribed: %v\n", err)
+	}
 
 	{
 		wg.Add(1)
