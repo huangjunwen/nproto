@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -91,11 +92,11 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) (*DurCon
 
 	dc := &DurConn{
 		reconnectWait: DefaultConnectWait,
-		subjectPrefix: DefaultSubjectPreifx,
 		clusterID:     clusterID,
 		nc:            nc,
 		subNames:      make(map[[2]string]int),
 	}
+	dc.setSubjectPrefix(DefaultSubjectPreifx)
 	for _, opt := range opts {
 		if err := opt(dc); err != nil {
 			return nil, err
@@ -116,6 +117,7 @@ func (dc *DurConn) Close() error {
 	return err
 }
 
+// Subscribe implements npmsg.RawMsgSubscriber interface.
 func (dc *DurConn) Subscribe(subject, queue string, handler npmsg.RawMsgHandler, opts ...interface{}) error {
 
 	sub := &subscription{
@@ -164,7 +166,7 @@ func (dc *DurConn) Publish(ctx context.Context, subject string, data []byte) err
 
 	// Use a seperated go routine to call Publish since we need to listen to ctx.
 	go func() {
-		err := sc.Publish(dc.makeSubject(subject), data)
+		err := sc.Publish(dc.addSubjectPrefix(subject), data)
 		select {
 		case resultc <- err:
 		case <-ctx.Done():
@@ -225,7 +227,7 @@ func (dc *DurConn) PublishBatch(ctx context.Context, subjects []string, datas []
 				}
 			}
 
-			_, err := sc.PublishAsync(dc.makeSubject(subject), datas[i], h)
+			_, err := sc.PublishAsync(dc.addSubjectPrefix(subject), datas[i], h)
 			if err != nil {
 				select {
 				case resultc <- result{I: i, E: err}:
@@ -337,7 +339,7 @@ func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, stalec chan struct
 		// Wrap sub.handler to stan.MsgHandler.
 		handler := func(m *stan.Msg) {
 			// Ack when no error.
-			if err := sub.handler(context.Background(), m.Subject, m.Data); err == nil {
+			if err := sub.handler(context.Background(), dc.trimSubjectPrefix(m.Subject), m.Data); err == nil {
 				m.Ack()
 			}
 		}
@@ -350,7 +352,7 @@ func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, stalec chan struct
 		// Loop until success or the stan connection is stale (e.g. scStaleC is closed).
 		for {
 			// We don't need the returned stan.Subscription object since no Unsubscribe.
-			_, err := sc.QueueSubscribe(dc.makeSubject(sub.subject), sub.queue, handler, opts...)
+			_, err := sc.QueueSubscribe(dc.addSubjectPrefix(sub.subject), sub.queue, handler, opts...)
 			if err == nil {
 				return
 			}
@@ -431,8 +433,16 @@ func (dc *DurConn) close_() (oldSc stan.Conn, oldStalec chan struct{}, err error
 	return
 }
 
-func (dc *DurConn) makeSubject(subject string) string {
-	return fmt.Sprintf("%s.%s", dc.subjectPrefix, subject)
+func (dc *DurConn) setSubjectPrefix(prefix string) {
+	dc.subjectPrefix = prefix + "."
+}
+
+func (dc *DurConn) addSubjectPrefix(subject string) string {
+	return fmt.Sprintf("%s%s", dc.subjectPrefix, subject)
+}
+
+func (dc *DurConn) trimSubjectPrefix(subject string) string {
+	return strings.TrimPrefix(subject, dc.subjectPrefix)
 }
 
 type notSetErr struct{}

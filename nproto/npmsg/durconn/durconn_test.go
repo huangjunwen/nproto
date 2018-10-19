@@ -1,11 +1,10 @@
 package durconn
 
 import (
-	//"context"
+	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
-	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -249,80 +248,63 @@ const (
 	stanTag       = "0.11.0-linux"
 )
 
-func TestReconnect(t *testing.T) {
-	tmpdir, err := ioutil.TempDir("/tmp", "durconn")
+var (
+	pool *dockertest.Pool
+)
+
+func init() {
+	var err error
+	pool, err = dockertest.NewPool("")
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer os.RemoveAll(tmpdir)
-	log.Printf("tmpdir: %s\n", tmpdir)
+}
 
-	pool, err := dockertest.NewPool("")
+func natsURL(res *dockertest.Resource) string {
+	return fmt.Sprintf("nats://localhost:%s", res.GetPort("4222/tcp"))
+}
+
+func runTestServer(dataDir string) (*dockertest.Resource, error) {
+	// Use file store.
+	opts := &dockertest.RunOptions{
+		Repository: "nats-streaming",
+		Tag:        stanTag,
+		Cmd: []string{
+			"-cid", stanClusterId,
+			"-st", "FILE",
+			"--dir", "/data",
+		},
+	}
+	if dataDir != "" {
+		opts.Mounts = []string{fmt.Sprintf("%s:/data", dataDir)}
+	}
+
+	// Start the container.
+	res, err := pool.RunWithOptions(opts)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
-	natsURL := func(res *dockertest.Resource) string {
-		return fmt.Sprintf("nats://localhost:%s", res.GetPort("4222/tcp"))
-	}
+	// Set max lifetime of the container.
+	res.Expire(120)
 
-	runTestServer := func() (*dockertest.Resource, error) {
-		// Start the container.
-		res, err := pool.RunWithOptions(&dockertest.RunOptions{
-			Repository: "nats-streaming",
-			Tag:        stanTag,
-			Mounts:     []string{fmt.Sprintf("%s:/data", tmpdir)},
-			Cmd: []string{
-				"-cid", stanClusterId,
-				"-st", "FILE",
-				"--dir", "/data",
-			},
-		})
+	// Wait.
+	if err := pool.Retry(func() error {
+		sc, err := stan.Connect(stanClusterId, xid.New().String(),
+			stan.NatsURL(natsURL(res)))
 		if err != nil {
-			return nil, err
+			return err
 		}
-		//res.Expire(60)
-
-		// Wait.
-		if err := pool.Retry(func() error {
-			sc, err := stan.Connect(stanClusterId, xid.New().String(),
-				stan.NatsURL(natsURL(res)))
-			if err != nil {
-				return err
-			}
-			sc.Close()
-			return nil
-		}); err != nil {
-			return nil, err
-		}
-
-		return res, nil
+		sc.Close()
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
-	// -- test begins --
-	res, err := runTestServer()
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer res.Close()
-	log.Printf("Streaming server ready.\n")
+	return res, nil
+}
 
-	// Creates a plain nats connection with infinite reconnection.
-	nc, err := nats.Connect(natsURL(res), nats.MaxReconnects(-1))
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer nc.Close()
-	log.Printf("nats.Conn ready.\n")
-
-	// Creates DurConn.
-	dc, err := NewDurConn(nc, stanClusterId)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer dc.Close()
-
-	// Wait a while for connect.
+func waitStanConnection(dc *DurConn) {
 	for {
 		dc.mu.RLock()
 		sc := dc.sc
@@ -332,26 +314,68 @@ func TestReconnect(t *testing.T) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	log.Printf("DurConn ready.\n")
+}
 
-	// TODO
-	/*
-		// Publish should ok.
-		{
-			err := dc.Publish(context.Background(), "subj", []byte("hello"))
-			assert.NoError(err)
-		}
-		log.Printf("A messsage published.\n")
+func TestBasicPubSub(t *testing.T) {
+	assert := assert.New(t)
 
-		// Stop the server.
-		res.Close()
-		log.Printf("Streaming server stopped.\n")
+	log.Printf("Starting streaming server\n")
+	res, err := runTestServer("")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer res.Close()
+	log.Printf("Streaming server started\n")
 
-		// Publish should not ok.
-		{
-			err := dc.Publish(context.Background(), "subj", []byte("hello"))
-			assert.NoError(err)
-		}
-		log.Printf("A messsage is not published.\n")
-	*/
+	nc, err := nats.Connect(natsURL(res),
+		nats.MaxReconnects(-1),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer nc.Close()
+	log.Printf("Nats connection created\n")
+
+	dc, err := NewDurConn(nc, stanClusterId)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer dc.Close()
+	log.Printf("DurConn created\n")
+
+	log.Printf("Wait a while for stan connection\n")
+	waitStanConnection(dc)
+
+	const (
+		testSubject = "subsub"
+		testQueue   = "qq"
+		testData    = "datadata"
+	)
+
+	wg := &sync.WaitGroup{}
+
+	{
+		err := dc.Subscribe(testSubject, testQueue, func(ctx context.Context, subject string, data []byte) error {
+			log.Printf("Handler called\n")
+			assert.Equal(testSubject, subject)
+			assert.Equal(testData, string(data))
+			wg.Done()
+			return nil
+		})
+		log.Printf("Subscribed: %v\n", err)
+		assert.NoError(err)
+	}
+
+	log.Printf("Wait a while for subscription")
+	time.Sleep(2 * time.Second)
+
+	{
+		wg.Add(1)
+		err := dc.Publish(context.Background(), testSubject, []byte(testData))
+		log.Printf("Published: %v\n", err)
+		assert.NoError(err)
+	}
+
+	wg.Wait()
+
 }
