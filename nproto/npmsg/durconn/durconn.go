@@ -147,7 +147,7 @@ func (dc *DurConn) Subscribe(subject, queue string, handler npmsg.RawMsgHandler,
 	return nil
 }
 
-func (dc *DurConn) Publish(_ context.Context, subject string, data []byte) error {
+func (dc *DurConn) Publish(ctx context.Context, subject string, data []byte) error {
 	dc.mu.RLock()
 	closed := dc.closed
 	sc := dc.sc
@@ -159,69 +159,104 @@ func (dc *DurConn) Publish(_ context.Context, subject string, data []byte) error
 	if sc == nil {
 		return ErrNotConnected
 	}
-	return sc.Publish(dc.makeSubject(subject), data)
 
+	resultc := make(chan error)
+
+	// Use a seperated go routine to call Publish since we need to listen to ctx.
+	go func() {
+		err := sc.Publish(dc.makeSubject(subject), data)
+		select {
+		case resultc <- err:
+		case <-ctx.Done():
+		}
+	}()
+
+	// Wait result or context done.
+	select {
+	case r := <-resultc:
+		return r
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
-func (dc *DurConn) PublishBatch(_ context.Context, subjects []string, datas [][]byte) (errors []error) {
-	n := len(subjects)
-	errors = make([]error, n)
+func (dc *DurConn) PublishBatch(ctx context.Context, subjects []string, datas [][]byte) (errors []error) {
 
 	dc.mu.RLock()
 	closed := dc.closed
 	sc := dc.sc
 	dc.mu.RUnlock()
 
-	if closed || sc == nil {
-		var err error
-		if closed {
-			err = ErrClosed
-		} else {
-			err = ErrNotConnected
-		}
-		for i, _ := range subjects {
-			errors[i] = err
-		}
+	var err error = notSetErr{}
+	if closed {
+		err = ErrClosed
+	} else if sc == nil {
+		err = ErrNotConnected
+	}
+
+	// Initialize error slice.
+	n := len(subjects)
+	errors = make([]error, n)
+	for i, _ := range errors {
+		errors[i] = err
+	}
+
+	// If real error.
+	if err != (notSetErr{}) {
 		return
 	}
 
-	// Use a wait group to wait message deliveries.
-	wg := &sync.WaitGroup{}
-	wg.Add(n)
-
-	// Ack handler to record result.
-	mu := &sync.Mutex{}
-	ackResult := map[string]error{} // id -> error
-	ackHandler := func(id string, err error) {
-		mu.Lock()
-		ackResult[id] = err
-		mu.Unlock()
-		wg.Done()
+	// Channel to send/recv result.
+	type result struct {
+		I int
+		E error
 	}
+	resultc := make(chan result)
 
-	// Publish async.
-	id2i := map[string]int{} // id -> msg index
-	nErrs := 0
-	for i, subject := range subjects {
-		id, err := sc.PublishAsync(dc.makeSubject(subject), datas[i], ackHandler)
-		if err != nil {
-			nErrs++
-			errors[i] = err
-		} else {
-			id2i[id] = i
+	// Use a seperated go routine to call PublishAsync since we need to listen to ctx.
+	go func() {
+		for i, subject := range subjects {
+			i := i
+			h := func(_ string, err error) {
+				select {
+				case resultc <- result{I: i, E: err}:
+				case <-ctx.Done():
+					return
+				}
+			}
+
+			_, err := sc.PublishAsync(dc.makeSubject(subject), datas[i], h)
+			if err != nil {
+				select {
+				case resultc <- result{I: i, E: err}:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+
+	// Wait all results or context done.
+	for n > 0 {
+		select {
+		case r := <-resultc:
+			errors[r.I] = r.E
+			n -= 1
+		case <-ctx.Done():
+			break
 		}
 	}
 
-	// Subtract nErrs and wait.
-	if nErrs > 0 {
-		wg.Add(-nErrs)
+	// Context done before getting all results.
+	if n > 0 {
+		err = ctx.Err()
+		for i, _ := range errors {
+			if errors[i] == (notSetErr{}) {
+				errors[i] = err
+			}
+		}
 	}
-	wg.Wait()
 
-	// Process ackResult.
-	for id, err := range ackResult {
-		errors[id2i[id]] = err
-	}
 	return
 }
 
@@ -399,3 +434,11 @@ func (dc *DurConn) close_() (oldSc stan.Conn, oldStalec chan struct{}, err error
 func (dc *DurConn) makeSubject(subject string) string {
 	return fmt.Sprintf("%s.%s", dc.subjectPrefix, subject)
 }
+
+type notSetErr struct{}
+
+func (notSetErr) Error() string {
+	return "Not set"
+}
+
+var _ error = notSetErr{}

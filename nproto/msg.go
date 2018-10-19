@@ -9,6 +9,7 @@ import (
 // MsgPublisher is used to publish messages reliably, e.g. at least once delivery.
 type MsgPublisher interface {
 	// Publish publishes a message to the given subject. It returns nil when succeeded.
+	// When returning not nil error, it maybe succeeded or failed.
 	Publish(ctx context.Context, subject string, msg proto.Message) error
 }
 

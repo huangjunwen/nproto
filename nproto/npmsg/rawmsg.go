@@ -12,6 +12,7 @@ import (
 // RawMsgPublisher is similar to MsgPublisher but operates on lower level.
 type RawMsgPublisher interface {
 	// Publish publishes a message to the given subject. It returns nil when succeeded.
+	// When returning not nil error, it maybe succeeded or failed.
 	Publish(ctx context.Context, subject string, data []byte) error
 }
 
