@@ -4,15 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/nats-io/go-nats"
 	"github.com/nats-io/go-nats-streaming"
 	"github.com/ory/dockertest"
 	"github.com/rs/xid"
-	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -305,7 +304,10 @@ func runTestServer(dataDir string) (*dockertest.Resource, error) {
 	return res, nil
 }
 
+// TestBasicPubSub test basic publish and subscribe.
 func TestBasicPubSub(t *testing.T) {
+	log.Printf("\n")
+	log.Printf("\n")
 	log.Printf(">>> TestBasicPubSub.\n")
 	assert := assert.New(t)
 	var err error
@@ -335,12 +337,10 @@ func TestBasicPubSub(t *testing.T) {
 
 	var dc *DurConn
 	{
-		logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
 		connectc := make(chan struct{})
 		connectCb := func(_ stan.Conn) { connectc <- struct{}{} }
 
 		dc, err = NewDurConn(nc, stanClusterId,
-			DurConnOptLogger(&logger),
 			DurConnOptConnectCb(connectCb), // Use the callback to notify connection establish.
 		)
 		if err != nil {
@@ -393,4 +393,83 @@ func TestBasicPubSub(t *testing.T) {
 
 	wg.Wait()
 
+}
+
+func TestReconnect(t *testing.T) {
+	log.Printf("\n")
+	log.Printf("\n")
+	log.Printf(">>> TestReconnect.\n")
+	var err error
+
+	var res1 *dockertest.Resource
+	{
+		log.Printf("Starting streaming server.\n")
+		res1, err = runTestServer("")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer res1.Close()
+		log.Printf("Streaming server started.\n")
+	}
+
+	var nc *nats.Conn
+	{
+		nc, err = nats.Connect(natsURL(res1),
+			nats.MaxReconnects(-1),
+			nats.ReconnectWait(50*time.Millisecond), // A short reconnect wait.
+		)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer nc.Close()
+		log.Printf("Nats connection created.\n")
+	}
+
+	var dc *DurConn
+	connectc := make(chan struct{})
+	disconnectc := make(chan struct{})
+	{
+		connectCb := func(_ stan.Conn) { connectc <- struct{}{} }
+		disconnectCb := func(_ stan.Conn) { disconnectc <- struct{}{} }
+
+		dc, err = NewDurConn(nc, stanClusterId,
+			DurConnOptConnectCb(connectCb),               // Use the callback to notify connection establish.
+			DurConnOptDisconnectCb(disconnectCb),         // Use the callback to notify disconnection.
+			DurConnOptReconnectWait(50*time.Millisecond), // A short reconnect wait.
+			DurConnOptPings(1, 3),                        // Minimal pings.
+		)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer dc.Close()
+		log.Printf("DurConn created.\n")
+
+		// Wait connection.
+		<-connectc
+		log.Printf("DurConn connected.\n")
+	}
+
+	// Server gone.
+	res1.Close()
+	log.Printf("Streaming server closed.\n")
+
+	// Wait disconnection.
+	<-disconnectc
+	log.Printf("DurConn disconnected.\n")
+
+	// Second server.
+	var res2 *dockertest.Resource
+	{
+		log.Printf("Starting another streaming server.\n")
+		res2, err = runTestServer("")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer res2.Close()
+		log.Printf("Another Streaming server started.\n")
+	}
+
+	// Wait connection.
+	<-connectc
+	log.Printf("DurConn connected again.\n")
 }

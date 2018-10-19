@@ -54,6 +54,7 @@ type DurConn struct {
 	reconnectWait time.Duration
 	subjectPrefix string
 	connectCb     func(sc stan.Conn)
+	disconnectCb  func(sc stan.Conn)
 
 	// Immutable fields.
 	clusterID string
@@ -99,6 +100,7 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) (*DurCon
 		logger:        zerolog.Nop(),
 		reconnectWait: DefaultReconnectWait,
 		connectCb:     func(_ stan.Conn) {},
+		disconnectCb:  func(_ stan.Conn) {},
 		clusterID:     clusterID,
 		nc:            nc,
 		subNames:      make(map[[2]string]int),
@@ -303,9 +305,10 @@ func (dc *DurConn) connect(wait bool) {
 		opts := []stan.Option{}
 		opts = append(opts, dc.stanOptions...)
 		opts = append(opts, stan.NatsConn(dc.nc))
-		opts = append(opts, stan.SetConnectionLostHandler(func(_ stan.Conn, _ error) {
+		opts = append(opts, stan.SetConnectionLostHandler(func(sc stan.Conn, _ error) {
 			// Reconnect when connection lost.
 			// NOTE: This callback will no be invoked in normal close.
+			dc.disconnectCb(sc)
 			dc.connect(true)
 		}))
 

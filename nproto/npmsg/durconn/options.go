@@ -40,6 +40,14 @@ func DurConnOptConnectCb(fn func(sc stan.Conn)) DurConnOption {
 	}
 }
 
+// DurConnOptDisconnectCb sets a callback invoked each time a stan.Conn lost.
+func DurConnOptDisconnectCb(fn func(sc stan.Conn)) DurConnOption {
+	return func(dc *DurConn) error {
+		dc.disconnectCb = fn
+		return nil
+	}
+}
+
 // DurConnOptPings sets ping
 func DurConnOptPings(interval, maxOut int) DurConnOption {
 	return func(dc *DurConn) error {
