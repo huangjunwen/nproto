@@ -47,7 +47,7 @@ var (
 type DurConn struct {
 	// Options.
 	stanOptions   []stan.Option
-	connectWait   time.Duration
+	reconnectWait time.Duration
 	subjectPrefix string
 
 	// Immutable fields.
@@ -90,7 +90,7 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) (*DurCon
 	}
 
 	dc := &DurConn{
-		connectWait:   DefaultConnectWait,
+		reconnectWait: DefaultConnectWait,
 		subjectPrefix: DefaultSubjectPreifx,
 		clusterID:     clusterID,
 		nc:            nc,
@@ -265,7 +265,7 @@ func (dc *DurConn) connect(wait bool) {
 
 	go func() {
 		if wait {
-			time.Sleep(dc.connectWait)
+			time.Sleep(dc.reconnectWait)
 		}
 
 		dc.connectMu.Lock()
