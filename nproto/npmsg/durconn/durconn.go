@@ -246,20 +246,21 @@ func (dc *DurConn) PublishBatch(ctx context.Context, subjects []string, datas []
 				case resultc <- result{I: i, E: err}:
 					continue
 				case <-ctx.Done():
-					break
+					return
 				}
 			}
 		}
 	}()
 
 	// Wait all results or context done.
+LOOP:
 	for n > 0 {
 		select {
 		case r := <-resultc:
 			errors[r.I] = r.E
 			n -= 1
 		case <-ctx.Done():
-			break
+			break LOOP
 		}
 	}
 

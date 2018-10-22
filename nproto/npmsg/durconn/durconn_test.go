@@ -32,11 +32,38 @@ func newMockConn(i int) MockConn {
 }
 
 func (mc MockConn) Publish(subject string, data []byte) error {
-	panic("Not implemented")
+	dur, err := time.ParseDuration(string(data))
+	if err != nil {
+		dur = 10 * time.Millisecond
+	}
+	time.Sleep(dur)
+	if subject == "good" {
+		return nil
+	} else {
+		return errors.New("bad")
+	}
 }
 
 func (mc MockConn) PublishAsync(subject string, data []byte, ah stan.AckHandler) (string, error) {
-	panic("Not implemented")
+	if subject == "evil" {
+		return "", errors.New("evil")
+	}
+
+	id := xid.New().String()
+	dur, err := time.ParseDuration(string(data))
+	if err != nil {
+		dur = 10 * time.Millisecond
+	}
+	go func() {
+		time.Sleep(dur)
+		if subject == "good" {
+			ah(id, nil)
+		} else {
+			ah(id, errors.New("bad"))
+		}
+	}()
+	return id, nil
+
 }
 
 func (mc MockConn) Subscribe(subject string, cb stan.MsgHandler, opts ...stan.SubscriptionOption) (stan.Subscription, error) {
@@ -253,6 +280,43 @@ func TestLockMethods(t *testing.T) {
 			[]interface{}{nil, nil, ErrClosed},
 			true, nil, []*subscription{sub1, sub2}},
 	})
+
+}
+
+func TestMockPub(t *testing.T) {
+	assert := assert.New(t)
+
+	sc := newMockConn(3)
+	dc := &DurConn{
+		sc:       sc,
+		subNames: map[[2]string]int{},
+	}
+
+	{
+		assert.NoError(dc.Publish(context.Background(), "good", nil))
+	}
+
+	{
+		ctx, _ := context.WithTimeout(context.Background(), time.Millisecond)
+		err := dc.Publish(ctx, "good", []byte((10 * time.Millisecond).String()))
+		assert.Error(err)
+	}
+
+	{
+		ctx, _ := context.WithTimeout(context.Background(), 10*time.Millisecond)
+		subjects := []string{"evil", "good", "bad", "good"}
+		datas := [][]byte{
+			nil,
+			[]byte(time.Millisecond.String()),
+			[]byte(time.Millisecond.String()),
+			[]byte(time.Second.String()),
+		}
+		errs := dc.PublishBatch(ctx, subjects, datas)
+		assert.Error(errs[0])   // Returns error immediately.
+		assert.NoError(errs[1]) // No error.
+		assert.Error(errs[2])   // Returns error after a while.
+		assert.Error(errs[3])   // Context timeout.
+	}
 
 }
 
