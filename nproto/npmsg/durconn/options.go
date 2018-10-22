@@ -15,7 +15,7 @@ func DurConnOptLogger(logger *zerolog.Logger) DurConnOption {
 	}
 }
 
-// DurConnOptReconnectWait sets reconnection wait.
+// DurConnOptReconnectWait sets reconnection wait, e.g. time between reconnections.
 func DurConnOptReconnectWait(t time.Duration) DurConnOption {
 	return func(dc *DurConn) error {
 		dc.reconnectWait = t

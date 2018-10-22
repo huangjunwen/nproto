@@ -19,6 +19,7 @@ import (
 var (
 	DefaultReconnectWait = 2 * time.Second
 	DefaultSubRetryWait  = 2 * time.Second
+	DefaultPubAckWait    = 2 * time.Second
 	DefaultSubjectPreifx = "npmsg"
 )
 
@@ -49,12 +50,12 @@ var (
 
 type DurConn struct {
 	// Options.
-	stanOptions   []stan.Option
 	logger        zerolog.Logger
 	reconnectWait time.Duration
 	subjectPrefix string
 	connectCb     func(sc stan.Conn)
 	disconnectCb  func(sc stan.Conn)
+	stanOptions   []stan.Option
 
 	// Immutable fields.
 	clusterID string
@@ -101,9 +102,12 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) (*DurCon
 		reconnectWait: DefaultReconnectWait,
 		connectCb:     func(_ stan.Conn) {},
 		disconnectCb:  func(_ stan.Conn) {},
-		clusterID:     clusterID,
-		nc:            nc,
-		subNames:      make(map[[2]string]int),
+		stanOptions: []stan.Option{
+			stan.PubAckWait(DefaultPubAckWait),
+		},
+		clusterID: clusterID,
+		nc:        nc,
+		subNames:  make(map[[2]string]int),
 	}
 	dc.setSubjectPrefix(DefaultSubjectPreifx)
 	for _, opt := range opts {
