@@ -232,6 +232,7 @@ func (dc *DurConn) PublishBatch(ctx context.Context, subjects []string, datas []
 			h := func(_ string, err error) {
 				select {
 				case resultc <- result{I: i, E: err}:
+					return
 				case <-ctx.Done():
 					return
 				}
