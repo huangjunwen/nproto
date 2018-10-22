@@ -179,7 +179,9 @@ func (dc *DurConn) Publish(ctx context.Context, subject string, data []byte) err
 		err := sc.Publish(dc.addSubjectPrefix(subject), data)
 		select {
 		case resultc <- err:
+			return
 		case <-ctx.Done():
+			return
 		}
 	}()
 
@@ -242,8 +244,9 @@ func (dc *DurConn) PublishBatch(ctx context.Context, subjects []string, datas []
 			if err != nil {
 				select {
 				case resultc <- result{I: i, E: err}:
+					continue
 				case <-ctx.Done():
-					return
+					break
 				}
 			}
 		}
