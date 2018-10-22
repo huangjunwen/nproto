@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// ----------- Mock begins -----------
+// ----------- Mock test -----------
 
 type MockConn int
 
@@ -51,8 +51,6 @@ func (mc MockConn) Close() error {
 func (mc MockConn) NatsConn() *nats.Conn {
 	panic("Not implemented")
 }
-
-// ----------- Mock ends -----------
 
 // Test reset/addSub/close_ .
 // They are the 'atomic' methods of DurConn since they all use:
@@ -191,42 +189,53 @@ func TestLockMethods(t *testing.T) {
 
 	runTestCase([]testCase{
 		// Init state.
-		testCase{"", nil, nil, false, nil, nil},
+		testCase{"",
+			nil,
+			nil,
+			false, nil, nil},
+
 		// Reset to nil. Nothing changed.
 		testCase{"reset",
 			[]interface{}{nil, nil},
 			[]interface{}{nil, nil, nil, nil},
 			false, nil, nil},
+
 		// Add subscription 1 (without connection).
 		testCase{"addSub",
 			[]interface{}{sub1},
-			[]interface{}{nil, nil, nil},
+			[]interface{}{nil, nil, nil}, // No current connection, the real subscription is defer to later connection reset. See next test case.
 			false, nil, []*subscription{sub1}},
+
 		// Reset to connection 1.
 		testCase{"reset",
 			[]interface{}{sc1, stalec1},
 			[]interface{}{nil, nil, []*subscription{sub1}, nil},
 			false, sc1, []*subscription{sub1}},
+
 		// Add subscription 2 (with connection).
 		testCase{"addSub",
 			[]interface{}{sub2},
-			[]interface{}{sc1, stalec1, nil},
+			[]interface{}{sc1, stalec1, nil}, // Has connection, the real subscription should be run immediately.
 			false, sc1, []*subscription{sub1, sub2}},
-		// Add subscription 1 again (with connection) should result an error.
+
+		// Add subscription 1 again (with connection) should result an error e.g. duplicated.
 		testCase{"addSub",
 			[]interface{}{sub1},
 			[]interface{}{nil, nil, ErrDupSubscription(sub1.subject, sub1.queue)},
 			false, sc1, []*subscription{sub1, sub2}},
+
 		// Reset to connection 2.
 		testCase{"reset",
 			[]interface{}{sc2, stalec2},
-			[]interface{}{sc1, stalec1, []*subscription{sub1, sub2}, nil},
+			[]interface{}{sc1, stalec1, []*subscription{sub1, sub2}, nil}, // sc1 should be released and sub1/sub2 should be re-subscribed.
 			false, sc2, []*subscription{sub1, sub2}},
+
 		// Now close.
 		testCase{"close",
 			nil,
-			[]interface{}{sc2, stalec2, nil},
+			[]interface{}{sc2, stalec2, nil}, // sc2 should be released.
 			true, nil, []*subscription{sub1, sub2}},
+
 		// Further calls should result ErrClosed.
 		testCase{"reset",
 			[]interface{}{sc1, stalec1},
@@ -243,6 +252,8 @@ func TestLockMethods(t *testing.T) {
 	})
 
 }
+
+// ----------- Real test -----------
 
 const (
 	stanClusterId = "durconn_test"
@@ -316,7 +327,6 @@ func runTestServer(dataDir string) (*dockertest.Resource, error) {
 // TestBasicPubSub test basic publish and subscribe.
 func TestBasicPubSub(t *testing.T) {
 	log.Printf("\n")
-	log.Printf("\n")
 	log.Printf(">>> TestBasicPubSub.\n")
 	assert := assert.New(t)
 	var err error
@@ -346,21 +356,13 @@ func TestBasicPubSub(t *testing.T) {
 
 	var dc *DurConn
 	{
-		connectc := make(chan struct{})
-		connectCb := func(_ stan.Conn) { connectc <- struct{}{} }
-
-		dc, err = NewDurConn(nc, stanClusterId,
-			DurConnOptConnectCb(connectCb), // Use the callback to notify connection establish.
-		)
+		dc, err = NewDurConn(nc, stanClusterId)
 		if err != nil {
 			log.Fatal(err)
 		}
 		defer dc.Close()
 		log.Printf("DurConn created.\n")
 
-		// Wait connection.
-		<-connectc
-		log.Printf("DurConn connected.\n")
 	}
 
 	const (
@@ -405,7 +407,6 @@ func TestBasicPubSub(t *testing.T) {
 }
 
 func TestReconnect(t *testing.T) {
-	log.Printf("\n")
 	log.Printf("\n")
 	log.Printf(">>> TestReconnect.\n")
 	var err error

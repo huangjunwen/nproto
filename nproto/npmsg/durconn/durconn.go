@@ -24,7 +24,7 @@ var (
 
 var (
 	ErrNCMaxReconnect     = errors.New("nproto.npmsg.durconn.NewDurConn: nats.Conn should have MaxReconnects < 0")
-	ErrClosed             = errors.New("nproto.npmsg.durconn.DurConn: DurConn closed.")
+	ErrClosed             = errors.New("nproto.npmsg.durconn.DurConn: Closed.")
 	ErrNotConnected       = errors.New("nproto.npmsg.durconn.DurConn: Not connected.")
 	ErrBadSubscriptionOpt = errors.New("nproto.npmsg.durconn.DurConn: Expect durconn.SubOption.")
 	ErrDupSubscription    = func(subject, queue string) error {
