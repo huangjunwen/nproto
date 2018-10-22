@@ -478,8 +478,22 @@ func TestPubSub(t *testing.T) {
 		log.Printf("DurConn connected.\n")
 	}
 
+	// Abnormal subscription.
+	{
+		// NOTE: nats streaming does not support wildcard.
+		// This will make this subscription loop infinitely.
+		err := dc.Subscribe(
+			"sub.*",
+			"q1",
+			func(_ context.Context, _ string, _ []byte) error { return nil },
+			SubOptRetryWait(time.Second),
+		)
+		assert.NoError(err)
+	}
+
+	// Normal subscription.
 	var (
-		testSubject = "subsub"
+		testSubject = "sub.sub"
 		testQueue   = "qq"
 		goodData    = []byte("good")
 		badData     = []byte("bad")
@@ -511,7 +525,7 @@ func TestPubSub(t *testing.T) {
 				}
 			},
 			SubOptSubscribeCb(subCb),
-			SubOptAckWait(time.Second),
+			SubOptAckWait(time.Second), // Short ack wait results in fast redelivery.
 		)
 		assert.NoError(err)
 

@@ -64,7 +64,15 @@ func DurConnOptPubAckWait(t time.Duration) DurConnOption {
 	}
 }
 
-// SubsOptSubscribeCb sets a callback invoked each time a subscription is established.
+// SubOptRetryWait sets the wait time between subscription.
+func SubOptRetryWait(t time.Duration) SubOption {
+	return func(sub *subscription) error {
+		sub.retryWait = t
+		return nil
+	}
+}
+
+// SubOptSubscribeCb sets a callback invoked each time a subscription is established.
 // NOTE: The callback is also called when resubscribing after reconnection.
 func SubOptSubscribeCb(fn func(sc stan.Conn, subject, queue string)) SubOption {
 	return func(sub *subscription) error {
