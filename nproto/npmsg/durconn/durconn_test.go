@@ -1,10 +1,13 @@
 package durconn
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
-	"sync"
+	"os"
 	"testing"
 	"time"
 
@@ -295,6 +298,8 @@ func runTestServer(dataDir string) (*dockertest.Resource, error) {
 			},
 		},
 	}
+
+	// If host's dataDir is not empty, then mount to it.
 	if dataDir != "" {
 		opts.Mounts = []string{fmt.Sprintf("%s:/data", dataDir)}
 	}
@@ -324,93 +329,13 @@ func runTestServer(dataDir string) (*dockertest.Resource, error) {
 	return res, nil
 }
 
-// TestBasicPubSub test basic publish and subscribe.
-func TestBasicPubSub(t *testing.T) {
+// TestConnect tests connects and reconnects.
+func TestConnect(t *testing.T) {
 	log.Printf("\n")
-	log.Printf(">>> TestBasicPubSub.\n")
-	assert := assert.New(t)
+	log.Printf(">>> TestConnect.\n")
 	var err error
 
-	var res *dockertest.Resource
-	{
-		log.Printf("Starting streaming server.\n")
-		res, err = runTestServer("")
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer res.Close()
-		log.Printf("Streaming server started.\n")
-	}
-
-	var nc *nats.Conn
-	{
-		nc, err = nats.Connect(natsURL(),
-			nats.MaxReconnects(-1),
-		)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer nc.Close()
-		log.Printf("Nats connection created.\n")
-	}
-
-	var dc *DurConn
-	{
-		dc, err = NewDurConn(nc, stanClusterId)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer dc.Close()
-		log.Printf("DurConn created.\n")
-
-	}
-
-	const (
-		testSubject = "subsub"
-		testQueue   = "qq"
-		testData    = "datadata"
-	)
-
-	wg := &sync.WaitGroup{}
-
-	{
-		subc := make(chan struct{})
-		subCb := func(_ stan.Conn, _, _ string) { subc <- struct{}{} }
-
-		err := dc.Subscribe(
-			testSubject,
-			testQueue,
-			func(ctx context.Context, subject string, data []byte) error {
-				log.Printf("Handler called\n")
-				assert.Equal(testSubject, subject)
-				assert.Equal(testData, string(data))
-				wg.Done()
-				return nil
-			},
-			SubOptSubscribeCb(subCb),
-		)
-		assert.NoError(err)
-
-		<-subc
-		log.Printf("Subscribed: %v\n", err)
-	}
-
-	{
-		wg.Add(1)
-		err := dc.Publish(context.Background(), testSubject, []byte(testData))
-		log.Printf("Published: %v\n", err)
-		assert.NoError(err)
-	}
-
-	wg.Wait()
-
-}
-
-func TestReconnect(t *testing.T) {
-	log.Printf("\n")
-	log.Printf(">>> TestReconnect.\n")
-	var err error
-
+	// Starts the first server.
 	var res1 *dockertest.Resource
 	{
 		log.Printf("Starting streaming server.\n")
@@ -422,11 +347,11 @@ func TestReconnect(t *testing.T) {
 		log.Printf("Streaming server started.\n")
 	}
 
+	// Creates nats connection (with infinite reconnection).
 	var nc *nats.Conn
 	{
 		nc, err = nats.Connect(natsURL(),
 			nats.MaxReconnects(-1),
-			//nats.ReconnectWait(50*time.Millisecond), // A short reconnect wait.
 		)
 		if err != nil {
 			log.Fatal(err)
@@ -435,6 +360,7 @@ func TestReconnect(t *testing.T) {
 		log.Printf("Nats connection created.\n")
 	}
 
+	// Creates DurConn.
 	var dc *DurConn
 	connectc := make(chan struct{})
 	disconnectc := make(chan struct{})
@@ -459,7 +385,7 @@ func TestReconnect(t *testing.T) {
 		log.Printf("DurConn connected.\n")
 	}
 
-	// Server gone.
+	// First server gone.
 	res1.Close()
 	log.Printf("Streaming server closed.\n")
 
@@ -467,7 +393,7 @@ func TestReconnect(t *testing.T) {
 	<-disconnectc
 	log.Printf("DurConn disconnected.\n")
 
-	// Second server.
+	// Starts the second server.
 	var res2 *dockertest.Resource
 	{
 		log.Printf("Starting another streaming server.\n")
@@ -482,4 +408,183 @@ func TestReconnect(t *testing.T) {
 	// Wait connection.
 	<-connectc
 	log.Printf("DurConn connected again.\n")
+}
+
+// TestPubSub tests message publishing and subscribing.
+func TestPubSub(t *testing.T) {
+	log.Printf("\n")
+	log.Printf(">>> TestPubSub.\n")
+	assert := assert.New(t)
+	var err error
+
+	// Use a tmp directory as data dir.
+	var datadir string
+	{
+		datadir, err = ioutil.TempDir("/tmp", "durconn_test")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer os.RemoveAll(datadir)
+		log.Printf("Temp data dir created: %s.\n", datadir)
+	}
+
+	// Starts the first server.
+	var res1 *dockertest.Resource
+	{
+		log.Printf("Starting streaming server.\n")
+		res1, err = runTestServer(datadir)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer res1.Close()
+		log.Printf("Streaming server started.\n")
+	}
+
+	// Creates nats connection (with infinite reconnection).
+	var nc *nats.Conn
+	{
+		nc, err = nats.Connect(natsURL(),
+			nats.MaxReconnects(-1),
+		)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer nc.Close()
+		log.Printf("Nats connection created.\n")
+	}
+
+	// Creates DurConn.
+	var dc *DurConn
+	connectc := make(chan struct{})
+	disconnectc := make(chan struct{})
+	{
+		connectCb := func(_ stan.Conn) { connectc <- struct{}{} }
+		disconnectCb := func(_ stan.Conn) { disconnectc <- struct{}{} }
+
+		dc, err = NewDurConn(nc, stanClusterId,
+			DurConnOptConnectCb(connectCb),       // Use the callback to notify connection establish.
+			DurConnOptDisconnectCb(disconnectCb), // Use the callback to notify disconnection.
+			DurConnOptReconnectWait(time.Second), // A short reconnect wait.
+			DurConnOptPings(1, 3),                // Minimal pings.
+		)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer dc.Close()
+		log.Printf("DurConn created.\n")
+
+		// Wait connection.
+		<-connectc
+		log.Printf("DurConn connected.\n")
+	}
+
+	var (
+		testSubject = "subsub"
+		testQueue   = "qq"
+		goodData    = []byte("good")
+		badData     = []byte("bad")
+	)
+
+	subc := make(chan struct{})
+	goodc := make(chan struct{}, 3)
+	badc := make(chan struct{}, 3)
+	{
+
+		subCb := func(_ stan.Conn, _, _ string) { subc <- struct{}{} }
+		err := dc.Subscribe(
+			testSubject,
+			testQueue,
+			func(ctx context.Context, subject string, data []byte) error {
+				log.Printf("*** Handler called %+q %+q.\n", subject, data)
+				assert.Equal(testSubject, subject)
+				if bytes.Equal(data, goodData) {
+					goodc <- struct{}{}
+					return nil
+				} else {
+					// NOTE: since returnning error will cause message redelivery.
+					// Don't block here.
+					select {
+					case badc <- struct{}{}:
+					default:
+					}
+					return errors.New("bad data")
+				}
+			},
+			SubOptSubscribeCb(subCb),
+			SubOptAckWait(time.Second),
+		)
+		assert.NoError(err)
+
+		<-subc
+		log.Printf("Subscribed: %v.\n", err)
+	}
+
+	// Publish good data.
+	{
+		err := dc.Publish(context.Background(),
+			testSubject,
+			goodData,
+		)
+		assert.NoError(err)
+		<-goodc
+		log.Printf("Publish good data: %v.\n", err)
+	}
+
+	// PublishBatch good data.
+	{
+		errs := dc.PublishBatch(context.Background(),
+			[]string{testSubject, testSubject},
+			[][]byte{goodData, goodData},
+		)
+		for _, err := range errs {
+			assert.NoError(err)
+		}
+		<-goodc
+		<-goodc
+		log.Printf("PublishBatch good data: %v.\n", errs)
+	}
+
+	// Publish bad data.
+	{
+		err := dc.Publish(context.Background(),
+			testSubject,
+			badData,
+		)
+		assert.NoError(err)
+		<-badc
+		log.Printf("Publish bad data: %v.\n", err)
+	}
+
+	// First server gone.
+	res1.Close()
+	log.Printf("Streaming server closed.\n")
+
+	// Wait disconnection.
+	<-disconnectc
+	log.Printf("DurConn disconnected.\n")
+
+	// Starts the second server.
+	var res2 *dockertest.Resource
+	{
+		log.Printf("Starting another streaming server.\n")
+		res2, err = runTestServer(datadir)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer res2.Close()
+		log.Printf("Another Streaming server started.\n")
+	}
+
+	// Wait re connection.
+	<-connectc
+	log.Printf("DurConn connected again.\n")
+
+	// Wait re subscription.
+	<-subc
+	log.Printf("Subscribed again.\n")
+
+	// Wait bad data redelivery.
+	<-badc
+	<-badc
+	log.Printf("Bad data redelivery.\n")
 }

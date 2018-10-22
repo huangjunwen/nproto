@@ -17,8 +17,8 @@ import (
 )
 
 var (
-	DefaultReconnectWait = 5 * time.Second
-	DefaultSubRetryWait  = 5 * time.Second
+	DefaultReconnectWait = 2 * time.Second
+	DefaultSubRetryWait  = 2 * time.Second
 	DefaultSubjectPreifx = "npmsg"
 )
 

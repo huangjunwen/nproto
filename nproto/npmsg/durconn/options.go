@@ -48,7 +48,7 @@ func DurConnOptDisconnectCb(fn func(sc stan.Conn)) DurConnOption {
 	}
 }
 
-// DurConnOptPings sets ping
+// DurConnOptPings sets stan.Pings.
 func DurConnOptPings(interval, maxOut int) DurConnOption {
 	return func(dc *DurConn) error {
 		dc.stanOptions = append(dc.stanOptions, stan.Pings(interval, maxOut))
@@ -56,7 +56,7 @@ func DurConnOptPings(interval, maxOut int) DurConnOption {
 	}
 }
 
-// DurConnOptPubAckWait sets publish ack time wait.
+// DurConnOptPubAckWait sets stan.PubAckWait.
 func DurConnOptPubAckWait(t time.Duration) DurConnOption {
 	return func(dc *DurConn) error {
 		dc.stanOptions = append(dc.stanOptions, stan.PubAckWait(t))
@@ -69,6 +69,14 @@ func DurConnOptPubAckWait(t time.Duration) DurConnOption {
 func SubOptSubscribeCb(fn func(sc stan.Conn, subject, queue string)) SubOption {
 	return func(sub *subscription) error {
 		sub.subscribeCb = fn
+		return nil
+	}
+}
+
+// SubOptAckWait sets stan.AckWait.
+func SubOptAckWait(t time.Duration) SubOption {
+	return func(sub *subscription) error {
+		sub.stanOptions = append(sub.stanOptions, stan.AckWait(t))
 		return nil
 	}
 }
