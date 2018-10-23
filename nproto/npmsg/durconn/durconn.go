@@ -198,7 +198,7 @@ func (dc *DurConn) Publish(ctx context.Context, subject string, data []byte) err
 	}
 }
 
-func (dc *DurConn) PublishBatch(ctx context.Context, subjects []string, datas [][]byte) (errors []error) {
+func (dc *DurConn) PublishBatch(ctx context.Context, subjects []string, datas [][]byte) (errs []error) {
 
 	dc.mu.RLock()
 	closed := dc.closed
@@ -214,9 +214,9 @@ func (dc *DurConn) PublishBatch(ctx context.Context, subjects []string, datas []
 
 	// Initialize error slice.
 	n := len(subjects)
-	errors = make([]error, n)
-	for i, _ := range errors {
-		errors[i] = err
+	errs = make([]error, n)
+	for i, _ := range errs {
+		errs[i] = err
 	}
 
 	// If real error.
@@ -261,7 +261,7 @@ LOOP:
 	for n > 0 {
 		select {
 		case r := <-resultc:
-			errors[r.I] = r.E
+			errs[r.I] = r.E
 			n -= 1
 		case <-ctx.Done():
 			break LOOP
@@ -271,9 +271,9 @@ LOOP:
 	// Context done before getting all results.
 	if n > 0 {
 		err = ctx.Err()
-		for i, _ := range errors {
-			if errors[i] == (notSetErr{}) {
-				errors[i] = err
+		for i, _ := range errs {
+			if errs[i] == (notSetErr{}) {
+				errs[i] = err
 			}
 		}
 	}
