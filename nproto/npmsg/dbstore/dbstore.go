@@ -60,7 +60,7 @@ type DBMsgStoreDialect interface {
 	// DeleteMsgs is used to delete published messages.
 	DeleteMsgs(ctx context.Context, q Queryer, table string, ids []string) error
 
-	// CreateMsgStoreTable creates the message store table.
+	// CreateMsgStoreTable creates the message store table if not exists.
 	CreateMsgStoreTable(ctx context.Context, q Queryer, table string) error
 
 	// GetLock is used to acquire an global lock on the given table.
@@ -85,9 +85,9 @@ type Queryer interface {
 	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
 }
 
-type DBMsgStoreOption func(*DBMsgStore) error
+type Option func(*DBMsgStore) error
 
-func NewDBMsgStore(downstream npmsg.RawMsgPublisher, db *sql.DB, dialect DBMsgStoreDialect, table string, opts ...DBMsgStoreOption) (*DBMsgStore, error) {
+func NewDBMsgStore(downstream npmsg.RawMsgPublisher, db *sql.DB, dialect DBMsgStoreDialect, table string, opts ...Option) (*DBMsgStore, error) {
 	store := &DBMsgStore{
 		logger:     zerolog.Nop(),
 		retryWait:  DefaultRetryWait,
@@ -111,6 +111,17 @@ func NewDBMsgStore(downstream npmsg.RawMsgPublisher, db *sql.DB, dialect DBMsgSt
 
 	store.loop()
 	return store, nil
+}
+
+func (store *DBMsgStore) NewPublisher(q Queryer) *DBRawMsgPublisher {
+	return &DBRawMsgPublisher{
+		store: store,
+		q:     q,
+	}
+}
+
+func (store *DBMsgStore) Close() {
+	store.closeFunc()
 }
 
 func (store *DBMsgStore) loop() {
