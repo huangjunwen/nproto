@@ -7,17 +7,24 @@ import (
 	"time"
 
 	"github.com/huangjunwen/nproto/nproto/npmsg/dbstore"
+
+	_ "github.com/go-sql-driver/mysql"
 )
 
-type mysqlDialect struct{}
+type nxDialect struct{}
 
-func (m *mysqlDialect) InsertMsg(ctx context.Context, q dbstore.Queryer, table string, id string, subject string, data []byte) error {
+var (
+	// MySQL dialect.
+	Dialect dbstore.DBMsgStoreDialect = nxDialect{}
+)
+
+func (d nxDialect) InsertMsg(ctx context.Context, q dbstore.Queryer, table string, id string, subject string, data []byte) error {
 	sql := fmt.Sprintf(`INSERT INTO %s (id, subject, data) VALUES (?, ?, ?)`, table)
 	_, err := q.ExecContext(ctx, sql, id, subject, data)
 	return err
 }
 
-func (m *mysqlDialect) DeleteMsgs(ctx context.Context, q dbstore.Queryer, table string, ids []string) error {
+func (d nxDialect) DeleteMsgs(ctx context.Context, q dbstore.Queryer, table string, ids []string) error {
 	phs := []byte{}
 	args := []interface{}{}
 	for i, id := range ids {
@@ -32,7 +39,7 @@ func (m *mysqlDialect) DeleteMsgs(ctx context.Context, q dbstore.Queryer, table 
 	return err
 }
 
-func (m *mysqlDialect) CreateMsgStoreTable(ctx context.Context, q dbstore.Queryer, table string) error {
+func (d nxDialect) CreateMsgStoreTable(ctx context.Context, q dbstore.Queryer, table string) error {
 	sql := fmt.Sprintf(`
 	CREATE TABLE IF NOT EXISTS %s (
 		id char(20) NOT NULL,
@@ -46,9 +53,9 @@ func (m *mysqlDialect) CreateMsgStoreTable(ctx context.Context, q dbstore.Querye
 	return err
 }
 
-func (m *mysqlDialect) GetLock(ctx context.Context, conn *sql.Conn, table string) (acquired bool, err error) {
+func (d nxDialect) GetLock(ctx context.Context, conn *sql.Conn, table string) (acquired bool, err error) {
 	// Get lock no wait.
-	row := conn.QueryRowContext(ctx, `SELECT GET_LOCK(?, 0)`, m.lockName(table))
+	row := conn.QueryRowContext(ctx, `SELECT GET_LOCK(?, 0)`, d.lockName(table))
 	r := sql.NullInt64{}
 	if err := row.Scan(&r); err != nil {
 		return false, err
@@ -61,17 +68,17 @@ func (m *mysqlDialect) GetLock(ctx context.Context, conn *sql.Conn, table string
 	return r.Int64 == 1, nil
 }
 
-func (m *mysqlDialect) ReleaseLock(ctx context.Context, conn *sql.Conn, table string) error {
-	row := conn.QueryRowContext(ctx, `SELECT RELEASE_LOCK(?)`, m.lockName(table))
+func (d nxDialect) ReleaseLock(ctx context.Context, conn *sql.Conn, table string) error {
+	row := conn.QueryRowContext(ctx, `SELECT RELEASE_LOCK(?)`, d.lockName(table))
 	r := sql.NullInt64{}
 	return row.Scan(&r)
 }
 
-func (m *mysqlDialect) SelectMsgs(ctx context.Context, conn *sql.Conn, table string, window time.Duration) (
+func (d nxDialect) SelectMsgs(ctx context.Context, conn *sql.Conn, table string, window time.Duration) (
 	iter func(next bool) (id, subject string, data []byte, err error),
 	err error,
 ) {
-	sql := fmt.Sprintf(`SELECT id, subject, data FROM %s WHERE ts < NOW() - INTERVAL ? SECOND`, table)
+	sql := fmt.Sprintf(`SELECT id, subject, data FROM %s WHERE ts <= NOW() - INTERVAL ? SECOND`, table)
 	rows, err := conn.QueryContext(ctx, sql, int(window.Seconds()))
 	if err != nil {
 		return nil, err
@@ -93,6 +100,6 @@ func (m *mysqlDialect) SelectMsgs(ctx context.Context, conn *sql.Conn, table str
 	}, nil
 }
 
-func (m *mysqlDialect) lockName(table string) string {
+func (d nxDialect) lockName(table string) string {
 	return "npmsg.dbstore.lock:" + table
 }
