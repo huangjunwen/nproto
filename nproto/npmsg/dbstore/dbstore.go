@@ -72,7 +72,7 @@ type DBMsgStoreDialect interface {
 	// SelectMsgs is used to select all messages older than window.
 	// A message is returned for each call to iter(true), id == "" means there is no more messages or an error occurred.
 	// Use iter(false) to close the iterator.
-	SelectMsgs(ctx context.Context, conn *sql.Conn, table string, windown time.Duration) (
+	SelectMsgs(ctx context.Context, conn *sql.Conn, table string, window time.Duration) (
 		iter func(next bool) (id, subject string, data []byte, err error),
 		err error,
 	)
