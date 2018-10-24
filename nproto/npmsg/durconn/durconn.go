@@ -87,11 +87,11 @@ type subscription struct {
 	handler npmsg.RawMsgHandler
 }
 
-type DurConnOption func(*DurConn) error
+type Option func(*DurConn) error
 
 type SubOption func(*subscription) error
 
-func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) (*DurConn, error) {
+func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) (*DurConn, error) {
 
 	if nc.Opts.MaxReconnect >= 0 {
 		return nil, ErrNCMaxReconnect

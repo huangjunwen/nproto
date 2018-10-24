@@ -8,7 +8,7 @@ import (
 )
 
 // DurConnOptLogger sets structured logger.
-func DurConnOptLogger(logger *zerolog.Logger) DurConnOption {
+func DurConnOptLogger(logger *zerolog.Logger) Option {
 	return func(dc *DurConn) error {
 		dc.logger = logger.With().Str("component", "nproto.npmsg.durconn.DurConn").Logger()
 		return nil
@@ -16,7 +16,7 @@ func DurConnOptLogger(logger *zerolog.Logger) DurConnOption {
 }
 
 // DurConnOptReconnectWait sets reconnection wait, e.g. time between reconnections.
-func DurConnOptReconnectWait(t time.Duration) DurConnOption {
+func DurConnOptReconnectWait(t time.Duration) Option {
 	return func(dc *DurConn) error {
 		dc.reconnectWait = t
 		return nil
@@ -25,7 +25,7 @@ func DurConnOptReconnectWait(t time.Duration) DurConnOption {
 
 // DurConnOptSubjectPrefix sets message subject prefix.
 // Default "npmsg": If you publish a message with subject "xxx", then the actual subject is "npmsg.xxx".
-func DurConnOptSubjectPrefix(prefix string) DurConnOption {
+func DurConnOptSubjectPrefix(prefix string) Option {
 	return func(dc *DurConn) error {
 		dc.setSubjectPrefix(prefix)
 		return nil
@@ -33,7 +33,7 @@ func DurConnOptSubjectPrefix(prefix string) DurConnOption {
 }
 
 // DurConnOptConnectCb sets a callback invoked each time a new stan.Conn is established.
-func DurConnOptConnectCb(fn func(sc stan.Conn)) DurConnOption {
+func DurConnOptConnectCb(fn func(sc stan.Conn)) Option {
 	return func(dc *DurConn) error {
 		dc.connectCb = fn
 		return nil
@@ -41,7 +41,7 @@ func DurConnOptConnectCb(fn func(sc stan.Conn)) DurConnOption {
 }
 
 // DurConnOptDisconnectCb sets a callback invoked each time a stan.Conn lost.
-func DurConnOptDisconnectCb(fn func(sc stan.Conn)) DurConnOption {
+func DurConnOptDisconnectCb(fn func(sc stan.Conn)) Option {
 	return func(dc *DurConn) error {
 		dc.disconnectCb = fn
 		return nil
@@ -49,7 +49,7 @@ func DurConnOptDisconnectCb(fn func(sc stan.Conn)) DurConnOption {
 }
 
 // DurConnOptPings sets stan.Pings.
-func DurConnOptPings(interval, maxOut int) DurConnOption {
+func DurConnOptPings(interval, maxOut int) Option {
 	return func(dc *DurConn) error {
 		dc.stanOptions = append(dc.stanOptions, stan.Pings(interval, maxOut))
 		return nil
@@ -57,7 +57,7 @@ func DurConnOptPings(interval, maxOut int) DurConnOption {
 }
 
 // DurConnOptPubAckWait sets stan.PubAckWait.
-func DurConnOptPubAckWait(t time.Duration) DurConnOption {
+func DurConnOptPubAckWait(t time.Duration) Option {
 	return func(dc *DurConn) error {
 		dc.stanOptions = append(dc.stanOptions, stan.PubAckWait(t))
 		return nil
