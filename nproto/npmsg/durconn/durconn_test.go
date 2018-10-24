@@ -405,7 +405,7 @@ func TestConnect(t *testing.T) {
 		log.Printf("Starting streaming server.\n")
 		res1, err = runTestServer("")
 		if err != nil {
-			log.Fatal(err)
+			log.Panic(err)
 		}
 		defer res1.Close()
 		log.Printf("Streaming server started.\n")
@@ -418,7 +418,7 @@ func TestConnect(t *testing.T) {
 			nats.MaxReconnects(-1),
 		)
 		if err != nil {
-			log.Fatal(err)
+			log.Panic(err)
 		}
 		defer nc.Close()
 		log.Printf("Nats connection created.\n")
@@ -439,7 +439,7 @@ func TestConnect(t *testing.T) {
 			DurConnOptPings(1, 3),                // Minimal pings.
 		)
 		if err != nil {
-			log.Fatal(err)
+			log.Panic(err)
 		}
 		defer dc.Close()
 		log.Printf("DurConn created.\n")
@@ -463,7 +463,7 @@ func TestConnect(t *testing.T) {
 		log.Printf("Starting another streaming server.\n")
 		res2, err = runTestServer("")
 		if err != nil {
-			log.Fatal(err)
+			log.Panic(err)
 		}
 		defer res2.Close()
 		log.Printf("Another Streaming server started.\n")
@@ -486,7 +486,7 @@ func TestPubSub(t *testing.T) {
 	{
 		datadir, err = ioutil.TempDir("/tmp", "durconn_test")
 		if err != nil {
-			log.Fatal(err)
+			log.Panic(err)
 		}
 		defer os.RemoveAll(datadir)
 		log.Printf("Temp data dir created: %s.\n", datadir)
@@ -498,7 +498,7 @@ func TestPubSub(t *testing.T) {
 		log.Printf("Starting streaming server.\n")
 		res1, err = runTestServer(datadir)
 		if err != nil {
-			log.Fatal(err)
+			log.Panic(err)
 		}
 		defer res1.Close()
 		log.Printf("Streaming server started.\n")
@@ -511,7 +511,7 @@ func TestPubSub(t *testing.T) {
 			nats.MaxReconnects(-1),
 		)
 		if err != nil {
-			log.Fatal(err)
+			log.Panic(err)
 		}
 		defer nc.Close()
 		log.Printf("Nats connection created.\n")
@@ -532,7 +532,7 @@ func TestPubSub(t *testing.T) {
 			DurConnOptPings(1, 3),                // Minimal pings.
 		)
 		if err != nil {
-			log.Fatal(err)
+			log.Panic(err)
 		}
 		defer dc.Close()
 		log.Printf("DurConn created.\n")
@@ -647,7 +647,7 @@ func TestPubSub(t *testing.T) {
 		log.Printf("Starting another streaming server.\n")
 		res2, err = runTestServer(datadir)
 		if err != nil {
-			log.Fatal(err)
+			log.Panic(err)
 		}
 		defer res2.Close()
 		log.Printf("Another Streaming server started.\n")
