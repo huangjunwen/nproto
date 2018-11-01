@@ -86,7 +86,7 @@ func CurrMsgSubject(ctx context.Context) string {
 // NewMsgCtx creates a new msg context. This function is mainly used by MsgSubscriber implementation
 // to setup context for MsgHandler.
 //   parent: Parent context.
-//   subject: Current msg's subject. Use CurrMsgSubjec to get it inside MsgHandler.
+//   subject: Current msg's subject. Use CurrMsgSubject to get it inside MsgHandler.
 //   passthru(optional): Passthru context dict. Use Passthru to get it inside MsgHandler.
 func NewMsgCtx(parent context.Context, subject string, passthru map[string]string) context.Context {
 	return &msgCtx{

@@ -13,18 +13,12 @@ type RPCServer interface {
 
 	// DeregistSvc deregist a service.
 	DeregistSvc(svcName string) error
-
-	// Close the server.
-	Close() error
 }
 
 // RPCClient is used to invoke rpc services.
 type RPCClient interface {
 	// MakeHandler creates a RPCHandler for a given method of a service.
 	MakeHandler(svcName string, method *RPCMethod) RPCHandler
-
-	// Close the client.
-	Close() error
 }
 
 // RPCMethod contains meta and type information of a given method.
