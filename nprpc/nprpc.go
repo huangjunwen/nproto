@@ -12,8 +12,8 @@ import (
 	"github.com/nats-io/go-nats"
 	"github.com/rs/zerolog"
 
-	"github.com/huangjunwen/nproto/nproto"
-	"github.com/huangjunwen/nproto/nproto/nprpc/enc"
+	"github.com/huangjunwen/nproto"
+	"github.com/huangjunwen/nproto/nprpc/enc"
 )
 
 var (
@@ -108,8 +108,7 @@ func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*nproto.RPCMe
 	server.mu.RUnlock()
 
 	// Subscribe.
-	subs, err := natsQueueSubscribe(
-		nc,
+	subs, err := nc.QueueSubscribe(
 		fmt.Sprintf("%s.%s.>", server.subjPrefix, svcName),
 		server.group,
 		handler,
@@ -188,7 +187,7 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nproto.RPCM
 	prefix := server.subjPrefix + "." + svcName + "."
 
 	return func(msg *nats.Msg) {
-		cfh.Go("NatsRPCServer.msgHandler", func() {
+		go func() {
 			// Subject should be in the form of "subjPrefix.svcName.enc.method".
 			// Extract encoding and method from it.
 			if !strings.HasPrefix(msg.Subject, prefix) {
@@ -243,7 +242,7 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nproto.RPCM
 				server.replyResult(msg.Reply, result, encoding)
 			}
 
-		})
+		}()
 	}, nil
 }
 
@@ -282,7 +281,7 @@ func (server *NatsRPCServer) reply(subj string, r *enc.RPCReply, encoding string
 	}
 
 	// Publish reply.
-	err = natsPublish(nc, subj, data)
+	err = nc.Publish(subj, data)
 	if err != nil {
 		goto Err
 	}
@@ -353,7 +352,7 @@ func (client *NatsRPCClient) MakeHandler(svcName string, method *nproto.RPCMetho
 		}
 
 		// Send request.
-		msg, err := natsRequestWithContext(nc, ctx, subj, data)
+		msg, err := nc.RequestWithContext(ctx, subj, data)
 		if err != nil {
 			return nil, err
 		}
