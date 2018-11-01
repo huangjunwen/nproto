@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/huangjunwen/nproto/nproto/npmsg/dbstore"
+	"github.com/huangjunwen/nproto/npmsg/dbstore"
 
 	_ "github.com/go-sql-driver/mysql"
 )

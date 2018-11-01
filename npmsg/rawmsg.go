@@ -5,8 +5,8 @@ import (
 
 	"github.com/golang/protobuf/proto"
 
-	"github.com/huangjunwen/nproto/nproto"
-	"github.com/huangjunwen/nproto/nproto/npmsg/enc"
+	"github.com/huangjunwen/nproto"
+	"github.com/huangjunwen/nproto/npmsg/enc"
 )
 
 // RawMsgPublisher is similar to MsgPublisher but operates on lower level.
