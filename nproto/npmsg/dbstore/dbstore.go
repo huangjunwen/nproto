@@ -87,6 +87,10 @@ type Queryer interface {
 
 type Option func(*DBMsgStore) error
 
+var (
+	_ npmsg.RawMsgPublisher = (*DBRawMsgPublisher)(nil)
+)
+
 func NewDBMsgStore(downstream npmsg.RawMsgPublisher, db *sql.DB, dialect DBMsgStoreDialect, table string, opts ...Option) (*DBMsgStore, error) {
 	store := &DBMsgStore{
 		logger:     zerolog.Nop(),
@@ -126,7 +130,7 @@ func (store *DBMsgStore) Close() {
 
 func (store *DBMsgStore) loop() {
 	fn := func() {
-		// First get connection.
+		// Wait for connection.
 		conn, err := store.getConn()
 		if err != nil {
 			return
