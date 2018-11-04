@@ -25,6 +25,12 @@ var (
 var (
 	ErrMaxReconnect = errors.New("nproto.nprpc: nc should have MaxReconnects < 0")
 	ErrServerClosed = errors.New("nproto.nprpc.NatsRPCServer: Server closed")
+	ErrDupSvcName   = func(svcName string) error {
+		return fmt.Errorf("nproto.nprpc.NatsRPCServer: Duplicated service %+q", svcName)
+	}
+	ErrDupMethodName = func(methodName string) error {
+		return fmt.Errorf("nproto.nprpc.NatsRPCServer: Duplicated method %+q", methodName)
+	}
 	ErrClientClosed = errors.New("nproto.nprpc.NatsRPCClient: Client closed")
 )
 
@@ -87,69 +93,82 @@ func NewNatsRPCServer(nc *nats.Conn, opts ...NatsRPCServerOption) (*NatsRPCServe
 }
 
 // RegistSvc implements RPCServer interface.
-func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*nproto.RPCMethod]nproto.RPCHandler) error {
+func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*nproto.RPCMethod]nproto.RPCHandler) (err error) {
 	// Create msg handler.
 	handler, err := server.msgHandler(svcName, methods)
 	if err != nil {
-		return err
+		return
 	}
 
-	// First (read) lock: get nc and do some checks.
-	server.mu.RLock()
-	if server.nc == nil {
-		server.mu.RUnlock()
-		return ErrServerClosed
-	}
-	if server.svcs[svcName] != nil {
-		server.mu.RUnlock()
-		return fmt.Errorf("nproto.nprpc.NatsRPCServer: Duplicated service %+q", svcName)
-	}
-	nc := server.nc
-	server.mu.RUnlock()
+	// Set subscription placeholder.
+	err = func() error {
+		server.mu.Lock()
+		defer server.mu.Unlock()
 
-	// Subscribe.
-	subs, err := nc.QueueSubscribe(
+		if server.nc == nil {
+			return ErrServerClosed
+		}
+		if _, ok := server.svcs[svcName]; ok {
+			return ErrDupSvcName(svcName)
+		}
+		server.svcs[svcName] = nil // NOTE: Set a placeholder so that other can't regist the same name.
+		return nil
+	}()
+	if err != nil {
+		return
+	}
+	defer func() {
+		// Release the placeholder if any error.
+		if err != nil {
+			server.mu.Lock()
+			delete(server.svcs, svcName)
+			server.mu.Unlock()
+		}
+	}()
+
+	// Real subscription.
+	sub, err := server.nc.QueueSubscribe(
 		fmt.Sprintf("%s.%s.>", server.subjPrefix, svcName),
 		server.group,
 		handler,
 	)
 	if err != nil {
-		return err
+		return
 	}
+	defer func() {
+		// Unsubscribe if any error.
+		if err != nil {
+			sub.Unsubscribe()
+		}
+	}()
 
-	// Second (write) lock: set subscription
+	// Set subscription.
 	server.mu.Lock()
 	if server.nc == nil {
-		server.mu.Unlock()
-		subs.Unsubscribe()
-		return ErrServerClosed
+		err = ErrServerClosed
+	} else {
+		server.svcs[svcName] = sub
 	}
-	if server.svcs[svcName] != nil {
-		server.mu.Unlock()
-		subs.Unsubscribe()
-		return fmt.Errorf("nproto.nprpc.NatsRPCServer: Duplicated service name %+q", svcName)
-	}
-	server.svcs[svcName] = subs
 	server.mu.Unlock()
-	return nil
+	return
 }
 
 // DeregistSvc implements RPCServer interface.
 func (server *NatsRPCServer) DeregistSvc(svcName string) error {
 	// Pop svcName.
 	server.mu.Lock()
-	subs := server.svcs[svcName]
+	sub := server.svcs[svcName]
 	delete(server.svcs, svcName)
 	server.mu.Unlock()
 
 	// Unsubscribe.
-	if subs != nil {
-		return subs.Unsubscribe()
+	if sub != nil {
+		return sub.Unsubscribe()
 	}
 	return nil
 }
 
-// Close implements RPCServer interface.
+// Close stops the server and deregist all registed services.
 func (server *NatsRPCServer) Close() error {
 	// Set conn to nil to indicate close.
 	server.mu.Lock()
@@ -159,10 +178,10 @@ func (server *NatsRPCServer) Close() error {
 	server.svcs = nil
 	server.mu.Unlock()
 
-	// Release subscriptions.
+	// Unsubscribe.
 	if len(svcs) != 0 {
-		for _, subs := range svcs {
-			subs.Unsubscribe()
+		for _, sub := range svcs {
+			sub.Unsubscribe()
 		}
 	}
 
@@ -178,7 +197,7 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nproto.RPCM
 	methodNames := make(map[string]*nproto.RPCMethod)
 	for method, _ := range methods {
 		if _, found := methodNames[method.Name]; found {
-			return nil, fmt.Errorf("nproto.nprpc.NatsRPCServer: Duplicated method %+q", method.Name)
+			return nil, ErrDupMethodName(method.Name)
 		}
 		methodNames[method.Name] = method
 	}
@@ -318,6 +337,7 @@ func (client *NatsRPCClient) MakeHandler(svcName string, method *nproto.RPCMetho
 
 	encoder := chooseClientEncoder(client.encoding)
 	subj := strings.Join([]string{client.subjPrefix, svcName, client.encoding, method.Name}, ".")
+
 	return func(ctx context.Context, input proto.Message) (proto.Message, error) {
 
 		// Get conn and check closed.
@@ -370,7 +390,7 @@ func (client *NatsRPCClient) MakeHandler(svcName string, method *nproto.RPCMetho
 	}
 }
 
-// Close implements RPCClient interface.
+// Close closes the client.
 func (client *NatsRPCClient) Close() error {
 	client.mu.Lock()
 	nc := client.nc
@@ -398,57 +418,5 @@ func chooseClientEncoder(encoding string) enc.RPCClientEncoder {
 		return enc.JSONClientEncoder{}
 	default:
 		return enc.PBClientEncoder{}
-	}
-}
-
-// ServerOptSubjectPrefix sets the subject prefix.
-func ServerOptSubjectPrefix(subjPrefix string) NatsRPCServerOption {
-	return func(server *NatsRPCServer) error {
-		server.subjPrefix = subjPrefix
-		return nil
-	}
-}
-
-// ServerOptGroup sets the subscription group of the server.
-func ServerOptGroup(group string) NatsRPCServerOption {
-	return func(server *NatsRPCServer) error {
-		server.group = group
-		return nil
-	}
-}
-
-// ServerOptLogger sets logger.
-func ServerOptLogger(logger *zerolog.Logger) NatsRPCServerOption {
-	return func(server *NatsRPCServer) error {
-		if logger == nil {
-			nop := zerolog.Nop()
-			logger = &nop
-		}
-		server.logger = logger.With().Str("component", "nproto.nprpc.NatsRPCServer").Logger()
-		return nil
-	}
-}
-
-// ClientOptSubjectPrefix sets the subject prefix.
-func ClientOptSubjectPrefix(subjPrefix string) NatsRPCClientOption {
-	return func(client *NatsRPCClient) error {
-		client.subjPrefix = subjPrefix
-		return nil
-	}
-}
-
-// ClientOptPBEncoding sets rpc encoding to protobuf.
-func ClientOptPBEncoding() NatsRPCClientOption {
-	return func(client *NatsRPCClient) error {
-		client.encoding = "pb"
-		return nil
-	}
-}
-
-// ClientOptJSONEncoding sets rpc encoding to json.
-func ClientOptJSONEncoding() NatsRPCClientOption {
-	return func(client *NatsRPCClient) error {
-		client.encoding = "json"
-		return nil
 	}
 }
