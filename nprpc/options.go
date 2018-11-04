@@ -7,7 +7,7 @@ import (
 // ServerOptSubjectPrefix sets the subject prefix.
 func ServerOptSubjectPrefix(subjPrefix string) NatsRPCServerOption {
 	return func(server *NatsRPCServer) error {
-		server.subjPrefix = subjPrefix
+		server.subjectPrefix = subjPrefix
 		return nil
 	}
 }
@@ -35,7 +35,7 @@ func ServerOptLogger(logger *zerolog.Logger) NatsRPCServerOption {
 // ClientOptSubjectPrefix sets the subject prefix.
 func ClientOptSubjectPrefix(subjPrefix string) NatsRPCClientOption {
 	return func(client *NatsRPCClient) error {
-		client.subjPrefix = subjPrefix
+		client.subjectPrefix = subjPrefix
 		return nil
 	}
 }

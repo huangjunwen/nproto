@@ -37,9 +37,9 @@ var (
 // NatsRPCServer implements RPCServer.
 type NatsRPCServer struct {
 	// Options.
-	subjPrefix string         // subject prefix
-	group      string         // server group
-	logger     zerolog.Logger // logger
+	subjectPrefix string         // subject prefix
+	group         string         // server group
+	logger        zerolog.Logger // logger
 
 	// Mutable fields.
 	mu   sync.RWMutex
@@ -50,8 +50,8 @@ type NatsRPCServer struct {
 // NatsRPCClient implements RPCClient.
 type NatsRPCClient struct {
 	// Options.
-	subjPrefix string // subject prefix
-	encoding   string // rpc encoding
+	subjectPrefix string // subject prefix
+	encoding      string // rpc encoding
 
 	// Mutable fields.
 	mu sync.RWMutex
@@ -77,11 +77,11 @@ func NewNatsRPCServer(nc *nats.Conn, opts ...NatsRPCServerOption) (*NatsRPCServe
 	}
 
 	server := &NatsRPCServer{
-		subjPrefix: DefaultSubjectPrefix,
-		group:      DefaultGroup,
-		logger:     zerolog.Nop(),
-		nc:         nc,
-		svcs:       make(map[string]*nats.Subscription),
+		subjectPrefix: DefaultSubjectPrefix,
+		group:         DefaultGroup,
+		logger:        zerolog.Nop(),
+		nc:            nc,
+		svcs:          make(map[string]*nats.Subscription),
 	}
 	for _, opt := range opts {
 		if err := opt(server); err != nil {
@@ -128,7 +128,7 @@ func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*nproto.RPCMe
 
 	// Real subscription.
 	sub, err := server.nc.QueueSubscribe(
-		fmt.Sprintf("%s.%s.>", server.subjPrefix, svcName),
+		fmt.Sprintf("%s.%s.>", server.subjectPrefix, svcName),
 		server.group,
 		handler,
 	)
@@ -203,7 +203,7 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nproto.RPCM
 	}
 
 	// Subject prefix.
-	prefix := server.subjPrefix + "." + svcName + "."
+	prefix := server.subjectPrefix + "." + svcName + "."
 
 	return func(msg *nats.Msg) {
 		go func() {
@@ -319,9 +319,9 @@ func NewNatsRPCClient(nc *nats.Conn, opts ...NatsRPCClientOption) (*NatsRPCClien
 	}
 
 	client := &NatsRPCClient{
-		subjPrefix: DefaultSubjectPrefix,
-		encoding:   DefaultEncoding,
-		nc:         nc,
+		subjectPrefix: DefaultSubjectPrefix,
+		encoding:      DefaultEncoding,
+		nc:            nc,
 	}
 	for _, opt := range opts {
 		if err := opt(client); err != nil {
@@ -336,7 +336,7 @@ func NewNatsRPCClient(nc *nats.Conn, opts ...NatsRPCClientOption) (*NatsRPCClien
 func (client *NatsRPCClient) MakeHandler(svcName string, method *nproto.RPCMethod) nproto.RPCHandler {
 
 	encoder := chooseClientEncoder(client.encoding)
-	subj := strings.Join([]string{client.subjPrefix, svcName, client.encoding, method.Name}, ".")
+	subj := strings.Join([]string{client.subjectPrefix, svcName, client.encoding, method.Name}, ".")
 
 	return func(ctx context.Context, input proto.Message) (proto.Message, error) {
 
