@@ -223,7 +223,57 @@ func TestNatsRPC(t *testing.T) {
 				assert.Equal("10s", output.(*wrappers.StringValue).Value)
 			}
 		}
-
 	}
 
+}
+
+func TestRegist(t *testing.T) {
+	log.Printf("\n")
+	log.Printf(">>> TestRegist.\n")
+	assert := assert.New(t)
+	var err error
+
+	// Starts the test nats server.
+	var res *tstnats.Resource
+	{
+		res, err = tstnats.Run(nil)
+		assert.NoError(err)
+		defer res.Close()
+		log.Printf("Test nats server started: %+q\n", res.NatsURL())
+	}
+
+	// Creates connection.
+	var nc *nats.Conn
+	{
+		nc, err = res.NatsClient(
+			nats.MaxReconnects(-1),
+		)
+		assert.NoError(err)
+		defer nc.Close()
+		log.Printf("Connection connected.\n")
+	}
+
+	// Creates rpc server.
+	var server *NatsRPCServer
+	{
+		server, err = NewNatsRPCServer(nc)
+		assert.NoError(err)
+		defer server.Close()
+		log.Printf("NatsRPCServer created.\n")
+	}
+
+	// Regist should ok.
+	assert.NoError(server.RegistSvc("test1", nil))
+	assert.Len(server.svcs, 1)
+
+	// Regist should failed since duplication.
+	assert.Error(server.RegistSvc("test1", nil))
+	assert.Len(server.svcs, 1)
+
+	// Now shut down the connection.
+	nc.Close()
+
+	// Regist should failed since connection closed.
+	assert.Error(server.RegistSvc("test2", nil))
+	assert.Len(server.svcs, 1)
 }
