@@ -207,7 +207,7 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nproto.RPCM
 
 	return func(msg *nats.Msg) {
 		go func() {
-			// Subject should be in the form of "subjPrefix.svcName.enc.method".
+			// Subject should be in the form of "subjectPrefix.svcName.enc.method".
 			// Extract encoding and method from it.
 			if !strings.HasPrefix(msg.Subject, prefix) {
 				server.logger.Error().Err(fmt.Errorf("Unexpected msg with subject: %+q", msg.Subject)).Msg("")
