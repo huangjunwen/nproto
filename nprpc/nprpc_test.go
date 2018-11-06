@@ -51,6 +51,8 @@ func TestNatsRPC(t *testing.T) {
 			},
 		}
 		sqrtHandler = func(ctx context.Context, in proto.Message) (proto.Message, error) {
+			assert.Equal(svcName, nproto.CurrRPCSvcName(ctx))
+			assert.Equal(sqrtMethod, nproto.CurrRPCMethod(ctx))
 			input := in.(*wrappers.DoubleValue).Value
 			if input < 0 {
 				return nil, errors.New("sqrt only accepts non-negative numbers")
@@ -72,6 +74,8 @@ func TestNatsRPC(t *testing.T) {
 		bgTimeKey    = "bgtime"
 		bgCanDoneKey = "bgcandone"
 		bgHandler    = func(ctx context.Context, in proto.Message) (proto.Message, error) {
+			assert.Equal(svcName, nproto.CurrRPCSvcName(ctx))
+			assert.Equal(bgMethod, nproto.CurrRPCMethod(ctx))
 			var (
 				t       time.Duration
 				canDone string
