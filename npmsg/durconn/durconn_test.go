@@ -4,17 +4,16 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/huangjunwen/tstsvc"
+	tststan "github.com/huangjunwen/tstsvc/stan"
 	"github.com/nats-io/go-nats"
 	"github.com/nats-io/go-nats-streaming"
-	"github.com/ory/dockertest"
-	docker "github.com/ory/dockertest/docker"
 	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
 )
@@ -322,88 +321,20 @@ func TestMockPub(t *testing.T) {
 
 // ----------- Real test -----------
 
-const (
-	stanClusterId = "durconn_test"
-	stanTag       = "0.11.0-linux"
-)
-
-var (
-	pool *dockertest.Pool
-)
-
-func init() {
-	var err error
-	pool, err = dockertest.NewPool("")
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-func natsURL() string {
-	return "nats://localhost:42222"
-}
-
-func runTestServer(dataDir string) (*dockertest.Resource, error) {
-	// Use file store.
-	opts := &dockertest.RunOptions{
-		Repository: "nats-streaming",
-		Tag:        stanTag,
-		Cmd: []string{
-			"-cid", stanClusterId,
-			"-st", "FILE",
-			"--dir", "/data",
-		},
-		PortBindings: map[docker.Port][]docker.PortBinding{
-			"4222/tcp": []docker.PortBinding{
-				docker.PortBinding{
-					HostIP:   "127.0.0.1",
-					HostPort: "42222",
-				},
-			},
-		},
-	}
-
-	// If host's dataDir is not empty, then mount to it.
-	if dataDir != "" {
-		opts.Mounts = []string{fmt.Sprintf("%s:/data", dataDir)}
-	}
-
-	// Start the container.
-	res, err := pool.RunWithOptions(opts)
-	if err != nil {
-		return nil, err
-	}
-
-	// Set max lifetime of the container.
-	res.Expire(120)
-
-	// Wait.
-	if err := pool.Retry(func() error {
-		sc, err := stan.Connect(stanClusterId, xid.New().String(),
-			stan.NatsURL(natsURL()))
-		if err != nil {
-			return err
-		}
-		sc.Close()
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-
-	return res, nil
-}
-
 // TestConnect tests connects and reconnects.
 func TestConnect(t *testing.T) {
 	log.Printf("\n")
 	log.Printf(">>> TestConnect.\n")
 	var err error
 
+	opts := &tststan.Options{
+		HostPort: tstsvc.FreePort(),
+	}
+
 	// Starts the first server.
-	var res1 *dockertest.Resource
+	var res1 *tststan.Resource
 	{
-		log.Printf("Starting streaming server.\n")
-		res1, err = runTestServer("")
+		res1, err = tststan.Run(opts)
 		if err != nil {
 			log.Panic(err)
 		}
@@ -414,7 +345,7 @@ func TestConnect(t *testing.T) {
 	// Creates nats connection (with infinite reconnection).
 	var nc *nats.Conn
 	{
-		nc, err = nats.Connect(natsURL(),
+		nc, err = res1.NatsClient(
 			nats.MaxReconnects(-1),
 		)
 		if err != nil {
@@ -432,7 +363,7 @@ func TestConnect(t *testing.T) {
 		connectCb := func(_ stan.Conn) { connectc <- struct{}{} }
 		disconnectCb := func(_ stan.Conn) { disconnectc <- struct{}{} }
 
-		dc, err = NewDurConn(nc, stanClusterId,
+		dc, err = NewDurConn(nc, res1.Options.ClusterId,
 			DurConnOptConnectCb(connectCb),       // Use the callback to notify connection establish.
 			DurConnOptDisconnectCb(disconnectCb), // Use the callback to notify disconnection.
 			DurConnOptReconnectWait(time.Second), // A short reconnect wait.
@@ -458,10 +389,9 @@ func TestConnect(t *testing.T) {
 	log.Printf("DurConn disconnected.\n")
 
 	// Starts the second server.
-	var res2 *dockertest.Resource
+	var res2 *tststan.Resource
 	{
-		log.Printf("Starting another streaming server.\n")
-		res2, err = runTestServer("")
+		res2, err = tststan.Run(opts)
 		if err != nil {
 			log.Panic(err)
 		}
@@ -492,11 +422,16 @@ func TestPubSub(t *testing.T) {
 		log.Printf("Temp data dir created: %s.\n", datadir)
 	}
 
+	opts := &tststan.Options{
+		FileStore:    true,
+		HostDataPath: datadir,
+		HostPort:     tstsvc.FreePort(),
+	}
+
 	// Starts the first server.
-	var res1 *dockertest.Resource
+	var res1 *tststan.Resource
 	{
-		log.Printf("Starting streaming server.\n")
-		res1, err = runTestServer(datadir)
+		res1, err = tststan.Run(opts)
 		if err != nil {
 			log.Panic(err)
 		}
@@ -507,7 +442,7 @@ func TestPubSub(t *testing.T) {
 	// Creates nats connection (with infinite reconnection).
 	var nc *nats.Conn
 	{
-		nc, err = nats.Connect(natsURL(),
+		nc, err = res1.NatsClient(
 			nats.MaxReconnects(-1),
 		)
 		if err != nil {
@@ -525,7 +460,7 @@ func TestPubSub(t *testing.T) {
 		connectCb := func(_ stan.Conn) { connectc <- struct{}{} }
 		disconnectCb := func(_ stan.Conn) { disconnectc <- struct{}{} }
 
-		dc, err = NewDurConn(nc, stanClusterId,
+		dc, err = NewDurConn(nc, res1.Options.ClusterId,
 			DurConnOptConnectCb(connectCb),       // Use the callback to notify connection establish.
 			DurConnOptDisconnectCb(disconnectCb), // Use the callback to notify disconnection.
 			DurConnOptReconnectWait(time.Second), // A short reconnect wait.
@@ -642,10 +577,9 @@ func TestPubSub(t *testing.T) {
 	log.Printf("DurConn disconnected.\n")
 
 	// Starts the second server.
-	var res2 *dockertest.Resource
+	var res2 *tststan.Resource
 	{
-		log.Printf("Starting another streaming server.\n")
-		res2, err = runTestServer(datadir)
+		res2, err = tststan.Run(opts)
 		if err != nil {
 			log.Panic(err)
 		}
@@ -661,7 +595,7 @@ func TestPubSub(t *testing.T) {
 	<-subc
 	log.Printf("Subscribed again.\n")
 
-	// Wait bad data redelivery.
+	// Wait some bad data redelivery.
 	<-badc
 	<-badc
 	log.Printf("Bad data redelivery.\n")

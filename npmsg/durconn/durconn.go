@@ -20,7 +20,7 @@ var (
 	DefaultReconnectWait = 2 * time.Second
 	DefaultSubRetryWait  = 2 * time.Second
 	DefaultPubAckWait    = 2 * time.Second
-	DefaultSubjectPreifx = "npmsg"
+	DefaultSubjectPrefix = "npmsg"
 )
 
 var (
@@ -109,7 +109,7 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) (*DurConn, erro
 		nc:        nc,
 		subNames:  make(map[[2]string]int),
 	}
-	dc.setSubjectPrefix(DefaultSubjectPreifx)
+	dc.setSubjectPrefix(DefaultSubjectPrefix)
 	for _, opt := range opts {
 		if err := opt(dc); err != nil {
 			return nil, err
