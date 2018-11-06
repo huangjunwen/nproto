@@ -58,11 +58,11 @@ type NatsRPCClient struct {
 	nc *nats.Conn // nil if closed
 }
 
-// NatsRPCServerOption is option in creating NatsRPCServer.
-type NatsRPCServerOption func(*NatsRPCServer) error
+// ServerOption is option in creating NatsRPCServer.
+type ServerOption func(*NatsRPCServer) error
 
-// NatsRPCClientOption is option in creating NatsRPCClient.
-type NatsRPCClientOption func(*NatsRPCClient) error
+// ClientOption is option in creating NatsRPCClient.
+type ClientOption func(*NatsRPCClient) error
 
 var (
 	_ nproto.RPCServer = (*NatsRPCServer)(nil)
@@ -70,7 +70,7 @@ var (
 )
 
 // NewNatsRPCServer creates a new NatsRPCServer. `nc` must have MaxReconnects < 0 set (e.g. Always reconnect).
-func NewNatsRPCServer(nc *nats.Conn, opts ...NatsRPCServerOption) (*NatsRPCServer, error) {
+func NewNatsRPCServer(nc *nats.Conn, opts ...ServerOption) (*NatsRPCServer, error) {
 
 	if nc.Opts.MaxReconnect >= 0 {
 		return nil, ErrMaxReconnect
@@ -312,7 +312,7 @@ Err:
 }
 
 // NewNatsRPCClient creates a new NatsRPCClient. `nc` must have MaxReconnects < 0 set (e.g. Always reconnect).
-func NewNatsRPCClient(nc *nats.Conn, opts ...NatsRPCClientOption) (*NatsRPCClient, error) {
+func NewNatsRPCClient(nc *nats.Conn, opts ...ClientOption) (*NatsRPCClient, error) {
 
 	if nc.Opts.MaxReconnect >= 0 {
 		return nil, ErrMaxReconnect

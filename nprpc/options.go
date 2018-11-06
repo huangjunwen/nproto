@@ -5,7 +5,7 @@ import (
 )
 
 // ServerOptSubjectPrefix sets the subject prefix.
-func ServerOptSubjectPrefix(subjPrefix string) NatsRPCServerOption {
+func ServerOptSubjectPrefix(subjPrefix string) ServerOption {
 	return func(server *NatsRPCServer) error {
 		server.subjectPrefix = subjPrefix
 		return nil
@@ -13,7 +13,7 @@ func ServerOptSubjectPrefix(subjPrefix string) NatsRPCServerOption {
 }
 
 // ServerOptGroup sets the subscription group of the server.
-func ServerOptGroup(group string) NatsRPCServerOption {
+func ServerOptGroup(group string) ServerOption {
 	return func(server *NatsRPCServer) error {
 		server.group = group
 		return nil
@@ -21,7 +21,7 @@ func ServerOptGroup(group string) NatsRPCServerOption {
 }
 
 // ServerOptLogger sets logger.
-func ServerOptLogger(logger *zerolog.Logger) NatsRPCServerOption {
+func ServerOptLogger(logger *zerolog.Logger) ServerOption {
 	return func(server *NatsRPCServer) error {
 		if logger == nil {
 			nop := zerolog.Nop()
@@ -33,7 +33,7 @@ func ServerOptLogger(logger *zerolog.Logger) NatsRPCServerOption {
 }
 
 // ClientOptSubjectPrefix sets the subject prefix.
-func ClientOptSubjectPrefix(subjPrefix string) NatsRPCClientOption {
+func ClientOptSubjectPrefix(subjPrefix string) ClientOption {
 	return func(client *NatsRPCClient) error {
 		client.subjectPrefix = subjPrefix
 		return nil
@@ -41,7 +41,7 @@ func ClientOptSubjectPrefix(subjPrefix string) NatsRPCClientOption {
 }
 
 // ClientOptPBEncoding sets rpc encoding to protobuf.
-func ClientOptPBEncoding() NatsRPCClientOption {
+func ClientOptPBEncoding() ClientOption {
 	return func(client *NatsRPCClient) error {
 		client.encoding = "pb"
 		return nil
@@ -49,7 +49,7 @@ func ClientOptPBEncoding() NatsRPCClientOption {
 }
 
 // ClientOptJSONEncoding sets rpc encoding to json.
-func ClientOptJSONEncoding() NatsRPCClientOption {
+func ClientOptJSONEncoding() ClientOption {
 	return func(client *NatsRPCClient) error {
 		client.encoding = "json"
 		return nil
