@@ -48,6 +48,8 @@ var (
 	_ npmsg.RawMsgSubscriber     = (*DurConn)(nil)
 )
 
+// DurConn implements a "durable" connection to nats-streaming server: auto reconnection/auto resubscription.
+// And it implements RawMsgPublisher/RawBatchMsgPublisher/RawMsgSubscriber interfaces.
 type DurConn struct {
 	// Options.
 	logger        zerolog.Logger
@@ -87,10 +89,14 @@ type subscription struct {
 	handler npmsg.RawMsgHandler
 }
 
+// Option is option in creating DurConn.
 type Option func(*DurConn) error
 
+// SubOption is option in subscription.
 type SubOption func(*subscription) error
 
+// NewDurConn creates a new DurConn. `nc` must have MaxReconnect < 0 set (e.g. Always reconnect).
+// `clusterID` is nats-streaming server's cluster id.
 func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) (*DurConn, error) {
 
 	if nc.Opts.MaxReconnect >= 0 {
@@ -121,6 +127,7 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) (*DurConn, erro
 
 }
 
+// Close closes the DurConn.
 func (dc *DurConn) Close() error {
 	oldSc, oldStalec, err := dc.close_()
 	if oldSc != nil {
@@ -130,7 +137,7 @@ func (dc *DurConn) Close() error {
 	return err
 }
 
-// Subscribe implements npmsg.RawMsgSubscriber interface.
+// Subscribe implements npmsg.RawMsgSubscriber interface. `opts` must be SubOption.
 func (dc *DurConn) Subscribe(subject, queue string, handler npmsg.RawMsgHandler, opts ...interface{}) error {
 
 	sub := &subscription{
@@ -163,6 +170,7 @@ func (dc *DurConn) Subscribe(subject, queue string, handler npmsg.RawMsgHandler,
 	return nil
 }
 
+// Publish implements npmsg.RawMsgPublisher interface.
 func (dc *DurConn) Publish(ctx context.Context, subject string, data []byte) error {
 	dc.mu.RLock()
 	closed := dc.closed
@@ -198,6 +206,7 @@ func (dc *DurConn) Publish(ctx context.Context, subject string, data []byte) err
 	}
 }
 
+// PublishBatch implements npmsg.RawBatchMsgPublisher interface.
 func (dc *DurConn) PublishBatch(ctx context.Context, subjects []string, datas [][]byte) (errs []error) {
 
 	dc.mu.RLock()

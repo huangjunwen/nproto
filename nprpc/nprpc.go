@@ -69,7 +69,7 @@ var (
 	_ nproto.RPCClient = (*NatsRPCClient)(nil)
 )
 
-// NewNatsRPCServer creates a new NatsRPCServer. `nc` should have MaxReconnects < 0 set (e.g. Always reconnect).
+// NewNatsRPCServer creates a new NatsRPCServer. `nc` must have MaxReconnects < 0 set (e.g. Always reconnect).
 func NewNatsRPCServer(nc *nats.Conn, opts ...NatsRPCServerOption) (*NatsRPCServer, error) {
 
 	if nc.Opts.MaxReconnect >= 0 {
@@ -311,7 +311,7 @@ Err:
 	return
 }
 
-// NewNatsRPCClient creates a new NatsRPCClient. `nc` should have MaxReconnects < 0 set (e.g. Always reconnect).
+// NewNatsRPCClient creates a new NatsRPCClient. `nc` must have MaxReconnects < 0 set (e.g. Always reconnect).
 func NewNatsRPCClient(nc *nats.Conn, opts ...NatsRPCClientOption) (*NatsRPCClient, error) {
 
 	if nc.Opts.MaxReconnect >= 0 {
