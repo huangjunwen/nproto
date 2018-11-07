@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package enc;
+
+message PBPayload {
+  // Msg is protobuf encoded message.
+  bytes Msg = 1;
+
+  // Passthru is an optional dict carrying context values.
+  map<string, string> passthru = 2;
+}
