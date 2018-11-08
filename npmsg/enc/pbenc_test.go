@@ -19,34 +19,34 @@ func TestPBEncodeDecode(t *testing.T) {
 
 	// Encode.
 	{
-		payload := &MsgPayload{
+		p := &MsgPayload{
 			Msg:      msg,
 			Passthru: passthru,
 		}
 
-		data, err = PBPublisherEncoder{}.EncodePayload(payload)
+		data, err = PBPublisherEncoder{}.EncodePayload(p)
 		assert.NoError(err)
 	}
 
 	// Decode.
 	{
 		m := timestamp.Timestamp{}
-		payload := &MsgPayload{
+		p := &MsgPayload{
 			Msg: &m,
 		}
-		err = PBSubscriberEncoder{}.DecodePayload(data, payload)
+		err = PBSubscriberEncoder{}.DecodePayload(data, p)
 		assert.NoError(err)
 
-		assert.Equal(m.Seconds, msg.Seconds)
-		assert.Equal(m.Nanos, msg.Nanos)
-		assert.Equal(passthru, payload.Passthru)
+		assert.Equal(msg.Seconds, m.Seconds)
+		assert.Equal(msg.Nanos, m.Nanos)
+		assert.Equal(passthru, p.Passthru)
 	}
 
 	// Panic if Msg not set
 	{
-		payload := &MsgPayload{}
+		p := &MsgPayload{}
 		assert.Panics(func() {
-			PBSubscriberEncoder{}.DecodePayload(data, payload)
+			PBSubscriberEncoder{}.DecodePayload(data, p)
 		})
 	}
 }

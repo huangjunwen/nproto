@@ -19,34 +19,34 @@ func TestJSONEncodeDecode(t *testing.T) {
 
 	// Encode.
 	{
-		payload := &MsgPayload{
+		p := &MsgPayload{
 			Msg:      msg,
 			Passthru: passthru,
 		}
 
-		data, err = JSONPublisherEncoder{}.EncodePayload(payload)
+		data, err = JSONPublisherEncoder{}.EncodePayload(p)
 		assert.NoError(err)
 	}
 
 	// Decode.
 	{
 		m := timestamp.Timestamp{}
-		payload := &MsgPayload{
+		p := &MsgPayload{
 			Msg: &m,
 		}
-		err = JSONSubscriberEncoder{}.DecodePayload(data, payload)
+		err = JSONSubscriberEncoder{}.DecodePayload(data, p)
 		assert.NoError(err)
 
-		assert.Equal(m.Seconds, msg.Seconds)
-		assert.Equal(m.Nanos, msg.Nanos)
-		assert.Equal(passthru, payload.Passthru)
+		assert.Equal(msg.Seconds, m.Seconds)
+		assert.Equal(msg.Nanos, m.Nanos)
+		assert.Equal(passthru, p.Passthru)
 	}
 
 	// Panic if Msg not set
 	{
-		payload := &MsgPayload{}
+		p := &MsgPayload{}
 		assert.Panics(func() {
-			JSONSubscriberEncoder{}.DecodePayload(data, payload)
+			JSONSubscriberEncoder{}.DecodePayload(data, p)
 		})
 	}
 }
