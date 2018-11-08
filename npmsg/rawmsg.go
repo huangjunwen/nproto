@@ -51,6 +51,9 @@ var (
 
 // NewMsgPublisher creates a MsgPublisher from RawMsgPublisher and MsgPublisherEncoder.
 func NewMsgPublisher(publisher RawMsgPublisher, encoder enc.MsgPublisherEncoder) nproto.MsgPublisher {
+	if encoder == nil {
+		encoder = enc.PBPublisherEncoder{}
+	}
 	return &defaultMsgPublisher{
 		publisher: publisher,
 		encoder:   encoder,
@@ -74,6 +77,9 @@ func (p *defaultMsgPublisher) Publish(ctx context.Context, subject string, msg p
 
 // NewMsgSubscriber creates a MsgSubscriber from RawMsgSubscriber and MsgSubscriberEncoder.
 func NewMsgSubscriber(subscriber RawMsgSubscriber, encoder enc.MsgSubscriberEncoder) nproto.MsgSubscriber {
+	if encoder == nil {
+		encoder = enc.PBSubscriberEncoder{}
+	}
 	return &defaultMsgSubscriber{
 		subscriber: subscriber,
 		encoder:    encoder,
