@@ -1,3 +1,5 @@
+//go:generate	protoc --go_out=. pbenc.proto
+
 package enc
 
 import (
