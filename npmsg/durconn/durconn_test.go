@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -599,4 +600,143 @@ func TestPubSub(t *testing.T) {
 	<-badc
 	<-badc
 	log.Printf("Bad data redelivery.\n")
+}
+
+func TestMultipleSub(t *testing.T) {
+	log.Printf("\n")
+	log.Printf(">>> TestMultipleSub.\n")
+	var err error
+
+	// Starts the server.
+	var res *tststan.Resource
+	{
+		res, err = tststan.Run(nil)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer res.Close()
+		log.Printf("Streaming server started.\n")
+	}
+
+	// Creates nat connection.
+	var nc *nats.Conn
+	{
+		nc, err = res.NatsClient(
+			nats.MaxReconnects(-1),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer nc.Close()
+
+		log.Printf("Nats connection created.\n")
+	}
+
+	// Creates two DurConns.
+	var dc1, dc2 *DurConn
+	{
+		connectc1, connectc2 := make(chan struct{}), make(chan struct{})
+		connectCb1 := func(_ stan.Conn) { connectc1 <- struct{}{} }
+		connectCb2 := func(_ stan.Conn) { connectc2 <- struct{}{} }
+
+		dc1, err = NewDurConn(nc, res.Options.ClusterId,
+			DurConnOptConnectCb(connectCb1), // Use the callback to notify connection establish.
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer dc1.Close()
+
+		dc2, err = NewDurConn(nc, res.Options.ClusterId,
+			DurConnOptConnectCb(connectCb2), // Use the callback to notify connection establish.
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer dc2.Close()
+
+		log.Printf("DurConns created.\n")
+
+		<-connectc1
+		<-connectc2
+		log.Printf("DurConns connected.\n")
+	}
+
+	var (
+		testSubject = "sub2"
+		testQueue   = "q2"
+		sub1Called  = make(chan struct{})
+		sub2Called  = make(chan struct{})
+	)
+
+	// The first subscription always return error cause redelivery.
+	{
+		subc := make(chan struct{})
+		subCb := func(_ stan.Conn, _, _ string) { subc <- struct{}{} }
+		once := &sync.Once{}
+
+		err := dc1.Subscribe(
+			testSubject,
+			testQueue,
+			func(ctx context.Context, subject string, data []byte) error {
+				once.Do(func() {
+					close(sub1Called)
+				})
+				return errors.New("sub1 error")
+			},
+			SubOptSubscribeCb(subCb),
+			SubOptAckWait(time.Second), // Short ack wait results in fast redelivery.
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		<-subc
+		log.Printf("Subscribed 1.\n")
+	}
+
+	// Now publish a message.
+	{
+		err := dc2.Publish(context.Background(), testSubject, []byte("xxxx"))
+		if err != nil {
+			log.Panic(err)
+		}
+		log.Printf("Message published.\n")
+	}
+
+	// Subscription 1 should handle the message.
+	<-sub1Called
+	log.Printf("Subscription 1 handled the message.\n")
+
+	// Close the first dc.
+	dc1.Close()
+
+	// Make the second subscription.
+	{
+		subc := make(chan struct{})
+		subCb := func(_ stan.Conn, _, _ string) { subc <- struct{}{} }
+		once := &sync.Once{}
+
+		err := dc2.Subscribe(
+			testSubject,
+			testQueue,
+			func(ctx context.Context, subject string, data []byte) error {
+				once.Do(func() {
+					close(sub2Called)
+				})
+				return nil
+			},
+			SubOptSubscribeCb(subCb),
+			SubOptAckWait(time.Second), // Short ack wait results in fast redelivery.
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		<-subc
+		log.Printf("Subscribed 2.\n")
+	}
+
+	// Subscription 2 should handle the message.
+	<-sub2Called
+	log.Printf("Subscription 2 handled the message.\n")
+
 }
