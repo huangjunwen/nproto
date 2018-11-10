@@ -37,9 +37,9 @@ var (
 // NatsRPCServer implements RPCServer.
 type NatsRPCServer struct {
 	// Options.
-	subjectPrefix string         // subject prefix
-	group         string         // server group
-	logger        zerolog.Logger // logger
+	logger        zerolog.Logger
+	subjectPrefix string
+	group         string // server group
 
 	// Mutable fields.
 	mu   sync.RWMutex

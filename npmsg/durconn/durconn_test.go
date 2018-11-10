@@ -602,6 +602,7 @@ func TestPubSub(t *testing.T) {
 	log.Printf("Bad data redelivery.\n")
 }
 
+// TestMultipleSub tests multiple subscribers.
 func TestMultipleSub(t *testing.T) {
 	log.Printf("\n")
 	log.Printf(">>> TestMultipleSub.\n")

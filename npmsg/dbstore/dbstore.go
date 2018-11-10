@@ -85,12 +85,14 @@ type Queryer interface {
 	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
 }
 
+// Option is option in creating DBMsgStore.
 type Option func(*DBMsgStore) error
 
 var (
 	_ npmsg.RawMsgPublisher = (*DBRawMsgPublisher)(nil)
 )
 
+// NewDBMsgStore creates a new DBMsgStore.
 func NewDBMsgStore(downstream npmsg.RawMsgPublisher, db *sql.DB, dialect DBMsgStoreDialect, table string, opts ...Option) (*DBMsgStore, error) {
 	store := &DBMsgStore{
 		logger:     zerolog.Nop(),
@@ -279,7 +281,7 @@ func (store *DBMsgStore) flush(ctx context.Context, ids, subjects []string, data
 		return
 	}
 
-	// Publish to downstream according by downstream's type.
+	// Publish to downstream.
 	switch downstream := store.downstream.(type) {
 	case npmsg.RawBatchMsgPublisher:
 		errs = downstream.PublishBatch(ctx, subjects, datas)
