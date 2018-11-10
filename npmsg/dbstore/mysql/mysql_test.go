@@ -8,62 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-sql-driver/mysql"
-	"github.com/ory/dockertest"
+	"github.com/huangjunwen/tstsvc/mysql"
 	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
 )
-
-const (
-	mysqlTag = "5.7.21"
-)
-
-var (
-	pool *dockertest.Pool
-)
-
-func init() {
-	var err error
-	pool, err = dockertest.NewPool("")
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-func mysqlDSN(res *dockertest.Resource) string {
-	return fmt.Sprintf("root:123456@tcp(localhost:%s)/dev?parseTime=true", res.GetPort("3306/tcp"))
-}
-
-type noopLogger struct{}
-
-func (l noopLogger) Print(v ...interface{}) {}
-
-func runTestServer() (*dockertest.Resource, error) {
-	// Start the container.
-	res, err := pool.Run("mysql", mysqlTag, []string{"MYSQL_ROOT_PASSWORD=123456", "MYSQL_DATABASE=dev"})
-	if err != nil {
-		return nil, err
-	}
-
-	// Set max lifetime of the container.
-	res.Expire(120)
-
-	// Suppress output.
-	mysql.SetLogger(noopLogger{})
-
-	// Wait.
-	if err := pool.Retry(func() error {
-		db, err := sql.Open("mysql", mysqlDSN(res))
-		if err != nil {
-			return err
-		}
-		defer db.Close()
-		return db.Ping()
-	}); err != nil {
-		return nil, err
-	}
-	return res, nil
-}
 
 func TestMySQLDialect(t *testing.T) {
 	log.Printf("\n")
@@ -72,10 +20,9 @@ func TestMySQLDialect(t *testing.T) {
 	var err error
 
 	// Starts the server.
-	var res *dockertest.Resource
+	var res *tstmysql.Resource
 	{
-		log.Printf("Starting MySQL server.\n")
-		res, err = runTestServer()
+		res, err = tstmysql.Run(nil)
 		if err != nil {
 			log.Panic(err)
 		}
@@ -86,7 +33,7 @@ func TestMySQLDialect(t *testing.T) {
 	// Creates client.
 	var db *sql.DB
 	{
-		db, err = sql.Open("mysql", mysqlDSN(res))
+		db, err = res.Client()
 		if err != nil {
 			log.Panic(err)
 		}
