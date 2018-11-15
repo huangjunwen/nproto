@@ -19,7 +19,8 @@ type MsgAsyncPublisher interface {
 
 	// PublishAsync publishes a message to the given subject asynchronously.
 	// The final result is returned by cb.
-	// NOTE: This method must be non-blocking. And cb must be called exactly once (even after context done).
+	// NOTE: This method must be non-blocking.
+	// And cb must be called exactly once (even after context done) if PublishAsync returns nil.
 	PublishAsync(ctx context.Context, subject string, msg proto.Message, cb func(error)) error
 }
 
