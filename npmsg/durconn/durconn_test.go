@@ -302,22 +302,6 @@ func TestMockPub(t *testing.T) {
 		assert.Error(err)
 	}
 
-	{
-		ctx, _ := context.WithTimeout(context.Background(), 10*time.Millisecond)
-		subjects := []string{"evil", "good", "bad", "good"}
-		datas := [][]byte{
-			nil,
-			[]byte(time.Millisecond.String()),
-			[]byte(time.Millisecond.String()),
-			[]byte(time.Second.String()),
-		}
-		errs := dc.PublishBatch(ctx, subjects, datas)
-		assert.Error(errs[0])   // Returns error immediately.
-		assert.NoError(errs[1]) // No error.
-		assert.Error(errs[2])   // Returns error after a while.
-		assert.Error(errs[3])   // Context timeout.
-	}
-
 }
 
 // ----------- Real test -----------
@@ -542,20 +526,6 @@ func TestPubSub(t *testing.T) {
 		assert.NoError(err)
 		<-goodc
 		log.Printf("Publish good data: %v.\n", err)
-	}
-
-	// PublishBatch good data.
-	{
-		errs := dc.PublishBatch(context.Background(),
-			[]string{testSubject, testSubject},
-			[][]byte{goodData, goodData},
-		)
-		for _, err := range errs {
-			assert.NoError(err)
-		}
-		<-goodc
-		<-goodc
-		log.Printf("PublishBatch good data: %v.\n", errs)
 	}
 
 	// Publish bad data.

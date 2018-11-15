@@ -43,8 +43,7 @@ var (
 )
 
 var (
-	_ npmsg.RawMsgPublisher      = (*DurConn)(nil)
-	_ npmsg.RawBatchMsgPublisher = (*DurConn)(nil)
+	_ npmsg.RawMsgAsyncPublisher = (*DurConn)(nil)
 	_ npmsg.RawMsgSubscriber     = (*DurConn)(nil)
 )
 
@@ -170,8 +169,8 @@ func (dc *DurConn) Subscribe(subject, queue string, handler npmsg.RawMsgHandler,
 	return nil
 }
 
-// Publish implements npmsg.RawMsgPublisher interface.
-func (dc *DurConn) Publish(ctx context.Context, subject string, data []byte) error {
+// PublishAsync implements npmsg.RawMsgAsyncPublisher interface.
+func (dc *DurConn) PublishAsync(ctx context.Context, subject string, data []byte, cb func(error)) error {
 	dc.mu.RLock()
 	closed := dc.closed
 	sc := dc.sc
@@ -183,111 +182,29 @@ func (dc *DurConn) Publish(ctx context.Context, subject string, data []byte) err
 	if sc == nil {
 		return ErrNotConnected
 	}
-
-	resultc := make(chan error)
-
-	// Use a seperated go routine to call Publish since we need to listen to ctx.
-	go func() {
-		err := sc.Publish(dc.addSubjectPrefix(subject), data)
-		select {
-		case resultc <- err:
-			return
-		case <-ctx.Done():
-			return
-		}
-	}()
-
-	// Wait result or context done.
-	select {
-	case r := <-resultc:
-		return r
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	_, err := sc.PublishAsync(dc.addSubjectPrefix(subject), data, func(_ string, err error) { cb(err) })
+	return err
 }
 
-// PublishBatch implements npmsg.RawBatchMsgPublisher interface.
-func (dc *DurConn) PublishBatch(ctx context.Context, subjects []string, datas [][]byte) (errs []error) {
-
-	dc.mu.RLock()
-	closed := dc.closed
-	sc := dc.sc
-	dc.mu.RUnlock()
-
-	var err error = notSetErr{}
-	if closed {
-		err = ErrClosed
-	} else if sc == nil {
-		err = ErrNotConnected
+// Publish implements npmsg.RawMsgPublisher interface.
+func (dc *DurConn) Publish(ctx context.Context, subject string, data []byte) error {
+	var (
+		err  error
+		errc = make(chan struct{})
+	)
+	if e1 := dc.PublishAsync(ctx, subject, data, func(e2 error) {
+		err = e2
+		close(errc)
+	}); e1 != nil {
+		return e1
 	}
 
-	// Initialize error slice.
-	n := len(subjects)
-	errs = make([]error, n)
-	for i, _ := range errs {
-		errs[i] = err
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-errc:
+		return err
 	}
-
-	// If real error.
-	if err != (notSetErr{}) {
-		return
-	}
-
-	// Channel to send/recv result.
-	type result struct {
-		I int
-		E error
-	}
-	resultc := make(chan result)
-
-	// Use a seperated go routine to call PublishAsync since we need to listen to ctx.
-	go func() {
-		for i, subject := range subjects {
-			i := i
-			h := func(_ string, err error) {
-				select {
-				case resultc <- result{I: i, E: err}:
-					return
-				case <-ctx.Done():
-					return
-				}
-			}
-
-			_, err := sc.PublishAsync(dc.addSubjectPrefix(subject), datas[i], h)
-			if err != nil {
-				select {
-				case resultc <- result{I: i, E: err}:
-					continue
-				case <-ctx.Done():
-					return
-				}
-			}
-		}
-	}()
-
-	// Wait all results or context done.
-LOOP:
-	for n > 0 {
-		select {
-		case r := <-resultc:
-			errs[r.I] = r.E
-			n -= 1
-		case <-ctx.Done():
-			break LOOP
-		}
-	}
-
-	// Context done before getting all results.
-	if n > 0 {
-		err = ctx.Err()
-		for i, _ := range errs {
-			if errs[i] == (notSetErr{}) {
-				errs[i] = err
-			}
-		}
-	}
-
-	return
 }
 
 // connect is used to make a new stan connection.

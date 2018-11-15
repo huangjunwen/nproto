@@ -16,12 +16,14 @@ type RawMsgPublisher interface {
 	Publish(ctx context.Context, subject string, data []byte) error
 }
 
-// RawBatchMsgPublisher can publish a batch of messages at once for higher throughput.
-type RawBatchMsgPublisher interface {
+// RawMsgAsyncPublisher is similar to MsgAsyncPublisher but operates on lower level.
+type RawMsgAsyncPublisher interface {
 	RawMsgPublisher
 
-	// PublishBatch publishes a batch of messages.
-	PublishBatch(ctx context.Context, subjects []string, datas [][]byte) (errors []error)
+	// PublishAsync publishes a message to the given subject asynchronously.
+	// The final result is returned by cb.
+	// NOTE: This method must be non-blocking. And cb must be called exactly once (even after context done).
+	PublishAsync(ctx context.Context, subject string, data []byte, cb func(error)) error
 }
 
 // RawMsgSubscriber is similar to MsgSubscriber but operates on lower level.
@@ -39,14 +41,20 @@ type defaultMsgPublisher struct {
 	publisher RawMsgPublisher
 }
 
+type defaultMsgAsyncPublisher struct {
+	encoder   enc.MsgPublisherEncoder
+	publisher RawMsgAsyncPublisher
+}
+
 type defaultMsgSubscriber struct {
 	encoder    enc.MsgSubscriberEncoder
 	subscriber RawMsgSubscriber
 }
 
 var (
-	_ nproto.MsgPublisher  = (*defaultMsgPublisher)(nil)
-	_ nproto.MsgSubscriber = (*defaultMsgSubscriber)(nil)
+	_ nproto.MsgPublisher      = (*defaultMsgPublisher)(nil)
+	_ nproto.MsgAsyncPublisher = (*defaultMsgAsyncPublisher)(nil)
+	_ nproto.MsgSubscriber     = (*defaultMsgSubscriber)(nil)
 )
 
 // NewMsgPublisher creates a MsgPublisher from RawMsgPublisher and MsgPublisherEncoder.
@@ -62,7 +70,6 @@ func NewMsgPublisher(publisher RawMsgPublisher, encoder enc.MsgPublisherEncoder)
 
 // Publish implements MsgPublisher interface.
 func (p *defaultMsgPublisher) Publish(ctx context.Context, subject string, msg proto.Message) error {
-	// Encode payload.
 	data, err := p.encoder.EncodePayload(&enc.MsgPayload{
 		Msg:      msg,
 		Passthru: nproto.Passthru(ctx),
@@ -70,9 +77,42 @@ func (p *defaultMsgPublisher) Publish(ctx context.Context, subject string, msg p
 	if err != nil {
 		panic(err)
 	}
-
-	// Publish.
 	return p.publisher.Publish(ctx, subject, data)
+}
+
+// NewMsgAsyncPublisher creates a MsgAsyncPublisher from RawMsgAsyncPublisher and MsgPublisherEncoder.
+func NewMsgAsyncPublisher(publisher RawMsgAsyncPublisher, encoder enc.MsgPublisherEncoder) nproto.MsgAsyncPublisher {
+	if encoder == nil {
+		encoder = enc.PBPublisherEncoder{}
+	}
+	return &defaultMsgAsyncPublisher{
+		publisher: publisher,
+		encoder:   encoder,
+	}
+}
+
+// Publish implements MsgAsyncPublisher interface.
+func (p *defaultMsgAsyncPublisher) Publish(ctx context.Context, subject string, msg proto.Message) error {
+	data, err := p.encoder.EncodePayload(&enc.MsgPayload{
+		Msg:      msg,
+		Passthru: nproto.Passthru(ctx),
+	})
+	if err != nil {
+		panic(err)
+	}
+	return p.publisher.Publish(ctx, subject, data)
+}
+
+// PublishAsync implements MsgAsyncPublisher interface.
+func (p *defaultMsgAsyncPublisher) PublishAsync(ctx context.Context, subject string, msg proto.Message, cb func(error)) error {
+	data, err := p.encoder.EncodePayload(&enc.MsgPayload{
+		Msg:      msg,
+		Passthru: nproto.Passthru(ctx),
+	})
+	if err != nil {
+		panic(err)
+	}
+	return p.publisher.PublishAsync(ctx, subject, data, cb)
 }
 
 // NewMsgSubscriber creates a MsgSubscriber from RawMsgSubscriber and MsgSubscriberEncoder.

@@ -9,8 +9,18 @@ import (
 // MsgPublisher is used to publish messages reliably, e.g. at least once delivery.
 type MsgPublisher interface {
 	// Publish publishes a message to the given subject. It returns nil when succeeded.
-	// When returning not nil error, it maybe succeeded or failed.
 	Publish(ctx context.Context, subject string, msg proto.Message) error
+}
+
+// MsgAsyncPublisher extends MsgPublisher with async API.
+type MsgAsyncPublisher interface {
+	// It's trivial to implement a sync publish if it supports async publish.
+	MsgPublisher
+
+	// PublishAsync publishes a message to the given subject asynchronously.
+	// The final result is returned by cb.
+	// NOTE: This method must be non-blocking. And cb must be called exactly once (even after context done).
+	PublishAsync(ctx context.Context, subject string, msg proto.Message, cb func(error)) error
 }
 
 // MsgSubscriber is used to consume messages.
