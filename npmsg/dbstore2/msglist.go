@@ -5,7 +5,7 @@ import (
 )
 
 var (
-	msgNodePool = &sync.Pool{
+	nodePool = &sync.Pool{
 		New: func() interface{} {
 			return &msgNode{}
 		},
@@ -13,8 +13,8 @@ var (
 )
 
 var (
-	newNode    = func() *msgNode { return msgNodePool.Get().(*msgNode) }
-	deleteNode = func(node *msgNode) { msgNodePool.Put(node) }
+	newNode    = func() *msgNode { return nodePool.Get().(*msgNode) }
+	deleteNode = func(node *msgNode) { nodePool.Put(node) }
 )
 
 // msgList is a list of messages.
@@ -22,13 +22,14 @@ type msgList struct {
 	head msgNode // head.next is the first item and head.prev is the last item.
 }
 
-// msgNode is a single message. It belong to only one msgList at any time.
+// msgNode is a single message. It belong to at most one msgList at any time.
 type msgNode struct {
-	id      uint64
-	subject string
-	data    []byte
-	prev    *msgNode
-	next    *msgNode
+	Id      uint64
+	Subject string
+	Data    []byte
+
+	prev *msgNode
+	next *msgNode
 }
 
 // newMsgList creates an empty msgList.
@@ -41,11 +42,8 @@ func newMsgList() *msgList {
 }
 
 // NewNode creates a new msgNode and appends it to list.
-func (list *msgList) NewNode(id uint64, subject string, data []byte) *msgNode {
+func (list *msgList) NewNode() *msgNode {
 	ret := newNode()
-	ret.id = id
-	ret.subject = subject
-	ret.data = data
 	ret.attach(list)
 	return ret
 }

@@ -14,7 +14,7 @@ func TestMsgList(t *testing.T) {
 	}()
 	deleteNodeC := make(chan uint64, 10000)
 	deleteNode = func(node *msgNode) {
-		deleteNodeC <- node.id
+		deleteNodeC <- node.Id
 		origDeleteNode(node)
 	}
 	expectDeleteNode := func(expectId uint64) {
@@ -29,14 +29,16 @@ func TestMsgList(t *testing.T) {
 		assert.Equal(&l1.head, l1.head.next)
 	}
 
-	n1 := l1.NewNode(1, "sub1", nil)
+	n1 := l1.NewNode()
+	n1.Id = 1
 	{
 		assert.Equal(n1, l1.head.next) // First item is n1.
 		assert.Equal(n1, l1.head.prev) // Last item is n1.
 		assert.Equal(&l1.head, n1.prev)
 		assert.Equal(&l1.head, n1.next)
 	}
-	n2 := l1.NewNode(2, "sub2", nil)
+	n2 := l1.NewNode()
+	n2.Id = 2
 	{
 		assert.Equal(n1, l1.head.next) // First item is n1.
 		assert.Equal(n2, l1.head.prev) // Last item is n2.
