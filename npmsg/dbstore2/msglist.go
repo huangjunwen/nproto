@@ -1,20 +1,9 @@
 package dbstore
 
-import (
-	"sync"
-)
-
 var (
-	nodePool = &sync.Pool{
-		New: func() interface{} {
-			return &msgNode{}
-		},
-	}
-)
-
-var (
-	newNode    = func() *msgNode { return nodePool.Get().(*msgNode) }
-	deleteNode = func(node *msgNode) { nodePool.Put(node) }
+	// NOTE: Possible to use a sync.Pool if needed.
+	newNode    = func() *msgNode { return &msgNode{} }
+	deleteNode = func(node *msgNode) {}
 )
 
 // msgList is a list of messages.
