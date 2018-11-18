@@ -56,21 +56,18 @@ func (list *msgList) Reset() {
 	head.prev = head
 }
 
-// MigrateTo migrates all msgNode from list to target.
-func (list *msgList) MigrateTo(target *msgList) {
+// Iterate returns an iterator of the list.
+func (list *msgList) Iterate() func() *msgNode {
 	head := &list.head
-	if head.next == head {
-		return
+	node := head.next
+	return func() *msgNode {
+		if node == head {
+			return nil
+		}
+		ret := node
+		node = node.next
+		return ret
 	}
-	first := head.next
-	last := head.prev
-	first.prev = &target.head
-	last.next = &target.head
-	target.head.next = first
-	target.head.prev = last
-
-	head.next = head
-	head.prev = head
 }
 
 func (node *msgNode) attach(list *msgList) {
