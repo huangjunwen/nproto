@@ -8,85 +8,66 @@ var (
 
 // msgList is a list of messages.
 type msgList struct {
-	head msgNode // head.next is the first item and head.prev is the last item.
+	head *msgNode
+	tail *msgNode
+	n    int
 }
 
-// msgNode is a single message. It belong to at most one msgList at any time.
+// msgNode is a single message.
 type msgNode struct {
 	Id      uint64
 	Subject string
 	Data    []byte
+	Err     error
 
-	prev *msgNode
+	list *msgList
 	next *msgNode
 }
 
-// newMsgList creates an empty msgList.
-func newMsgList() *msgList {
-	ret := &msgList{}
-	head := &ret.head
-	head.prev = head
-	head.next = head
-	return ret
-}
+// Append appends node to list. node must not belong to other list.
+func (list *msgList) Append(node *msgNode) {
+	if node.list != nil {
+		if node.list != list {
+			panic("msgNode belongs to other msgList")
+		}
+		return
+	}
 
-// NewNode creates a new msgNode and appends it to list.
-func (list *msgList) NewNode() *msgNode {
-	ret := newNode()
-	ret.attach(list)
-	return ret
-}
-
-// AppendNode detaches a msgNode from its current owning list and appends to list.
-func (list *msgList) AppendNode(node *msgNode) {
-	node.detach()
-	node.attach(list)
+	node.list = list
+	if list.head == nil {
+		list.head = node
+	}
+	if list.tail != nil {
+		list.tail.next = node
+	}
+	list.tail = node
+	list.n += 1
 }
 
 // Reset deletes all msgNode in a msgList.
 func (list *msgList) Reset() {
-	head := &list.head
-	node := head.next
-	for node != head {
+	node := list.head
+	for node != nil {
 		next := node.next
+		node.list = nil
+		node.next = nil
 		deleteNode(node)
 		node = next
 	}
-	head.next = head
-	head.prev = head
+	list.head = nil
+	list.tail = nil
+	list.n = 0
 }
 
 // Iterate returns an iterator of the list.
 func (list *msgList) Iterate() func() *msgNode {
-	head := &list.head
-	node := head.next
+	node := list.head
 	return func() *msgNode {
-		if node == head {
+		if node == nil {
 			return nil
 		}
 		ret := node
 		node = node.next
 		return ret
 	}
-}
-
-func (node *msgNode) attach(list *msgList) {
-	head := &list.head
-	node.prev = head.prev
-	node.next = head
-	head.prev.next = node
-	head.prev = node
-}
-
-func (node *msgNode) detach() {
-	prev := node.prev
-	next := node.next
-	if prev != nil {
-		prev.next = next
-	}
-	if next != nil {
-		next.prev = prev
-	}
-	node.prev = nil
-	node.next = nil
 }

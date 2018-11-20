@@ -22,79 +22,60 @@ func TestMsgList(t *testing.T) {
 		assert.Equal(id, expectId)
 	}
 
-	// --- test NewNode ---
-	l1 := newMsgList()
+	// --- test Append ---
+	l := &msgList{}
 	{
-		assert.Equal(&l1.head, l1.head.prev)
-		assert.Equal(&l1.head, l1.head.next)
+		assert.Nil(l.head)
+		assert.Nil(l.tail)
+		assert.Equal(0, l.n)
 	}
 
-	n1 := l1.NewNode()
+	n1 := newNode()
 	n1.Id = 1
+	l.Append(n1)
 	{
-		assert.Equal(n1, l1.head.next) // First item is n1.
-		assert.Equal(n1, l1.head.prev) // Last item is n1.
-		assert.Equal(&l1.head, n1.prev)
-		assert.Equal(&l1.head, n1.next)
+		assert.Equal(n1, l.head)
+		assert.Equal(n1, l.tail)
+		assert.Equal(1, l.n)
+		assert.Equal(l, n1.list)
+		assert.Nil(n1.next)
 	}
-	n2 := l1.NewNode()
+
+	n2 := newNode()
 	n2.Id = 2
+	l.Append(n2)
 	{
-		assert.Equal(n1, l1.head.next) // First item is n1.
-		assert.Equal(n2, l1.head.prev) // Last item is n2.
-		assert.Equal(&l1.head, n1.prev)
+		assert.Equal(n1, l.head)
+		assert.Equal(n2, l.tail)
+		assert.Equal(2, l.n)
+		assert.Equal(l, n1.list)
 		assert.Equal(n2, n1.next)
-		assert.Equal(n1, n2.prev)
-		assert.Equal(&l1.head, n2.next)
-	}
-
-	// --- test AppendNode ---
-	l2 := newMsgList()
-
-	l2.AppendNode(n1)
-	{
-		assert.Equal(n2, l1.head.next) // First item is n2.
-		assert.Equal(n2, l1.head.prev) // Last item is n2.
-		assert.Equal(&l1.head, n2.prev)
-		assert.Equal(&l1.head, n2.next)
-		assert.Equal(n1, l2.head.next) // First item is n1.
-		assert.Equal(n1, l2.head.prev) // Last item is n1.
-		assert.Equal(&l2.head, n1.prev)
-		assert.Equal(&l2.head, n1.next)
-	}
-
-	l2.AppendNode(n2)
-	{
-		assert.Equal(&l1.head, l1.head.next) // l1 is empty now.
-		assert.Equal(&l1.head, l1.head.prev) // l1 is empty now.
-		assert.Equal(n1, l2.head.next)       // First item is n1.
-		assert.Equal(n2, l2.head.prev)       // Last item is n2.
-		assert.Equal(&l2.head, n1.prev)
-		assert.Equal(n2, n1.next)
-		assert.Equal(n1, n2.prev)
-		assert.Equal(&l2.head, n2.next)
+		assert.Equal(l, n2.list)
+		assert.Nil(n2.next)
 	}
 
 	// --- test Iterate ---
 	{
-		iter := l2.Iterate()
+		iter := l.Iterate()
 		assert.Equal(n1, iter())
 		assert.Equal(n2, iter())
 		assert.Equal((*msgNode)(nil), iter())
 	}
 	{
-		iter := l1.Iterate()
+		l2 := &msgList{}
+		iter := l2.Iterate()
 		assert.Equal((*msgNode)(nil), iter())
 	}
 
 	// --- test Reset ---
-	l2.Reset()
+	l.Reset()
 	{
 		expectDeleteNode(1)
 		expectDeleteNode(2)
 		assert.Len(deleteNodeC, 0)
-		assert.Equal(&l2.head, l2.head.next) // l2 is empty now.
-		assert.Equal(&l2.head, l2.head.prev) // l2 is empty now.
+		assert.Nil(l.head)
+		assert.Nil(l.tail)
+		assert.Equal(0, l.n)
 	}
 
 }
