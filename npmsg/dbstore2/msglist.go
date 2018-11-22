@@ -15,7 +15,7 @@ type msgList struct {
 
 // msgNode is a single message.
 type msgNode struct {
-	Id      uint64
+	Id      int64
 	Subject string
 	Data    []byte
 	Err     error
@@ -49,8 +49,6 @@ func (list *msgList) Reset() {
 	node := list.head
 	for node != nil {
 		next := node.next
-		node.list = nil
-		node.next = nil
 		deleteNode(node)
 		node = next
 	}

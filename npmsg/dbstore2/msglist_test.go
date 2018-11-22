@@ -12,12 +12,12 @@ func TestMsgList(t *testing.T) {
 	defer func() {
 		deleteNode = origDeleteNode
 	}()
-	deleteNodeC := make(chan uint64, 10000)
+	deleteNodeC := make(chan int64, 10000)
 	deleteNode = func(node *msgNode) {
 		deleteNodeC <- node.Id
 		origDeleteNode(node)
 	}
-	expectDeleteNode := func(expectId uint64) {
+	expectDeleteNode := func(expectId int64) {
 		id := <-deleteNodeC
 		assert.Equal(id, expectId)
 	}
