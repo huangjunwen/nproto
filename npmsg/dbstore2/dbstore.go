@@ -19,6 +19,7 @@ type DBStore struct {
 	logger         zerolog.Logger
 	sampler        func() zerolog.Sampler
 	deleteBulkSize int
+	maxInflight    int
 
 	// Immutable fields.
 	downstream npmsg.RawMsgAsyncPublisher
@@ -100,7 +101,7 @@ L:
 	// Wait all publish done.
 	pubwg.Wait()
 
-	// The second loop to delete published messages.
+	// Delete loop.
 	// NOTE: This loop is always run even after ctx done, to avoid message redelivery.
 	iter = list.Iterate()
 	ids := []int64{}
@@ -133,11 +134,14 @@ func (store *DBStore) flushMsgStream(ctx context.Context, stream func() *msgNode
 	pubLogger := logger.Sample(store.sampler())
 	delLogger := logger.Sample(store.sampler())
 
+	// Use this channel to control flush speed.
+	ctrlc := make(chan struct{}, store.maxInflight)
+
 	c := make(chan bool, 1)
 	mu := &sync.Mutex{}
 	list := &msgList{}
 
-	// Start a goroutine to delete messages.
+	// Start a goroutine for delete loop.
 	delwg := &sync.WaitGroup{}
 	delwg.Add(1)
 	go func() {
@@ -178,6 +182,10 @@ func (store *DBStore) flushMsgStream(ctx context.Context, stream func() *msgNode
 				if err := store.dialect.DeleteMsgs(context.Background(), store.db, store.table, ids); err != nil {
 					delLogger.Error().Err(err).Msg("delete msg error")
 				}
+
+				for _ = range ids {
+					<-ctrlc
+				}
 			}
 		}
 		delwg.Done()
@@ -192,17 +200,19 @@ L:
 		case <-ctx.Done():
 			logger.Warn().Msg("context done during publishing")
 			break L
-		default:
+		case ctrlc <- struct{}{}:
 		}
 
 		msg := stream()
 		if msg == nil {
+			<-ctrlc
 			break
 		}
 
 		pubwg.Add(1)
 		cb := func(err error) {
 			if err != nil {
+				<-ctrlc
 				pubLogger.Error().Err(err).Msg("publish error")
 				return
 			}
@@ -213,7 +223,7 @@ L:
 			n := list.n
 			mu.Unlock()
 
-			// If list has enough item, kick the delete goroutine in non-blocking manner.
+			// If list has enough item, kick the delete loop in non-blocking manner.
 			if n >= store.deleteBulkSize {
 				select {
 				case c <- true:
@@ -235,7 +245,7 @@ L:
 	// Close c to end delete goroutine.
 	close(c)
 
-	// Wait delete goroutine done.
+	// Wait delete loop done.
 	delwg.Wait()
 
 }
