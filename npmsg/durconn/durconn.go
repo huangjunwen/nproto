@@ -408,11 +408,3 @@ func (dc *DurConn) addSubjectPrefix(subject string) string {
 func (dc *DurConn) trimSubjectPrefix(subject string) string {
 	return strings.TrimPrefix(subject, dc.subjectPrefix)
 }
-
-type notSetErr struct{}
-
-func (notSetErr) Error() string {
-	return "Not set"
-}
-
-var _ error = notSetErr{}
