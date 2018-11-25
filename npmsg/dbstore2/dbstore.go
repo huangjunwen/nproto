@@ -77,7 +77,7 @@ L:
 			break
 		}
 
-		// Add task.
+		// Add publish task.
 		pubwg.Add(1)
 		cb := func(err error) {
 			if err != nil {
@@ -90,7 +90,7 @@ L:
 				succList.Append(msg)
 				mu.Unlock()
 			}
-			// Task done.
+			// Publish task done.
 			pubwg.Done()
 		}
 
@@ -100,7 +100,7 @@ L:
 		}
 	}
 
-	// Wait publish done.
+	// Wait all publish done.
 	pubwg.Wait()
 
 	// Delete.
@@ -170,7 +170,7 @@ L:
 			break
 		}
 
-		// Add task.
+		// Add publish task.
 		pubwg.Add(1)
 		cb := func(err error) {
 			if err != nil {
@@ -189,7 +189,7 @@ L:
 				default:
 				}
 			}
-			// Task done.
+			// Publish task done.
 			pubwg.Done()
 		}
 
@@ -199,7 +199,7 @@ L:
 		}
 	}
 
-	// Wait publish done.
+	// Wait all publish done.
 	pubwg.Wait()
 
 	// Close delc and wait delete goroutine end.
