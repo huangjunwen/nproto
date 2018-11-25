@@ -54,7 +54,28 @@ func TestMsgList(t *testing.T) {
 		assert.Nil(n2.next)
 	}
 
+	// --- test Pop ---
+	{
+		assert.Equal(n1, l.Pop())
+		assert.Equal(n2, l.head)
+		assert.Equal(n2, l.tail)
+		assert.Equal(1, l.n)
+		assert.Nil(n1.list)
+		assert.Nil(n1.next)
+	}
+
+	{
+		assert.Equal(n2, l.Pop())
+		assert.Nil(l.head)
+		assert.Nil(l.tail)
+		assert.Equal(0, l.n)
+		assert.Nil(n2.list)
+		assert.Nil(n2.next)
+	}
+
 	// --- test Iterate ---
+	l.Append(n1)
+	l.Append(n2)
 	{
 		iter := l.Iterate()
 		assert.Equal(n1, iter())
