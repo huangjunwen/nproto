@@ -3,7 +3,6 @@ package dbstore
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"sync"
 
 	"github.com/huangjunwen/nproto/npmsg"
@@ -11,13 +10,8 @@ import (
 	"github.com/rs/zerolog"
 )
 
-var (
-	errNotSet = errors.New("Not set")
-)
-
 type DBStore struct {
 	logger         zerolog.Logger
-	sampler        func() zerolog.Sampler
 	deleteBulkSize int
 	maxInflight    int
 
@@ -61,13 +55,12 @@ func (store *DBStore) flushMsgList(ctx context.Context, list *msgList) {
 	if list.n == 0 {
 		return
 	}
-	logger := store.logger.With().Str("fn", "flushMsgList").Logger()
-	pubLogger := logger.Sample(store.sampler())
-	delLogger := logger.Sample(store.sampler())
+	logger := &store.logger
 
 	// Publish loop.
-	iter := list.Iterate()
 	pubwg := &sync.WaitGroup{}
+	mu := &sync.Mutex{}
+	succList := msgList{}
 L:
 	for {
 		// Context maybe done during publishing.
@@ -78,115 +71,82 @@ L:
 		default:
 		}
 
-		msg := iter()
+		// Pop msg.
+		msg := list.Pop()
 		if msg == nil {
 			break
 		}
 
-		msg.Err = errNotSet
+		// Add task.
 		pubwg.Add(1)
 		cb := func(err error) {
-			msg.Err = err
 			if err != nil {
-				pubLogger.Error().Err(err).Msg("publish error")
+				// Release the msg if err.
+				logger.Error().Err(err).Msg("publish error")
+				deleteNode(msg)
+			} else {
+				// Append to success list.
+				mu.Lock()
+				succList.Append(msg)
+				mu.Unlock()
 			}
+			// Task done.
 			pubwg.Done()
 		}
 
+		// PublishAsync.
 		if err := store.downstream.PublishAsync(ctx, msg.Subject, msg.Data, cb); err != nil {
 			cb(err)
 		}
 	}
 
-	// Wait all publish done.
+	// Wait publish done.
 	pubwg.Wait()
 
-	// Delete loop.
-	// NOTE: This loop is always run even after ctx done, to avoid message redelivery.
-	iter = list.Iterate()
-	ids := []int64{}
-	end := false
-	for !end {
-		// Collect no more than deleteBulkSize successful published message ids.
-		ids = ids[0:0]
-		for len(ids) < store.deleteBulkSize {
-			msg := iter()
-			if msg == nil {
-				end = true
-				break
-			}
-			if msg.Err == nil {
-				ids = append(ids, msg.Id)
-			}
-		}
+	// Delete.
+	store.deleteMsgs(&succList, nil, nil)
 
-		// Delete.
-		// NOTE: Use background context since ctx maybe already done here.
-		if err := store.dialect.DeleteMsgs(context.Background(), store.db, store.table, ids); err != nil {
-			delLogger.Error().Err(err).Msg("delete msg error")
-		}
-	}
-
+	// Cleanup.
+	list.Reset()
+	succList.Reset()
 }
 
 func (store *DBStore) flushMsgStream(ctx context.Context, stream func() *msgNode) {
-	logger := store.logger.With().Str("fn", "flushMsgStream").Logger()
-	pubLogger := logger.Sample(store.sampler())
-	delLogger := logger.Sample(store.sampler())
+	logger := &store.logger
 
-	// Use this channel to control flush speed.
-	ctrlc := make(chan struct{}, store.maxInflight)
+	// This channel is used to control flush speed.
+	taskc := make(chan struct{}, store.maxInflight)
 
-	c := make(chan bool, 1)
+	// This channel is used to sync with delete goroutine.
+	delc := make(chan bool, 1)
+
 	mu := &sync.Mutex{}
-	list := &msgList{}
+	succList := &msgList{}
+	procList := &msgList{}
 
-	// Start a goroutine for delete loop.
+	// Start a seperate goroutine for deleting msgs.
 	delwg := &sync.WaitGroup{}
 	delwg.Add(1)
 	go func() {
-		ids := []int64{}
 		ok := true
+		idsBuff := []int64{} // Reusable buffer.
 		for ok {
-			// NOTE: When c is closed, ok will become false.
+			// NOTE: When delc is closed, ok will become false.
 			// But we still need to run one more time.
-			ok = <-c
+			ok = <-delc
 
-			// Replace the list.
+			// Swap succList and procList.
 			mu.Lock()
-			l := list
-			list = &msgList{}
+			tmp := succList
+			succList = procList
+			procList = tmp
 			mu.Unlock()
 
-			if l.n == 0 {
-				continue
-			}
+			// Delete msgs in procList.
+			store.deleteMsgs(procList, idsBuff, taskc)
 
-			// Loop to delete published messages.
-			iter := l.Iterate()
-			end := false
-			for !end {
-				// Collect no more than deleteBulkSize message ids.
-				ids = ids[0:0]
-				for len(ids) < store.deleteBulkSize {
-					msg := iter()
-					if msg == nil {
-						end = true
-						break
-					}
-					ids = append(ids, msg.Id)
-				}
-
-				// Delete.
-				// NOTE: Use background context since ctx maybe already done here.
-				if err := store.dialect.DeleteMsgs(context.Background(), store.db, store.table, ids); err != nil {
-					delLogger.Error().Err(err).Msg("delete msg error")
-				}
-
-				for _ = range ids {
-					<-ctrlc
-				}
-			}
+			// Cleanup.
+			procList.Reset()
 		}
 		delwg.Done()
 	}()
@@ -200,52 +160,85 @@ L:
 		case <-ctx.Done():
 			logger.Warn().Msg("context done during publishing")
 			break L
-		case ctrlc <- struct{}{}:
+		case taskc <- struct{}{}:
 		}
 
+		// Get msg.
 		msg := stream()
 		if msg == nil {
-			<-ctrlc
+			<-taskc
 			break
 		}
 
+		// Add task.
 		pubwg.Add(1)
 		cb := func(err error) {
 			if err != nil {
-				<-ctrlc
-				pubLogger.Error().Err(err).Msg("publish error")
-				return
-			}
-
-			// Append to list when successful.
-			mu.Lock()
-			list.Append(msg)
-			n := list.n
-			mu.Unlock()
-
-			// If list has enough item, kick the delete loop in non-blocking manner.
-			if n >= store.deleteBulkSize {
+				// Release the msg if err.
+				<-taskc
+				logger.Error().Err(err).Msg("publish error")
+				deleteNode(msg)
+			} else {
+				// Append to success list.
+				mu.Lock()
+				succList.Append(msg)
+				mu.Unlock()
+				// Kick delete goroutine in non-blocking manner.
 				select {
-				case c <- true:
+				case delc <- true:
 				default:
 				}
 			}
-
+			// Task done.
 			pubwg.Done()
 		}
 
+		// PublishAsync.
 		if err := store.downstream.PublishAsync(ctx, msg.Subject, msg.Data, cb); err != nil {
 			cb(err)
 		}
 	}
 
-	// Wait all publish done.
+	// Wait publish done.
 	pubwg.Wait()
 
-	// Close c to end delete goroutine.
-	close(c)
-
-	// Wait delete loop done.
+	// Close delc and wait delete goroutine end.
+	close(delc)
 	delwg.Wait()
 
+	// Cleanup.
+	succList.Reset()
+	procList.Reset()
+}
+
+func (store *DBStore) deleteMsgs(list *msgList, idsBuff []int64, taskc chan struct{}) {
+	if list.n == 0 {
+		return
+	}
+	iter := list.Iterate()
+	end := false
+	for !end {
+		// Collect no more than deleteBulkSize message ids.
+		idsBuff = idsBuff[0:0]
+		for len(idsBuff) < store.deleteBulkSize {
+			msg := iter()
+			if msg == nil {
+				end = true
+				break
+			}
+			idsBuff = append(idsBuff, msg.Id)
+		}
+
+		// Delete.
+		if err := store.dialect.DeleteMsgs(context.Background(), store.db, store.table, idsBuff); err != nil {
+			store.logger.Error().Err(err).Msg("delete msg error")
+		}
+
+		// If there is a task channel, finish them.
+		if taskc != nil {
+			for _ = range idsBuff {
+				<-taskc
+			}
+		}
+	}
 }
