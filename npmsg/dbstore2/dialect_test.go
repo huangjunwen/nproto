@@ -42,16 +42,17 @@ func TestMySQLDialect(t *testing.T) {
 		log.Printf("MySQL client created.\n")
 	}
 
+	// Test CreateSQL.
 	{
 		_, err := db.Exec(dialect.CreateSQL(table))
 		assert.NoError(err)
 	}
 
-	var id1, id2 int64
+	// Test InsertMsg.
 	{
-		id1, err = dialect.InsertMsg(ctx, db, table, batch, "subj1", []byte("data1"))
+		_, err = dialect.InsertMsg(ctx, db, table, batch, "subj1", []byte("data1"))
 		assert.NoError(err)
-		id2, err = dialect.InsertMsg(ctx, db, table, batch, "subj2", []byte("data2"))
+		_, err = dialect.InsertMsg(ctx, db, table, batch, "subj2", []byte("data2"))
 		assert.NoError(err)
 	}
 
@@ -62,8 +63,27 @@ func TestMySQLDialect(t *testing.T) {
 		assert.Equal(2, n)
 	}
 
+	// Test SelectMsgsByBatch.
+	ids := []int64{}
 	{
-		err = dialect.DeleteMsgs(ctx, db, table, []int64{id1, id2})
+		stream := dialect.SelectMsgsByBatch(ctx, db, table, batch)
+		for {
+			msg, err := stream(true)
+			assert.NoError(err)
+			if msg == nil {
+				break
+			}
+			ids = append(ids, msg.Id)
+		}
+		msg, err := stream(false)
+		assert.NoError(err)
+		assert.Nil(msg)
+		assert.Len(ids, 2)
+	}
+
+	// Test DeleteMsgs.
+	{
+		err = dialect.DeleteMsgs(ctx, db, table, ids)
 		assert.NoError(err)
 	}
 
