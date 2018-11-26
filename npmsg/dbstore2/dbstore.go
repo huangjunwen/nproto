@@ -6,7 +6,8 @@ import (
 	"sync"
 
 	"github.com/huangjunwen/nproto/npmsg"
-	//"github.com/rs/xid"
+
+	"github.com/rs/xid"
 	"github.com/rs/zerolog"
 )
 
@@ -14,6 +15,7 @@ type DBStore struct {
 	logger         zerolog.Logger
 	deleteBulkSize int
 	maxInflight    int
+	maxBuf         int
 
 	// Immutable fields.
 	downstream npmsg.RawMsgAsyncPublisher
@@ -34,7 +36,7 @@ type DBPublisher struct {
 
 	// Mutable fields.
 	mu      sync.Mutex
-	n       int      // Number of msgs.
+	n       int      // Number of published messages.
 	bufMsgs *msgList // Buffered messages, no more than maxBuf.
 }
 
@@ -49,13 +51,28 @@ type dbStoreDialect interface {
 	CreateSQL(table string) string
 	InsertMsg(ctx context.Context, q Queryer, table, batch, subject string, data []byte) (id int64, err error)
 	DeleteMsgs(ctx context.Context, q Queryer, table string, ids []int64) error
+	SelectMsgsByBatch(ctx context.Context, q Queryer, table, batch string) msgStream
+}
+
+var (
+	_ npmsg.RawMsgPublisher = (*DBPublisher)(nil)
+)
+
+func (store *DBStore) NewPublisher(q Queryer) *DBPublisher {
+
+	return &DBPublisher{
+		store:   store,
+		q:       q,
+		batch:   xid.New().String(),
+		bufMsgs: &msgList{},
+	}
 }
 
 func (store *DBStore) flushMsgList(ctx context.Context, list *msgList) {
 	if list.n == 0 {
 		return
 	}
-	logger := &store.logger
+	logger := store.logger.With().Str("fn", "flushMsgList").Logger()
 
 	// Publish loop.
 	pubwg := &sync.WaitGroup{}
@@ -111,8 +128,8 @@ L:
 	succList.Reset()
 }
 
-func (store *DBStore) flushMsgStream(ctx context.Context, stream func() *msgNode) {
-	logger := &store.logger
+func (store *DBStore) flushMsgStream(ctx context.Context, stream msgStream) {
+	logger := store.logger.With().Str("fn", "flushMsgStream").Logger()
 
 	// This channel is used to control flush speed.
 	taskc := make(chan struct{}, store.maxInflight)
@@ -164,8 +181,11 @@ L:
 		}
 
 		// Get msg.
-		msg := stream()
+		msg, err := stream(true)
 		if msg == nil {
+			if err != nil {
+				logger.Error().Err(err).Msg("msg stream error")
+			}
 			<-taskc
 			break
 		}
@@ -199,6 +219,9 @@ L:
 		}
 	}
 
+	// Close the stream.
+	stream(false)
+
 	// Wait all publish done.
 	pubwg.Wait()
 
@@ -231,7 +254,7 @@ func (store *DBStore) deleteMsgs(list *msgList, idsBuff []int64, taskc chan stru
 
 		// Delete.
 		if err := store.dialect.DeleteMsgs(context.Background(), store.db, store.table, idsBuff); err != nil {
-			store.logger.Error().Err(err).Msg("delete msg error")
+			store.logger.Error().Err(err).Str("fn", "deleteMsgs").Msg("delete msg error")
 		}
 
 		// If there is a task channel, finish them.
@@ -241,4 +264,53 @@ func (store *DBStore) deleteMsgs(list *msgList, idsBuff []int64, taskc chan stru
 			}
 		}
 	}
+}
+
+func (p *DBPublisher) Publish(ctx context.Context, subject string, data []byte) error {
+	// First save to db.
+	store := p.store
+	id, err := store.dialect.InsertMsg(ctx, p.q, store.table, p.batch, subject, data)
+	if err != nil {
+		return err
+	}
+
+	// Append to bufMsgs if not more then maxBuf.
+	p.mu.Lock()
+	if p.n < store.maxBuf {
+		msg := newNode()
+		msg.Id = id
+		msg.Subject = subject
+		msg.Data = data
+		p.bufMsgs.Append(msg)
+	}
+	p.n += 1
+	p.mu.Unlock()
+	return nil
+}
+
+func (p *DBPublisher) Finish(ctx context.Context, committed bool) {
+	p.mu.Lock()
+	n := p.n
+	bufMsgs := p.bufMsgs
+	p.n = 0
+	p.bufMsgs = nil // Just set to nil since there should be no further Publish.
+	p.mu.Unlock()
+	defer bufMsgs.Reset()
+
+	// Do nothing if rollbacked.
+	if !committed {
+		return
+	}
+
+	store := p.store
+	// Small amount of messages. We can use the buffered messages directly.
+	// Also no need to query db again.
+	if n <= store.maxBuf {
+		store.flushMsgList(ctx, bufMsgs)
+		return
+	}
+
+	// For larger amount of messages, we need to query the db again.
+	store.flushMsgStream(ctx, store.dialect.SelectMsgsByBatch(ctx, store.db, store.table, p.batch))
+
 }

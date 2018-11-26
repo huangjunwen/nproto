@@ -8,6 +8,10 @@ import (
 
 type mysqlDialect struct{}
 
+var (
+	_ dbStoreDialect = mysqlDialect{}
+)
+
 func (d mysqlDialect) CreateSQL(table string) string {
 	return fmt.Sprintf(`
 	CREATE TABLE IF NOT EXISTS %s (
@@ -48,4 +52,26 @@ func (d mysqlDialect) DeleteMsgs(ctx context.Context, q Queryer, table string, i
 	sql = append(sql, ')')
 	_, err := q.ExecContext(ctx, string(sql))
 	return err
+}
+
+func (d mysqlDialect) SelectMsgsByBatch(ctx context.Context, q Queryer, table, batch string) msgStream {
+	sql := fmt.Sprintf("SELECT id, subject, data FROM %s WHERE batch=?", table)
+	rows, err := q.QueryContext(ctx, sql, batch)
+	if err != nil {
+		return newErrStream(err)
+	}
+	return func(next bool) (*msgNode, error) {
+		if !next {
+			return nil, rows.Close()
+		}
+		if !rows.Next() {
+			return nil, rows.Err()
+		}
+		node := newNode()
+		err := rows.Scan(&node.Id, &node.Subject, &node.Data)
+		if err != nil {
+			return nil, err
+		}
+		return node, nil
+	}
 }

@@ -6,13 +6,6 @@ var (
 	deleteNode = func(node *msgNode) {}
 )
 
-// msgList is a list of messages.
-type msgList struct {
-	head *msgNode
-	tail *msgNode
-	n    int
-}
-
 // msgNode is a single message.
 type msgNode struct {
 	Id      int64
@@ -22,6 +15,18 @@ type msgNode struct {
 	list *msgList
 	next *msgNode
 }
+
+// msgList is a list of messages.
+type msgList struct {
+	head *msgNode
+	tail *msgNode
+	n    int
+}
+
+// msgStream is a stream (unknown length) of messages.
+// The next message (or nil if no more message) should be returned when calling with true.
+// If calling with false, then the stream should be closed and release resource.
+type msgStream func(next bool) (*msgNode, error)
 
 // Append appends node to list. node must not belong to any list.
 func (list *msgList) Append(node *msgNode) {
@@ -85,5 +90,12 @@ func (list *msgList) Iterate() func() *msgNode {
 		ret := node
 		node = node.next
 		return ret
+	}
+}
+
+// newErrStream creates a msgStream that always returns an error.
+func newErrStream(err error) msgStream {
+	return func(next bool) (*msgNode, error) {
+		return nil, err
 	}
 }
