@@ -7,57 +7,57 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// DurConnOptLogger sets structured logger.
-func DurConnOptLogger(logger *zerolog.Logger) Option {
+// OptLogger sets structured logger.
+func OptLogger(logger *zerolog.Logger) Option {
 	return func(dc *DurConn) error {
 		dc.logger = logger.With().Str("component", "nproto.npmsg.durconn.DurConn").Logger()
 		return nil
 	}
 }
 
-// DurConnOptReconnectWait sets reconnection wait, e.g. time between reconnections.
-func DurConnOptReconnectWait(t time.Duration) Option {
+// OptReconnectWait sets reconnection wait, e.g. time between reconnections.
+func OptReconnectWait(t time.Duration) Option {
 	return func(dc *DurConn) error {
 		dc.reconnectWait = t
 		return nil
 	}
 }
 
-// DurConnOptSubjectPrefix sets message subject prefix.
+// OptSubjectPrefix sets message subject prefix.
 // Default "npmsg": If you publish a message with subject "xxx", then the actual subject is "npmsg.xxx".
-func DurConnOptSubjectPrefix(prefix string) Option {
+func OptSubjectPrefix(prefix string) Option {
 	return func(dc *DurConn) error {
 		dc.setSubjectPrefix(prefix)
 		return nil
 	}
 }
 
-// DurConnOptConnectCb sets a callback invoked each time a new stan.Conn is established.
-func DurConnOptConnectCb(fn func(sc stan.Conn)) Option {
+// OptConnectCb sets a callback invoked each time a new stan.Conn is established.
+func OptConnectCb(fn func(sc stan.Conn)) Option {
 	return func(dc *DurConn) error {
 		dc.connectCb = fn
 		return nil
 	}
 }
 
-// DurConnOptDisconnectCb sets a callback invoked each time a stan.Conn lost.
-func DurConnOptDisconnectCb(fn func(sc stan.Conn)) Option {
+// OptDisconnectCb sets a callback invoked each time a stan.Conn lost.
+func OptDisconnectCb(fn func(sc stan.Conn)) Option {
 	return func(dc *DurConn) error {
 		dc.disconnectCb = fn
 		return nil
 	}
 }
 
-// DurConnOptPings sets stan.Pings.
-func DurConnOptPings(interval, maxOut int) Option {
+// OptPings sets stan.Pings.
+func OptPings(interval, maxOut int) Option {
 	return func(dc *DurConn) error {
 		dc.stanOptions = append(dc.stanOptions, stan.Pings(interval, maxOut))
 		return nil
 	}
 }
 
-// DurConnOptPubAckWait sets stan.PubAckWait.
-func DurConnOptPubAckWait(t time.Duration) Option {
+// OptPubAckWait sets stan.PubAckWait.
+func OptPubAckWait(t time.Duration) Option {
 	return func(dc *DurConn) error {
 		dc.stanOptions = append(dc.stanOptions, stan.PubAckWait(t))
 		return nil

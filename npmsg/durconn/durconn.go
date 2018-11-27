@@ -48,14 +48,14 @@ var (
 )
 
 // DurConn implements a "durable" connection to nats-streaming server: auto reconnection/auto resubscription.
-// And it implements RawMsgPublisher/RawBatchMsgPublisher/RawMsgSubscriber interfaces.
+// Implements RawMsgPublisher/RawBatchMsgPublisher/RawMsgSubscriber interfaces.
 type DurConn struct {
 	// Options.
 	logger        zerolog.Logger
 	reconnectWait time.Duration
 	subjectPrefix string
-	connectCb     func(sc stan.Conn)
-	disconnectCb  func(sc stan.Conn)
+	connectCb     func(stan.Conn)
+	disconnectCb  func(stan.Conn)
 	stanOptions   []stan.Option
 
 	// Immutable fields.

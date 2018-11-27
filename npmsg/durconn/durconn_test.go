@@ -349,10 +349,10 @@ func TestConnect(t *testing.T) {
 		disconnectCb := func(_ stan.Conn) { disconnectc <- struct{}{} }
 
 		dc, err = NewDurConn(nc, res1.Options.ClusterId,
-			DurConnOptConnectCb(connectCb),       // Use the callback to notify connection establish.
-			DurConnOptDisconnectCb(disconnectCb), // Use the callback to notify disconnection.
-			DurConnOptReconnectWait(time.Second), // A short reconnect wait.
-			DurConnOptPings(1, 3),                // Minimal pings.
+			OptConnectCb(connectCb),       // Use the callback to notify connection establish.
+			OptDisconnectCb(disconnectCb), // Use the callback to notify disconnection.
+			OptReconnectWait(time.Second), // A short reconnect wait.
+			OptPings(1, 3),                // Minimal pings.
 		)
 		if err != nil {
 			log.Panic(err)
@@ -446,10 +446,10 @@ func TestPubSub(t *testing.T) {
 		disconnectCb := func(_ stan.Conn) { disconnectc <- struct{}{} }
 
 		dc, err = NewDurConn(nc, res1.Options.ClusterId,
-			DurConnOptConnectCb(connectCb),       // Use the callback to notify connection establish.
-			DurConnOptDisconnectCb(disconnectCb), // Use the callback to notify disconnection.
-			DurConnOptReconnectWait(time.Second), // A short reconnect wait.
-			DurConnOptPings(1, 3),                // Minimal pings.
+			OptConnectCb(connectCb),       // Use the callback to notify connection establish.
+			OptDisconnectCb(disconnectCb), // Use the callback to notify disconnection.
+			OptReconnectWait(time.Second), // A short reconnect wait.
+			OptPings(1, 3),                // Minimal pings.
 		)
 		if err != nil {
 			log.Panic(err)
@@ -611,7 +611,7 @@ func TestMultipleSub(t *testing.T) {
 		connectCb2 := func(_ stan.Conn) { connectc2 <- struct{}{} }
 
 		dc1, err = NewDurConn(nc, res.Options.ClusterId,
-			DurConnOptConnectCb(connectCb1), // Use the callback to notify connection establish.
+			OptConnectCb(connectCb1), // Use the callback to notify connection establish.
 		)
 		if err != nil {
 			log.Panic(err)
@@ -619,7 +619,7 @@ func TestMultipleSub(t *testing.T) {
 		defer dc1.Close()
 
 		dc2, err = NewDurConn(nc, res.Options.ClusterId,
-			DurConnOptConnectCb(connectCb2), // Use the callback to notify connection establish.
+			OptConnectCb(connectCb2), // Use the callback to notify connection establish.
 		)
 		if err != nil {
 			log.Panic(err)
