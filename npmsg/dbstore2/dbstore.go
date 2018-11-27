@@ -3,6 +3,8 @@ package dbstore
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/huangjunwen/nproto/npmsg"
@@ -11,17 +13,31 @@ import (
 	"github.com/rs/zerolog"
 )
 
+var (
+	DefaultDeleteBulkSize = 100
+	DefaultMaxInflight    = 2048
+	DefaultMaxBuf         = 512
+)
+
+var (
+	ErrMaxInflightAndBuf = errors.New("nproto.npmsg.dbstore.DBStore: MaxBuf should be <= MaxInflight")
+	ErrUnknownDialect    = func(dialect string) error {
+		return fmt.Errorf("nproto.npmsg.dbstore.DBStore: Unknown dialect: %+q", dialect)
+	}
+)
+
 type DBStore struct {
 	logger         zerolog.Logger
 	deleteBulkSize int
 	maxInflight    int
 	maxBuf         int
+	createTable    bool
 
 	// Immutable fields.
 	downstream npmsg.RawMsgAsyncPublisher
+	dialect    dbStoreDialect
 	db         *sql.DB
 	table      string
-	dialect    dbStoreDialect
 
 	// Mutable fields.
 	closeCtx  context.Context
@@ -54,9 +70,52 @@ type dbStoreDialect interface {
 	SelectMsgsByBatch(ctx context.Context, q Queryer, table, batch string) msgStream
 }
 
+type Option func(*DBStore) error
+
 var (
 	_ npmsg.RawMsgPublisher = (*DBPublisher)(nil)
 )
+
+func NewDBStore(downstream npmsg.RawMsgAsyncPublisher, dialect string, db *sql.DB, table string, opts ...Option) (*DBStore, error) {
+	ret := &DBStore{
+		logger:         zerolog.Nop(),
+		deleteBulkSize: DefaultDeleteBulkSize,
+		maxInflight:    DefaultMaxInflight,
+		maxBuf:         DefaultMaxBuf,
+		downstream:     downstream,
+		db:             db,
+		table:          table,
+	}
+
+	switch dialect {
+	case "mysql":
+		ret.dialect = mysqlDialect{}
+	default:
+		return nil, ErrUnknownDialect(dialect)
+	}
+
+	for _, opt := range opts {
+		if err := opt(ret); err != nil {
+			return nil, err
+		}
+	}
+
+	if ret.maxBuf > ret.maxInflight {
+		return nil, ErrMaxInflightAndBuf
+	}
+
+	if ret.createTable {
+		_, err := db.Exec(ret.dialect.CreateSQL(table))
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	ret.closeCtx, ret.closeFunc = context.WithCancel(context.Background())
+	// TODO: launch re-delivery goroutine.
+
+	return ret, nil
+}
 
 func (store *DBStore) NewPublisher(q Queryer) *DBPublisher {
 
