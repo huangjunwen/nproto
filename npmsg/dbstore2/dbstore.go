@@ -117,6 +117,11 @@ func NewDBStore(downstream npmsg.RawMsgAsyncPublisher, dialect string, db *sql.D
 	return ret, nil
 }
 
+func (store *DBStore) Close() {
+	store.closeFunc()
+	// TODO:
+}
+
 func (store *DBStore) NewPublisher(q Queryer) *DBPublisher {
 
 	return &DBPublisher{
@@ -364,7 +369,7 @@ func (p *DBPublisher) Finish(ctx context.Context, committed bool) {
 	store := p.store
 	// Small amount of messages. We can use the buffered messages directly.
 	// Also no need to query db again.
-	if n <= store.maxBuf {
+	if bufMsgs.n == n {
 		store.flushMsgList(ctx, bufMsgs)
 		return
 	}
