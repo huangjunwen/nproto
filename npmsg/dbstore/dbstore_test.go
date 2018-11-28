@@ -3,11 +3,15 @@ package dbstore
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"log"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/huangjunwen/nproto/npmsg"
 	"github.com/huangjunwen/nproto/npmsg/durconn"
 
 	tstmysql "github.com/huangjunwen/tstsvc/mysql"
@@ -17,12 +21,73 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+type UnstableAsyncPublisher struct {
+	npmsg.RawMsgAsyncPublisher
+	cnt int64
+}
+
+var (
+	_           npmsg.RawMsgAsyncPublisher = (*UnstableAsyncPublisher)(nil)
+	errUnstable error                      = errors.New("Unstable error")
+)
+
+func NewUnstableAsyncPublisher(p npmsg.RawMsgAsyncPublisher) *UnstableAsyncPublisher {
+	return &UnstableAsyncPublisher{
+		RawMsgAsyncPublisher: p,
+	}
+}
+
+func (p *UnstableAsyncPublisher) ResetCounter() {
+	p.cnt = 0
+}
+
+func (p *UnstableAsyncPublisher) PublishAsync(ctx context.Context, subject string, data []byte, cb func(error)) error {
+	cnt := atomic.AddInt64(&p.cnt, 1)
+	// If cnt is even, then failed.
+	if cnt%2 == 0 {
+		if cnt == 2 {
+			// Failed directly.
+			return errUnstable
+		} else {
+			// Failed after some time.
+			time.AfterFunc(time.Duration(cnt)*time.Millisecond, func() {
+				cb(errUnstable)
+			})
+			return nil
+		}
+	}
+	return p.RawMsgAsyncPublisher.PublishAsync(ctx, subject, data, cb)
+}
+
 func TestFlush(t *testing.T) {
 	log.Printf("\n")
 	log.Printf(">>> TestFlush.\n")
 	var err error
 	assert := assert.New(t)
 
+	// Mock newNode/deleteNode to check their counting.
+	newNodeCnt := int64(0)
+	deleteNodeCnt := int64(0)
+	originNewNode := newNode
+	originDeleteNode := deleteNode
+	defer func() {
+		newNode = originNewNode
+		deleteNode = originDeleteNode
+	}()
+	newNode = func() *msgNode {
+		atomic.AddInt64(&newNodeCnt, 1)
+		return originNewNode()
+	}
+	deleteNode = func(node *msgNode) {
+		atomic.AddInt64(&deleteNodeCnt, 1)
+		originDeleteNode(node)
+	}
+	checkNewDeleteCnt := func() {
+		log.Printf("* newNodeCnt=%d deleteNodeCnt=%d\n", newNodeCnt, deleteNodeCnt)
+		assert.Equal(newNodeCnt, deleteNodeCnt)
+	}
+
+	// Starts test mysql server.
 	var resMySQL *tstmysql.Resource
 	{
 		resMySQL, err = tstmysql.Run(nil)
@@ -33,6 +98,7 @@ func TestFlush(t *testing.T) {
 		log.Printf("MySQL server started.\n")
 	}
 
+	// Connects to test mysql server.
 	var db *sql.DB
 	{
 		db, err = resMySQL.Client()
@@ -43,6 +109,7 @@ func TestFlush(t *testing.T) {
 		log.Printf("MySQL client created.\n")
 	}
 
+	// Starts test stan server.
 	var resStan *tststan.Resource
 	{
 		resStan, err = tststan.Run(nil)
@@ -53,6 +120,7 @@ func TestFlush(t *testing.T) {
 		log.Printf("Stan server started.\n")
 	}
 
+	// Connects to embeded nats server.
 	var nc *nats.Conn
 	{
 		nc, err = resStan.NatsClient(
@@ -65,6 +133,7 @@ func TestFlush(t *testing.T) {
 		log.Printf("Nats client created.\n")
 	}
 
+	// Creates DurConn.
 	var dc *durconn.DurConn
 	{
 		dc, err = durconn.NewDurConn(nc, resStan.ClusterId)
@@ -75,6 +144,7 @@ func TestFlush(t *testing.T) {
 		log.Printf("DurConn created.\n")
 	}
 
+	// Creates DBStore with small MaxInflight and MaxBuf.
 	var store *DBStore
 	table := "msgstore"
 	{
@@ -86,8 +156,8 @@ func TestFlush(t *testing.T) {
 		assert.Nil(store)
 
 		store, err = NewDBStore(dc, "mysql", db, table,
-			OptMaxInflight(2),
-			OptMaxBuf(1),
+			OptMaxInflight(3),
+			OptMaxBuf(2),
 			OptCreateTable(),
 		)
 		assert.NoError(err)
@@ -96,7 +166,7 @@ func TestFlush(t *testing.T) {
 		log.Printf("DBStore created.\n")
 	}
 
-	// Create a subscription to multiply some distinct prime numbers.
+	// Create a subscription to multiply some DISTINCT prime numbers.
 	testSubject := "primeproduct"
 	testQueue := "default"
 	wg := &sync.WaitGroup{} // wg.Done() is called each time product is updated.
@@ -145,7 +215,29 @@ func TestFlush(t *testing.T) {
 		log.Printf("DurConn subscribed.\n")
 	}
 
-	testFlush := func(ctx context.Context, primes []uint64) {
+	clearTable := func() {
+		_, err := db.Exec("DELETE FROM " + table)
+		assert.NoError(err)
+	}
+
+	assertTableRows := func(expect int) {
+		rows, err := db.Query("SELECT data FROM " + table)
+		assert.NoError(err)
+		n := 0
+		for rows.Next() {
+			data := []byte{}
+			assert.NoError(rows.Scan(&data))
+			n += 1
+			log.Printf("*** table row: %+q\n", data)
+		}
+		assert.Equal(expect, n)
+	}
+
+	// --- Test normal case ---
+	testNormal := func(primes []uint64) {
+		defer clearTable()
+		ctx := context.Background()
+
 		// Start a transaction.
 		tx, err := db.Begin()
 		assert.NoError(err)
@@ -158,8 +250,60 @@ func TestFlush(t *testing.T) {
 		expect := uint64(1)
 		p := store.NewPublisher(tx)
 		for _, prime := range primes {
+			err := p.Publish(ctx, testSubject, []byte(strconv.FormatUint(prime, 10)))
+			assert.NoError(err)
 			expect = expect * prime
-			wg.Add(1)
+		}
+
+		// Commit.
+		assert.NoError(tx.Commit())
+
+		// Check database rows.
+		assertTableRows(len(primes))
+
+		// Flush.
+		wg.Add(len(primes))
+		p.Finish(ctx, true)
+		wg.Wait()
+
+		// Check database rows.
+		assertTableRows(0)
+
+		// Check.
+		assert.Equal(expect, resetProduct())
+	}
+
+	testNormal([]uint64{})
+	checkNewDeleteCnt()
+	testNormal([]uint64{2, 3}) // flushMsgList
+	checkNewDeleteCnt()
+	testNormal([]uint64{5, 7, 11, 13, 17}) // flushMsgStream
+	checkNewDeleteCnt()
+
+	// --- Test error case ---
+	testError := func(primes []uint64) {
+		defer clearTable()
+
+		// Replace downstream.
+		originDownstream := store.downstream
+		defer func() {
+			store.downstream = originDownstream
+		}()
+		store.downstream = NewUnstableAsyncPublisher(originDownstream)
+
+		ctx := context.Background()
+
+		// Start a transaction.
+		tx, err := db.Begin()
+		assert.NoError(err)
+		defer tx.Rollback()
+
+		// Reset the product.
+		resetProduct()
+
+		// Publish distinct prime numbers.
+		p := store.NewPublisher(tx)
+		for _, prime := range primes {
 			err := p.Publish(ctx, testSubject, []byte(strconv.FormatUint(prime, 10)))
 			assert.NoError(err)
 		}
@@ -167,18 +311,25 @@ func TestFlush(t *testing.T) {
 		// Commit.
 		assert.NoError(tx.Commit())
 
-		// Flush.
-		p.Finish(ctx, true)
+		// Check database rows.
+		assertTableRows(len(primes))
 
-		// Wait finish.
+		// UnstableAsyncPublisher makes publishing half failed.
+		expectSucc := len(primes)/2 + len(primes)%2
+
+		// Flush.
+		wg.Add(expectSucc)
+		p.Finish(ctx, true)
 		wg.Wait()
 
-		// Check.
-		assert.Equal(expect, resetProduct())
+		// Check database rows.
+		assertTableRows(len(primes) - expectSucc)
 	}
 
-	testFlush(context.Background(), []uint64{})
-	testFlush(context.Background(), []uint64{2})       // flushMsgList
-	testFlush(context.Background(), []uint64{3, 5, 7}) // flushMsgStream
-
+	testError([]uint64{})
+	checkNewDeleteCnt()
+	testError([]uint64{2, 3}) // flushMsgList
+	checkNewDeleteCnt()
+	testError([]uint64{5, 7, 11, 13, 17}) // flushMsgStream
+	checkNewDeleteCnt()
 }
