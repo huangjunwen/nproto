@@ -215,12 +215,12 @@ func TestFlush(t *testing.T) {
 		log.Printf("DurConn subscribed.\n")
 	}
 
-	clearTable := func() {
+	clearMsgTable := func() {
 		_, err := db.Exec("DELETE FROM " + table)
 		assert.NoError(err)
 	}
 
-	assertTableRows := func(expect int) {
+	assertMsgTableRows := func(expect int) {
 		rows, err := db.Query("SELECT data FROM " + table)
 		assert.NoError(err)
 		n := 0
@@ -234,8 +234,8 @@ func TestFlush(t *testing.T) {
 	}
 
 	// --- Test normal case ---
-	testNormal := func(primes []uint64) {
-		defer clearTable()
+	testNormalFlush := func(primes []uint64) {
+		defer clearMsgTable()
 		ctx := context.Background()
 
 		// Start a transaction.
@@ -259,7 +259,7 @@ func TestFlush(t *testing.T) {
 		assert.NoError(tx.Commit())
 
 		// Check database rows.
-		assertTableRows(len(primes))
+		assertMsgTableRows(len(primes))
 
 		// Flush.
 		wg.Add(len(primes))
@@ -267,22 +267,22 @@ func TestFlush(t *testing.T) {
 		wg.Wait()
 
 		// Check database rows.
-		assertTableRows(0)
+		assertMsgTableRows(0)
 
 		// Check.
 		assert.Equal(expect, resetProduct())
 	}
 
-	testNormal([]uint64{})
+	testNormalFlush([]uint64{})
 	checkNewDeleteCnt()
-	testNormal([]uint64{2, 3}) // flushMsgList
+	testNormalFlush([]uint64{2, 3}) // flushMsgList
 	checkNewDeleteCnt()
-	testNormal([]uint64{5, 7, 11, 13, 17}) // flushMsgStream
+	testNormalFlush([]uint64{5, 7, 11, 13, 17}) // flushMsgStream
 	checkNewDeleteCnt()
 
 	// --- Test error case ---
-	testError := func(primes []uint64) {
-		defer clearTable()
+	testErrorFlush := func(primes []uint64) {
+		defer clearMsgTable()
 
 		// Replace downstream.
 		originDownstream := store.downstream
@@ -312,7 +312,7 @@ func TestFlush(t *testing.T) {
 		assert.NoError(tx.Commit())
 
 		// Check database rows.
-		assertTableRows(len(primes))
+		assertMsgTableRows(len(primes))
 
 		// UnstableAsyncPublisher makes publishing half failed.
 		expectSucc := len(primes)/2 + len(primes)%2
@@ -323,13 +323,13 @@ func TestFlush(t *testing.T) {
 		wg.Wait()
 
 		// Check database rows.
-		assertTableRows(len(primes) - expectSucc)
+		assertMsgTableRows(len(primes) - expectSucc)
 	}
 
-	testError([]uint64{})
+	testErrorFlush([]uint64{})
 	checkNewDeleteCnt()
-	testError([]uint64{2, 3}) // flushMsgList
+	testErrorFlush([]uint64{2, 3}) // flushMsgList
 	checkNewDeleteCnt()
-	testError([]uint64{5, 7, 11, 13, 17}) // flushMsgStream
+	testErrorFlush([]uint64{5, 7, 11, 13, 17}) // flushMsgStream
 	checkNewDeleteCnt()
 }
