@@ -14,12 +14,12 @@ func OptLogger(logger *zerolog.Logger) Option {
 	}
 }
 
-func OptDeleteBulkSize(bulkSize int) Option {
+func OptMaxDelBulkSz(bulkSize int) Option {
 	return func(store *DBStore) error {
 		if bulkSize <= 0 {
 			return fmt.Errorf("nproto.npmsg.dbstore.DBStore: DeleteBulkSize must >= 1")
 		}
-		store.deleteBulkSize = bulkSize
+		store.maxDelBulkSz = bulkSize
 		return nil
 	}
 }
@@ -36,8 +36,8 @@ func OptMaxInflight(maxInflight int) Option {
 
 func OptMaxBuf(maxBuf int) Option {
 	return func(store *DBStore) error {
-		if maxBuf <= 0 {
-			return fmt.Errorf("nproto.npmsg.dbstore.DBStore: MaxBuf must >= 1")
+		if maxBuf < 0 {
+			return fmt.Errorf("nproto.npmsg.dbstore.DBStore: MaxBuf must >= 0")
 		}
 		store.maxBuf = maxBuf
 		return nil

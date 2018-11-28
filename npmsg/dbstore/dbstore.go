@@ -14,9 +14,9 @@ import (
 )
 
 var (
-	DefaultDeleteBulkSize = 100
-	DefaultMaxInflight    = 2048
-	DefaultMaxBuf         = 512
+	DefaultMaxDelBulkSz = 1000
+	DefaultMaxInflight  = 2048
+	DefaultMaxBuf       = 512
 )
 
 var (
@@ -27,11 +27,11 @@ var (
 )
 
 type DBStore struct {
-	logger         zerolog.Logger
-	deleteBulkSize int
-	maxInflight    int
-	maxBuf         int
-	createTable    bool
+	logger       zerolog.Logger
+	maxDelBulkSz int
+	maxInflight  int
+	maxBuf       int
+	createTable  bool
 
 	// Immutable fields.
 	downstream npmsg.RawMsgAsyncPublisher
@@ -78,13 +78,13 @@ var (
 
 func NewDBStore(downstream npmsg.RawMsgAsyncPublisher, dialect string, db *sql.DB, table string, opts ...Option) (*DBStore, error) {
 	ret := &DBStore{
-		logger:         zerolog.Nop(),
-		deleteBulkSize: DefaultDeleteBulkSize,
-		maxInflight:    DefaultMaxInflight,
-		maxBuf:         DefaultMaxBuf,
-		downstream:     downstream,
-		db:             db,
-		table:          table,
+		logger:       zerolog.Nop(),
+		maxDelBulkSz: DefaultMaxDelBulkSz,
+		maxInflight:  DefaultMaxInflight,
+		maxBuf:       DefaultMaxBuf,
+		downstream:   downstream,
+		db:           db,
+		table:        table,
 	}
 
 	switch dialect {
@@ -148,6 +148,9 @@ L:
 		select {
 		case <-ctx.Done():
 			logger.Warn().Msg("context done during publishing")
+			break L
+		case <-store.closeCtx.Done():
+			logger.Warn().Msg("close during publishing")
 			break L
 		default:
 		}
@@ -241,6 +244,9 @@ L:
 		case <-ctx.Done():
 			logger.Warn().Msg("context done during publishing")
 			break L
+		case <-store.closeCtx.Done():
+			logger.Warn().Msg("close during publishing")
+			break L
 		case taskc <- struct{}{}:
 		}
 
@@ -305,9 +311,9 @@ func (store *DBStore) deleteMsgs(list *msgList, idsBuff []int64, taskc chan stru
 	iter := list.Iterate()
 	end := false
 	for !end {
-		// Collect no more than deleteBulkSize message ids.
+		// Collect no more than maxDelBulkSz message ids.
 		idsBuff = idsBuff[0:0]
-		for len(idsBuff) < store.deleteBulkSize {
+		for len(idsBuff) < store.maxDelBulkSz {
 			msg := iter()
 			if msg == nil {
 				end = true
