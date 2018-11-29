@@ -2,6 +2,7 @@ package dbstore
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/rs/zerolog"
 )
@@ -47,6 +48,20 @@ func OptMaxBuf(maxBuf int) Option {
 func OptCreateTable() Option {
 	return func(store *DBStore) error {
 		store.createTable = true
+		return nil
+	}
+}
+
+func OptRetryWait(t time.Duration) Option {
+	return func(store *DBStore) error {
+		store.retryWait = t
+		return nil
+	}
+}
+
+func OptFlushWait(t time.Duration) Option {
+	return func(store *DBStore) error {
+		store.flushWait = t
 		return nil
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/huangjunwen/nproto/npmsg"
 
@@ -17,6 +18,8 @@ var (
 	DefaultMaxDelBulkSz = 1000
 	DefaultMaxInflight  = 2048
 	DefaultMaxBuf       = 512
+	DefaultRetryWait    = 2 * time.Second
+	DefaultFlushWait    = 15 * time.Second
 )
 
 var (
@@ -32,6 +35,8 @@ type DBStore struct {
 	maxInflight  int
 	maxBuf       int
 	createTable  bool
+	retryWait    time.Duration
+	flushWait    time.Duration
 
 	// Immutable fields.
 	downstream npmsg.RawMsgAsyncPublisher
@@ -40,6 +45,7 @@ type DBStore struct {
 	table      string
 
 	// Mutable fields.
+	loopWg    sync.WaitGroup
 	closeCtx  context.Context
 	closeFunc context.CancelFunc
 }
@@ -64,10 +70,13 @@ type Queryer interface {
 }
 
 type dbStoreDialect interface {
-	CreateSQL(table string) string
+	CreateTable(ctx context.Context, q Queryer, table string) error
 	InsertMsg(ctx context.Context, q Queryer, table, batch, subject string, data []byte) (id int64, err error)
 	DeleteMsgs(ctx context.Context, q Queryer, table string, ids []int64) error
 	SelectMsgsByBatch(ctx context.Context, q Queryer, table, batch string) msgStream
+	SelectMsgsAll(ctx context.Context, q Queryer, table string, tsDelta time.Duration) msgStream
+	GetLock(ctx context.Context, conn *sql.Conn, table string) (acquired bool, err error)
+	ReleaseLock(ctx context.Context, conn *sql.Conn, table string) error
 }
 
 type Option func(*DBStore) error
@@ -82,6 +91,8 @@ func NewDBStore(downstream npmsg.RawMsgAsyncPublisher, dialect string, db *sql.D
 		maxDelBulkSz: DefaultMaxDelBulkSz,
 		maxInflight:  DefaultMaxInflight,
 		maxBuf:       DefaultMaxBuf,
+		retryWait:    DefaultRetryWait,
+		flushWait:    DefaultFlushWait,
 		downstream:   downstream,
 		db:           db,
 		table:        table,
@@ -105,21 +116,21 @@ func NewDBStore(downstream npmsg.RawMsgAsyncPublisher, dialect string, db *sql.D
 	}
 
 	if ret.createTable {
-		_, err := db.Exec(ret.dialect.CreateSQL(table))
-		if err != nil {
+		if err := ret.dialect.CreateTable(context.Background(), db, table); err != nil {
 			return nil, err
 		}
 	}
 
 	ret.closeCtx, ret.closeFunc = context.WithCancel(context.Background())
-	// TODO: launch re-delivery goroutine.
 
+	// Start the redelivery loop.
+	ret.loop()
 	return ret, nil
 }
 
 func (store *DBStore) Close() {
 	store.closeFunc()
-	// TODO:
+	store.loopWg.Wait()
 }
 
 func (store *DBStore) NewPublisher(q Queryer) *DBPublisher {
@@ -129,6 +140,94 @@ func (store *DBStore) NewPublisher(q Queryer) *DBPublisher {
 		q:       q,
 		batch:   xid.New().String(),
 		bufMsgs: &msgList{},
+	}
+}
+
+// loop is the redelivery loop.
+func (store *DBStore) loop() {
+	fn := func() {
+		// Wait for connection.
+		conn, err := store.getConn()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		// Wait for global lock.
+		err = store.getLock(conn)
+		if err != nil {
+			return
+		}
+		defer store.dialect.ReleaseLock(store.closeCtx, conn, store.table)
+
+		// Main loop.
+		for {
+			// Select msgs older than flushWait.
+			stream := store.dialect.SelectMsgsAll(store.closeCtx, store.db, store.table, store.flushWait)
+			store.flushMsgStream(store.closeCtx, stream)
+
+			select {
+			case <-store.closeCtx.Done():
+				return
+			case <-time.After(store.flushWait):
+				continue
+			}
+		}
+	}
+	store.loopWg.Add(1)
+	go func() {
+		defer store.loopWg.Done()
+		// Loop forever until closeCtx is done.
+		for {
+			select {
+			case <-store.closeCtx.Done():
+				return
+			default:
+			}
+			fn()
+		}
+	}()
+}
+
+// getConn gets a single connection to db. It returns an error when closed.
+func (store *DBStore) getConn() (conn *sql.Conn, err error) {
+	logger := &store.logger
+	for {
+		conn, err = store.db.Conn(store.closeCtx)
+		if err == nil {
+			return
+		}
+		logger.Error().Str("fn", "getConn").Err(err).Msg("get db conn error")
+
+		select {
+		case <-store.closeCtx.Done():
+			return nil, store.closeCtx.Err()
+		case <-time.After(store.retryWait):
+			continue
+		}
+	}
+}
+
+// getLock gets a global lock. It returns nil when lock acquired.
+// And returns an error when error or closed.
+func (store *DBStore) getLock(conn *sql.Conn) (err error) {
+	logger := &store.logger
+	for {
+		acquired, err := store.dialect.GetLock(store.closeCtx, conn, store.table)
+		if acquired {
+			return nil
+		}
+		if err != nil {
+			logger.Error().Str("fn", "getLock").Err(err).Msg("get db lock error")
+			return err
+		}
+
+		select {
+		case <-store.closeCtx.Done():
+			return store.closeCtx.Err()
+		case <-time.After(store.retryWait):
+			continue
+		}
 	}
 }
 

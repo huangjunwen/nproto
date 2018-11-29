@@ -42,11 +42,8 @@ func TestMySQLDialect(t *testing.T) {
 		log.Printf("MySQL client created.\n")
 	}
 
-	// Test CreateSQL.
-	{
-		_, err := db.Exec(dialect.CreateSQL(table))
-		assert.NoError(err)
-	}
+	// Test CreateTable.
+	assert.NoError(dialect.CreateTable(ctx, db, table))
 
 	// Test InsertMsg.
 	{
@@ -81,6 +78,24 @@ func TestMySQLDialect(t *testing.T) {
 		assert.Len(ids, 2)
 	}
 
+	// Test SelectMsgsAll
+	{
+		ids := []int64{}
+		stream := dialect.SelectMsgsAll(ctx, db, table, 0)
+		for {
+			msg, err := stream(true)
+			assert.NoError(err)
+			if msg == nil {
+				break
+			}
+			ids = append(ids, msg.Id)
+		}
+		msg, err := stream(false)
+		assert.NoError(err)
+		assert.Nil(msg)
+		assert.Len(ids, 2)
+	}
+
 	// Test DeleteMsgs.
 	{
 		err = dialect.DeleteMsgs(ctx, db, table, ids)
@@ -92,5 +107,41 @@ func TestMySQLDialect(t *testing.T) {
 		err = db.QueryRow(fmt.Sprintf("SELECT COUNT(*) FROM %s", table)).Scan(&n)
 		assert.NoError(err)
 		assert.Equal(0, n)
+	}
+
+	// Test GetLock/ReleaseLock.
+	{
+		conn1, err := db.Conn(ctx)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer conn1.Close()
+
+		conn2, err := db.Conn(ctx)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer conn2.Close()
+
+		// conn1 should acquire the lock.
+		acquired, err := dialect.GetLock(ctx, conn1, table)
+		assert.NoError(err)
+		assert.True(acquired)
+
+		// conn2 should not acquire the lock.
+		acquired, err = dialect.GetLock(ctx, conn2, table)
+		assert.NoError(err)
+		assert.False(acquired)
+
+		// conn1 release lock.
+		assert.NoError(dialect.ReleaseLock(ctx, conn1, table))
+
+		// now conn2 should acquire the lock.
+		acquired, err = dialect.GetLock(ctx, conn2, table)
+		assert.NoError(err)
+		assert.True(acquired)
+
+		// conn2 release lock.
+		assert.NoError(dialect.ReleaseLock(ctx, conn2, table))
 	}
 }
