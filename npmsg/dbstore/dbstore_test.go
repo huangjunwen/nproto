@@ -159,6 +159,7 @@ func TestFlush(t *testing.T) {
 			OptMaxInflight(3),
 			OptMaxBuf(2),
 			OptCreateTable(),
+			OptNoRedeliveryLoop(),
 		)
 		assert.NoError(err)
 		assert.NotNil(store)

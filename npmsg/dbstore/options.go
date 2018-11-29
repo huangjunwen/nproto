@@ -65,3 +65,10 @@ func OptFlushWait(t time.Duration) Option {
 		return nil
 	}
 }
+
+func OptNoRedeliveryLoop() Option {
+	return func(store *DBStore) error {
+		store.noRedeliveryLoop = true
+		return nil
+	}
+}

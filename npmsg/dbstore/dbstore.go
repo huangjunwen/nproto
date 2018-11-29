@@ -30,13 +30,14 @@ var (
 )
 
 type DBStore struct {
-	logger       zerolog.Logger
-	maxDelBulkSz int
-	maxInflight  int
-	maxBuf       int
-	createTable  bool
-	retryWait    time.Duration
-	flushWait    time.Duration
+	logger           zerolog.Logger
+	maxDelBulkSz     int
+	maxInflight      int
+	maxBuf           int
+	createTable      bool
+	retryWait        time.Duration
+	flushWait        time.Duration
+	noRedeliveryLoop bool
 
 	// Immutable fields.
 	downstream npmsg.RawMsgAsyncPublisher
@@ -124,7 +125,9 @@ func NewDBStore(downstream npmsg.RawMsgAsyncPublisher, dialect string, db *sql.D
 	ret.closeCtx, ret.closeFunc = context.WithCancel(context.Background())
 
 	// Start the redelivery loop.
-	ret.loop()
+	if !ret.noRedeliveryLoop {
+		ret.loop()
+	}
 	return ret, nil
 }
 
