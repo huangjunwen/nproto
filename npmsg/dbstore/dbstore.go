@@ -126,7 +126,7 @@ func NewDBStore(downstream npmsg.RawMsgAsyncPublisher, dialect string, db *sql.D
 
 	// Start the redelivery loop.
 	if !ret.noRedeliveryLoop {
-		ret.loop()
+		ret.redeliveryLoop()
 	}
 	return ret, nil
 }
@@ -146,8 +146,8 @@ func (store *DBStore) NewPublisher(q Queryer) *DBPublisher {
 	}
 }
 
-// loop is the redelivery loop.
-func (store *DBStore) loop() {
+// redeliveryLoop is the redelivery loop.
+func (store *DBStore) redeliveryLoop() {
 	fn := func() {
 		// Wait for connection.
 		conn, err := store.getConn()
@@ -269,7 +269,6 @@ L:
 			if err != nil {
 				// Release the msg if err.
 				logger.Error().Err(err).Msg("publish error")
-				deleteNode(msg)
 			} else {
 				// Append to success list.
 				mu.Lock()
@@ -369,7 +368,6 @@ L:
 				// Release the msg if err.
 				<-taskc
 				logger.Error().Err(err).Msg("publish error")
-				deleteNode(msg)
 			} else {
 				// Append to success list.
 				mu.Lock()
@@ -449,10 +447,11 @@ func (p *DBPublisher) Publish(ctx context.Context, subject string, data []byte) 
 	// Append to bufMsgs if not more then maxBuf.
 	p.mu.Lock()
 	if p.n < store.maxBuf {
-		msg := newNode()
-		msg.Id = id
-		msg.Subject = subject
-		msg.Data = data
+		msg := &msgNode{
+			Id:      id,
+			Subject: subject,
+			Data:    data,
+		}
 		p.bufMsgs.Append(msg)
 	}
 	p.n += 1
@@ -460,19 +459,14 @@ func (p *DBPublisher) Publish(ctx context.Context, subject string, data []byte) 
 	return nil
 }
 
-func (p *DBPublisher) Finish(ctx context.Context, committed bool) {
+func (p *DBPublisher) Flush(ctx context.Context) {
 	p.mu.Lock()
 	n := p.n
 	bufMsgs := p.bufMsgs
 	p.n = 0
-	p.bufMsgs = nil // Just set to nil since there should be no further Publish.
+	p.bufMsgs = &msgList{}
 	p.mu.Unlock()
 	defer bufMsgs.Reset()
-
-	// Do nothing if rollbacked.
-	if !committed {
-		return
-	}
 
 	store := p.store
 	// Small amount of messages. We can use the buffered messages directly.

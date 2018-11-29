@@ -65,27 +65,7 @@ func TestFlush(t *testing.T) {
 	var err error
 	assert := assert.New(t)
 
-	// Mock newNode/deleteNode to check their counting.
-	newNodeCnt := int64(0)
-	deleteNodeCnt := int64(0)
-	originNewNode := newNode
-	originDeleteNode := deleteNode
-	defer func() {
-		newNode = originNewNode
-		deleteNode = originDeleteNode
-	}()
-	newNode = func() *msgNode {
-		atomic.AddInt64(&newNodeCnt, 1)
-		return originNewNode()
-	}
-	deleteNode = func(node *msgNode) {
-		atomic.AddInt64(&deleteNodeCnt, 1)
-		originDeleteNode(node)
-	}
-	checkNewDeleteCnt := func() {
-		log.Printf("* newNodeCnt=%d deleteNodeCnt=%d\n", newNodeCnt, deleteNodeCnt)
-		assert.Equal(newNodeCnt, deleteNodeCnt)
-	}
+	bgctx := context.Background()
 
 	// Starts test mysql server.
 	var resMySQL *tstmysql.Resource
@@ -144,25 +124,29 @@ func TestFlush(t *testing.T) {
 		log.Printf("DurConn created.\n")
 	}
 
-	// Creates DBStore with small MaxInflight and MaxBuf.
+	// Creates DBStore with small MaxInflight/MaxBuf/FlushWait.
 	var store *DBStore
 	table := "msgstore"
 	{
-		store, err = NewDBStore(dc, "mysql", db, table,
-			OptMaxInflight(100),
-			OptMaxBuf(101),
-		)
-		assert.Error(err)
-		assert.Nil(store)
+		{
+			store, err = NewDBStore(dc, "mysql", db, table,
+				OptMaxInflight(100),
+				OptMaxBuf(101),
+			)
+			assert.Error(err)
+			assert.Nil(store)
+		}
 
 		store, err = NewDBStore(dc, "mysql", db, table,
 			OptMaxInflight(3),
 			OptMaxBuf(2),
 			OptCreateTable(),
-			OptNoRedeliveryLoop(),
+			OptFlushWait(500*time.Millisecond), // Short flush wait.
+			OptNoRedeliveryLoop(),              // NOTE: Manually run the redeliveryLoop later.
 		)
-		assert.NoError(err)
-		assert.NotNil(store)
+		if err != nil {
+			log.Panic(err)
+		}
 		defer store.Close()
 		log.Printf("DBStore created.\n")
 	}
@@ -178,6 +162,7 @@ func TestFlush(t *testing.T) {
 		ret := product
 		product = 1
 		mu.Unlock()
+		log.Printf("** product reset.\n")
 		return ret
 	}
 	{
@@ -222,36 +207,34 @@ func TestFlush(t *testing.T) {
 	}
 
 	assertMsgTableRows := func(expect int) {
-		rows, err := db.Query("SELECT data FROM " + table)
-		assert.NoError(err)
-		n := 0
-		for rows.Next() {
-			data := []byte{}
-			assert.NoError(rows.Scan(&data))
-			n += 1
-			log.Printf("*** table row: %+q\n", data)
-		}
-		assert.Equal(expect, n)
+		cnt := 0
+		assert.NoError(db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&cnt))
+		assert.Equal(expect, cnt)
 	}
 
 	// --- Test normal case ---
+	log.Printf("Test normal cases...\n")
 	testNormalFlush := func(primes []uint64) {
+		// Make sure msg table is empty.
+		clearMsgTable()
 		defer clearMsgTable()
-		ctx := context.Background()
+
+		// Make sure product reset.
+		resetProduct()
+		defer resetProduct()
 
 		// Start a transaction.
 		tx, err := db.Begin()
 		assert.NoError(err)
 		defer tx.Rollback()
 
-		// Reset the product.
-		resetProduct()
+		// Creates a publisher.
+		p := store.NewPublisher(tx)
 
 		// Publish distinct prime numbers.
 		expect := uint64(1)
-		p := store.NewPublisher(tx)
 		for _, prime := range primes {
-			err := p.Publish(ctx, testSubject, []byte(strconv.FormatUint(prime, 10)))
+			err := p.Publish(bgctx, testSubject, []byte(strconv.FormatUint(prime, 10)))
 			assert.NoError(err)
 			expect = expect * prime
 		}
@@ -264,7 +247,7 @@ func TestFlush(t *testing.T) {
 
 		// Flush.
 		wg.Add(len(primes))
-		p.Finish(ctx, true)
+		p.Flush(bgctx)
 		wg.Wait()
 
 		// Check database rows.
@@ -275,16 +258,12 @@ func TestFlush(t *testing.T) {
 	}
 
 	testNormalFlush([]uint64{})
-	checkNewDeleteCnt()
-	testNormalFlush([]uint64{2, 3}) // flushMsgList
-	checkNewDeleteCnt()
+	testNormalFlush([]uint64{2, 3})             // flushMsgList
 	testNormalFlush([]uint64{5, 7, 11, 13, 17}) // flushMsgStream
-	checkNewDeleteCnt()
 
 	// --- Test error case ---
+	log.Printf("Test error cases...\n")
 	testErrorFlush := func(primes []uint64) {
-		defer clearMsgTable()
-
 		// Replace downstream.
 		originDownstream := store.downstream
 		defer func() {
@@ -292,20 +271,25 @@ func TestFlush(t *testing.T) {
 		}()
 		store.downstream = NewUnstableAsyncPublisher(originDownstream)
 
-		ctx := context.Background()
+		// Make sure msg table is empty.
+		clearMsgTable()
+		defer clearMsgTable()
+
+		// Make sure product reset.
+		resetProduct()
+		defer resetProduct()
 
 		// Start a transaction.
 		tx, err := db.Begin()
 		assert.NoError(err)
 		defer tx.Rollback()
 
-		// Reset the product.
-		resetProduct()
+		// Creates a publisher.
+		p := store.NewPublisher(tx)
 
 		// Publish distinct prime numbers.
-		p := store.NewPublisher(tx)
 		for _, prime := range primes {
-			err := p.Publish(ctx, testSubject, []byte(strconv.FormatUint(prime, 10)))
+			err := p.Publish(bgctx, testSubject, []byte(strconv.FormatUint(prime, 10)))
 			assert.NoError(err)
 		}
 
@@ -320,7 +304,7 @@ func TestFlush(t *testing.T) {
 
 		// Flush.
 		wg.Add(expectSucc)
-		p.Finish(ctx, true)
+		p.Flush(bgctx)
 		wg.Wait()
 
 		// Check database rows.
@@ -328,9 +312,52 @@ func TestFlush(t *testing.T) {
 	}
 
 	testErrorFlush([]uint64{})
-	checkNewDeleteCnt()
-	testErrorFlush([]uint64{2, 3}) // flushMsgList
-	checkNewDeleteCnt()
+	testErrorFlush([]uint64{2, 3})             // flushMsgList
 	testErrorFlush([]uint64{5, 7, 11, 13, 17}) // flushMsgStream
-	checkNewDeleteCnt()
+
+	// --- Test redelivery flush ---
+	log.Printf("Test redelivery ...\n")
+	store.redeliveryLoop() // Run the loop manually here.
+
+	testRedelivery := func(primes []uint64) {
+		// Make sure msg table is empty.
+		clearMsgTable()
+		defer clearMsgTable()
+
+		// Make sure product reset.
+		resetProduct()
+		defer resetProduct()
+
+		// Start a transaction.
+		tx, err := db.Begin()
+		assert.NoError(err)
+		defer tx.Rollback()
+
+		// Creates a publisher.
+		p := store.NewPublisher(tx)
+
+		// Publish distinct prime numbers.
+		expect := uint64(1)
+		for _, prime := range primes {
+			err := p.Publish(bgctx, testSubject, []byte(strconv.FormatUint(prime, 10)))
+			assert.NoError(err)
+			expect = expect * prime
+		}
+
+		// NOTE: Add wait group before commit, since once committed, the redeliveryLoop run immediately.
+		wg.Add(len(primes))
+
+		// Commit.
+		assert.NoError(tx.Commit())
+
+		// NOTE: Not call p.Finish, let redeliveryLoop to do it.
+		wg.Wait()
+
+		// Check.
+		assert.Equal(expect, resetProduct())
+	}
+
+	testRedelivery([]uint64{})
+	testRedelivery([]uint64{2, 3})
+	testRedelivery([]uint64{5, 7, 11, 13, 17})
 }

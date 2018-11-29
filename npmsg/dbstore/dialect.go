@@ -71,7 +71,7 @@ func (d mysqlDialect) SelectMsgsByBatch(ctx context.Context, q Queryer, table, b
 		if !rows.Next() {
 			return nil, rows.Err()
 		}
-		node := newNode()
+		node := &msgNode{}
 		err := rows.Scan(&node.Id, &node.Subject, &node.Data)
 		if err != nil {
 			return nil, err
@@ -93,7 +93,7 @@ func (d mysqlDialect) SelectMsgsAll(ctx context.Context, q Queryer, table string
 		if !rows.Next() {
 			return nil, rows.Err()
 		}
-		node := newNode()
+		node := &msgNode{}
 		err := rows.Scan(&node.Id, &node.Subject, &node.Data)
 		if err != nil {
 			return nil, err

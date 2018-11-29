@@ -8,19 +8,6 @@ import (
 
 func TestMsgList(t *testing.T) {
 	assert := assert.New(t)
-	origDeleteNode := deleteNode
-	defer func() {
-		deleteNode = origDeleteNode
-	}()
-	deleteNodeC := make(chan int64, 10000)
-	deleteNode = func(node *msgNode) {
-		deleteNodeC <- node.Id
-		origDeleteNode(node)
-	}
-	expectDeleteNode := func(expectId int64) {
-		id := <-deleteNodeC
-		assert.Equal(id, expectId)
-	}
 
 	// --- test Append ---
 	l := &msgList{}
@@ -30,8 +17,9 @@ func TestMsgList(t *testing.T) {
 		assert.Equal(0, l.n)
 	}
 
-	n1 := newNode()
-	n1.Id = 1
+	n1 := &msgNode{
+		Id: 1,
+	}
 	l.Append(n1)
 	{
 		assert.Equal(n1, l.head)
@@ -41,8 +29,9 @@ func TestMsgList(t *testing.T) {
 		assert.Nil(n1.next)
 	}
 
-	n2 := newNode()
-	n2.Id = 2
+	n2 := &msgNode{
+		Id: 2,
+	}
 	l.Append(n2)
 	{
 		assert.Equal(n1, l.head)
@@ -91,9 +80,6 @@ func TestMsgList(t *testing.T) {
 	// --- test Reset ---
 	l.Reset()
 	{
-		expectDeleteNode(1)
-		expectDeleteNode(2)
-		assert.Len(deleteNodeC, 0)
 		assert.Nil(l.head)
 		assert.Nil(l.tail)
 		assert.Equal(0, l.n)

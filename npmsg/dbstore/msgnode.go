@@ -1,11 +1,5 @@
 package dbstore
 
-var (
-	// NOTE: Possible to use a sync.Pool if needed.
-	newNode    = func() *msgNode { return &msgNode{} }
-	deleteNode = func(node *msgNode) {}
-)
-
 // msgNode is a single message.
 type msgNode struct {
 	Id      int64
@@ -67,14 +61,6 @@ func (list *msgList) Pop() *msgNode {
 
 // Reset deletes all msgNode in a msgList.
 func (list *msgList) Reset() {
-	node := list.head
-	for node != nil {
-		next := node.next
-		node.list = nil
-		node.next = nil
-		deleteNode(node)
-		node = next
-	}
 	list.head = nil
 	list.tail = nil
 	list.n = 0
