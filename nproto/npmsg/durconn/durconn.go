@@ -105,6 +105,7 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) (*DurConn, erro
 	dc := &DurConn{
 		logger:        zerolog.Nop(),
 		reconnectWait: DefaultReconnectWait,
+		subjectPrefix: DefaultSubjectPrefix,
 		connectCb:     func(_ stan.Conn) {},
 		disconnectCb:  func(_ stan.Conn) {},
 		stanOptions: []stan.Option{
@@ -114,7 +115,6 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) (*DurConn, erro
 		nc:        nc,
 		subNames:  make(map[[2]string]int),
 	}
-	dc.setSubjectPrefix(DefaultSubjectPrefix)
 	for _, opt := range opts {
 		if err := opt(dc); err != nil {
 			return nil, err
@@ -182,7 +182,11 @@ func (dc *DurConn) PublishAsync(ctx context.Context, subject string, data []byte
 	if sc == nil {
 		return ErrNotConnected
 	}
-	_, err := sc.PublishAsync(dc.addSubjectPrefix(subject), data, func(_ string, err error) { cb(err) })
+	_, err := sc.PublishAsync(
+		fmt.Sprintf("%s.%s", dc.subjectPrefix, subject),
+		data,
+		func(_ string, err error) { cb(err) },
+	)
 	return err
 }
 
@@ -296,9 +300,11 @@ func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, stalec chan struct
 			Logger()
 
 		// Wrap sub.handler to stan.MsgHandler.
+		prefix := dc.subjectPrefix + "."
 		handler := func(m *stan.Msg) {
+			subject := strings.TrimPrefix(m.Subject, prefix)
 			// Ack when no error.
-			if err := sub.handler(context.Background(), dc.trimSubjectPrefix(m.Subject), m.Data); err == nil {
+			if err := sub.handler(context.Background(), subject, m.Data); err == nil {
 				m.Ack()
 			}
 		}
@@ -311,7 +317,12 @@ func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, stalec chan struct
 		// Loop until success or the stan connection is stale (e.g. scStaleC is closed).
 		for {
 			// We don't need the returned stan.Subscription object since no Unsubscribe.
-			_, err := sc.QueueSubscribe(dc.addSubjectPrefix(sub.subject), sub.queue, handler, opts...)
+			_, err := sc.QueueSubscribe(
+				fmt.Sprintf("%s.%s", dc.subjectPrefix, sub.subject),
+				sub.queue,
+				handler,
+				opts...,
+			)
 			if err == nil {
 				logger.Info().Msg("subscribed")
 				sub.subscribeCb(sc, sub.subject, sub.queue)
@@ -395,16 +406,4 @@ func (dc *DurConn) close_() (oldSc stan.Conn, oldStalec chan struct{}, err error
 
 	dc.closed = true
 	return
-}
-
-func (dc *DurConn) setSubjectPrefix(prefix string) {
-	dc.subjectPrefix = prefix + "."
-}
-
-func (dc *DurConn) addSubjectPrefix(subject string) string {
-	return fmt.Sprintf("%s%s", dc.subjectPrefix, subject)
-}
-
-func (dc *DurConn) trimSubjectPrefix(subject string) string {
-	return strings.TrimPrefix(subject, dc.subjectPrefix)
 }

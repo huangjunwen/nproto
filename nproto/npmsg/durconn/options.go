@@ -10,6 +10,10 @@ import (
 // OptLogger sets structured logger.
 func OptLogger(logger *zerolog.Logger) Option {
 	return func(dc *DurConn) error {
+		if logger == nil {
+			nop := zerolog.Nop()
+			logger = &nop
+		}
 		dc.logger = logger.With().Str("component", "nproto.npmsg.durconn.DurConn").Logger()
 		return nil
 	}
@@ -25,9 +29,9 @@ func OptReconnectWait(t time.Duration) Option {
 
 // OptSubjectPrefix sets message subject prefix.
 // Default "npmsg": If you publish a message with subject "xxx", then the actual subject is "npmsg.xxx".
-func OptSubjectPrefix(prefix string) Option {
+func OptSubjectPrefix(subjectPrefix string) Option {
 	return func(dc *DurConn) error {
-		dc.setSubjectPrefix(prefix)
+		dc.subjectPrefix = subjectPrefix
 		return nil
 	}
 }

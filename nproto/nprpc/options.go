@@ -4,6 +4,18 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// ServerOptLogger sets logger.
+func ServerOptLogger(logger *zerolog.Logger) ServerOption {
+	return func(server *NatsRPCServer) error {
+		if logger == nil {
+			nop := zerolog.Nop()
+			logger = &nop
+		}
+		server.logger = logger.With().Str("component", "nproto.nprpc.NatsRPCServer").Logger()
+		return nil
+	}
+}
+
 // ServerOptSubjectPrefix sets the subject prefix.
 func ServerOptSubjectPrefix(subjPrefix string) ServerOption {
 	return func(server *NatsRPCServer) error {
@@ -16,18 +28,6 @@ func ServerOptSubjectPrefix(subjPrefix string) ServerOption {
 func ServerOptGroup(group string) ServerOption {
 	return func(server *NatsRPCServer) error {
 		server.group = group
-		return nil
-	}
-}
-
-// ServerOptLogger sets logger.
-func ServerOptLogger(logger *zerolog.Logger) ServerOption {
-	return func(server *NatsRPCServer) error {
-		if logger == nil {
-			nop := zerolog.Nop()
-			logger = &nop
-		}
-		server.logger = logger.With().Str("component", "nproto.nprpc.NatsRPCServer").Logger()
 		return nil
 	}
 }

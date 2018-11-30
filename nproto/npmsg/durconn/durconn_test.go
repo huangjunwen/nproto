@@ -15,7 +15,6 @@ import (
 	tststan "github.com/huangjunwen/tstsvc/stan"
 	"github.com/nats-io/go-nats"
 	"github.com/nats-io/go-nats-streaming"
-	"github.com/rs/xid"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -32,38 +31,11 @@ func newMockConn(i int) MockConn {
 }
 
 func (mc MockConn) Publish(subject string, data []byte) error {
-	dur, err := time.ParseDuration(string(data))
-	if err != nil {
-		dur = 10 * time.Millisecond
-	}
-	time.Sleep(dur)
-	if subject == "good" {
-		return nil
-	} else {
-		return errors.New("bad")
-	}
+	panic("Not implemented")
 }
 
 func (mc MockConn) PublishAsync(subject string, data []byte, ah stan.AckHandler) (string, error) {
-	if subject == "evil" {
-		return "", errors.New("evil")
-	}
-
-	id := xid.New().String()
-	dur, err := time.ParseDuration(string(data))
-	if err != nil {
-		dur = 10 * time.Millisecond
-	}
-	go func() {
-		time.Sleep(dur)
-		if subject == "good" {
-			ah(id, nil)
-		} else {
-			ah(id, errors.New("bad"))
-		}
-	}()
-	return id, nil
-
+	panic("Not implemented")
 }
 
 func (mc MockConn) Subscribe(subject string, cb stan.MsgHandler, opts ...stan.SubscriptionOption) (stan.Subscription, error) {
@@ -283,27 +255,6 @@ func TestLockMethods(t *testing.T) {
 
 }
 
-func TestMockPub(t *testing.T) {
-	assert := assert.New(t)
-
-	sc := newMockConn(3)
-	dc := &DurConn{
-		sc:       sc,
-		subNames: map[[2]string]int{},
-	}
-
-	{
-		assert.NoError(dc.Publish(context.Background(), "good", nil))
-	}
-
-	{
-		ctx, _ := context.WithTimeout(context.Background(), time.Millisecond)
-		err := dc.Publish(ctx, "good", []byte((10 * time.Millisecond).String()))
-		assert.Error(err)
-	}
-
-}
-
 // ----------- Real test -----------
 
 // TestConnect tests connects and reconnects.
@@ -446,6 +397,8 @@ func TestPubSub(t *testing.T) {
 		disconnectCb := func(_ stan.Conn) { disconnectc <- struct{}{} }
 
 		dc, err = NewDurConn(nc, res1.Options.ClusterId,
+			OptLogger(nil),
+			OptSubjectPrefix("xxx"),
 			OptConnectCb(connectCb),       // Use the callback to notify connection establish.
 			OptDisconnectCb(disconnectCb), // Use the callback to notify disconnection.
 			OptReconnectWait(time.Second), // A short reconnect wait.
