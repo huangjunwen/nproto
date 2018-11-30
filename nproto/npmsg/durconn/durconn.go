@@ -37,11 +37,6 @@ var (
 	}
 )
 
-// For mocking.
-var (
-	stanConnect = stan.Connect
-)
-
 var (
 	_ npmsg.RawMsgAsyncPublisher = (*DurConn)(nil)
 	_ npmsg.RawMsgSubscriber     = (*DurConn)(nil)
@@ -253,7 +248,7 @@ func (dc *DurConn) connect(wait bool) {
 
 		// NOTE: Use a UUID-like id as client id sine we only use durable queue subscription.
 		// See: https://groups.google.com/d/msg/natsio/SkWAdSU1AgU/tCX9f3ONBQAJ
-		sc, err := stanConnect(dc.clusterID, xid.New().String(), opts...)
+		sc, err := stan.Connect(dc.clusterID, xid.New().String(), opts...)
 		if err != nil {
 			// Reconnect immediately.
 			logger.Error().Err(err).Msg("connect failed")
@@ -302,11 +297,13 @@ func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, stalec chan struct
 		// Wrap sub.handler to stan.MsgHandler.
 		prefix := dc.subjectPrefix + "."
 		handler := func(m *stan.Msg) {
-			subject := strings.TrimPrefix(m.Subject, prefix)
-			// Ack when no error.
-			if err := sub.handler(context.Background(), subject, m.Data); err == nil {
-				m.Ack()
-			}
+			go func() {
+				subject := strings.TrimPrefix(m.Subject, prefix)
+				// Ack when no error.
+				if err := sub.handler(context.Background(), subject, m.Data); err == nil {
+					m.Ack()
+				}
+			}()
 		}
 
 		opts := []stan.SubscriptionOption{}
