@@ -23,9 +23,9 @@ var (
 )
 
 var (
-	ErrMaxReconnect = errors.New("nproto.nprpc: nc should have MaxReconnects < 0")
-	ErrServerClosed = errors.New("nproto.nprpc.NatsRPCServer: Server closed")
-	ErrDupSvcName   = func(svcName string) error {
+	ErrNCMaxReconnect = errors.New("nproto.nprpc: nats.Conn should have MaxReconnects < 0")
+	ErrServerClosed   = errors.New("nproto.nprpc.NatsRPCServer: Server closed")
+	ErrDupSvcName     = func(svcName string) error {
 		return fmt.Errorf("nproto.nprpc.NatsRPCServer: Duplicated service %+q", svcName)
 	}
 	ErrDupMethodName = func(methodName string) error {
@@ -45,8 +45,6 @@ type NatsRPCServer struct {
 	mu   sync.RWMutex
 	nc   *nats.Conn                    // nil if closed
 	svcs map[string]*nats.Subscription // svcName -> Subscription
-
-	wg sync.WaitGroup // wait group for active handlers.
 }
 
 // NatsRPCClient implements RPCClient.
@@ -75,7 +73,7 @@ var (
 func NewNatsRPCServer(nc *nats.Conn, opts ...ServerOption) (*NatsRPCServer, error) {
 
 	if nc.Opts.MaxReconnect >= 0 {
-		return nil, ErrMaxReconnect
+		return nil, ErrNCMaxReconnect
 	}
 
 	server := &NatsRPCServer{
@@ -190,9 +188,6 @@ func (server *NatsRPCServer) Close() error {
 			sub.Unsubscribe()
 		}
 	}
-
-	// Wait all active handlers to finish.
-	server.wg.Wait()
 	return nil
 }
 
@@ -210,18 +205,7 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nproto.RPCM
 	prefix := fmt.Sprintf("%s.%s.", server.subjectPrefix, svcName)
 
 	return func(msg *nats.Msg) {
-		// If closed, ignore this msg.
-		server.mu.RLock()
-		nc := server.nc
-		server.mu.RUnlock()
-		if nc == nil {
-			return
-		}
-
 		go func() {
-			server.wg.Add(1)
-			defer server.wg.Done()
-
 			// Subject should be in the form of "subjectPrefix.svcName.enc.method".
 			// Extract encoding and method from it.
 			if !strings.HasPrefix(msg.Subject, prefix) {
@@ -330,7 +314,7 @@ Err:
 func NewNatsRPCClient(nc *nats.Conn, opts ...ClientOption) (*NatsRPCClient, error) {
 
 	if nc.Opts.MaxReconnect >= 0 {
-		return nil, ErrMaxReconnect
+		return nil, ErrNCMaxReconnect
 	}
 
 	client := &NatsRPCClient{

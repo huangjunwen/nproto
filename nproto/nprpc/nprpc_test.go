@@ -120,26 +120,6 @@ func TestNatsRPC(t *testing.T) {
 		}
 	)
 
-	// This method is used to test waiting for active handlers to finish after Close().
-	var (
-		waitMethod = &nproto.RPCMethod{
-			Name: "wait",
-			NewInput: func() proto.Message {
-				return &empty.Empty{}
-			},
-			NewOutput: func() proto.Message {
-				return &empty.Empty{}
-			},
-		}
-		waitc       = make(chan struct{}, 10)
-		waitHandler = func(ctx context.Context, in proto.Message) (out proto.Message, err error) {
-			// Wait a long time.
-			waitc <- struct{}{}
-			time.Sleep(3 * time.Second)
-			return &empty.Empty{}, nil
-		}
-	)
-
 	// Starts test nats server.
 	var res *tstnats.Resource
 	{
@@ -197,7 +177,6 @@ func TestNatsRPC(t *testing.T) {
 		if err = server.RegistSvc(svcName, map[*nproto.RPCMethod]nproto.RPCHandler{
 			sqrtMethod: sqrtHandler,
 			bgMethod:   bgHandler,
-			waitMethod: waitHandler,
 		}); err != nil {
 			log.Panic(err)
 		}
@@ -284,24 +263,6 @@ func TestNatsRPC(t *testing.T) {
 				assert.Equal("10s", output.(*wrappers.StringValue).Value)
 			}
 		}
-	}
-
-	// Test waiting for active handlers to finish after Close.
-	{
-		handler := client1.MakeHandler(svcName, waitMethod)
-
-		// Use a seperated go routine to call the method.
-		go handler(context.Background(), &empty.Empty{})
-
-		// Now close the server. It should wait for the handler to finish.
-		<-waitc
-		t := time.Now()
-		server.Close()
-		d := time.Since(t)
-
-		// Check.
-		log.Printf("** server close wait for %s\n", d.String())
-		assert.True(d > time.Second)
 	}
 
 }
