@@ -12,8 +12,8 @@ import (
 	"github.com/nats-io/go-nats"
 	"github.com/rs/zerolog"
 
-	"github.com/huangjunwen/nproto"
-	"github.com/huangjunwen/nproto/nprpc/enc"
+	"github.com/huangjunwen/nproto/nproto"
+	"github.com/huangjunwen/nproto/nproto/nprpc/enc"
 )
 
 var (

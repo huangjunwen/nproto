@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/huangjunwen/nproto"
+	"github.com/huangjunwen/nproto/nproto"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/empty"

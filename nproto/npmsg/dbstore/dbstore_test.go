@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/huangjunwen/nproto/npmsg"
-	"github.com/huangjunwen/nproto/npmsg/durconn"
+	"github.com/huangjunwen/nproto/nproto/npmsg"
+	"github.com/huangjunwen/nproto/nproto/npmsg/durconn"
 
 	tstmysql "github.com/huangjunwen/tstsvc/mysql"
 	tststan "github.com/huangjunwen/tstsvc/stan"

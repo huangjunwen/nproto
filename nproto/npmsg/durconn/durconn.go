@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/huangjunwen/nproto/npmsg"
+	"github.com/huangjunwen/nproto/nproto/npmsg"
 
 	"github.com/nats-io/go-nats"
 	"github.com/nats-io/go-nats-streaming"
