@@ -28,6 +28,7 @@ func TestNatsRPC(t *testing.T) {
 		svcName = "test"
 	)
 
+	// This method is used to test method not found.
 	var (
 		notfoundMethod = &nproto.RPCMethod{
 			Name: "notfound",
@@ -40,6 +41,7 @@ func TestNatsRPC(t *testing.T) {
 		}
 	)
 
+	// This method is used to test normal case.
 	var (
 		sqrtMethod = &nproto.RPCMethod{
 			Name: "sqrt",
@@ -61,6 +63,7 @@ func TestNatsRPC(t *testing.T) {
 		}
 	)
 
+	// This method is used to test timeout and passthru.
 	var (
 		bgMethod = &nproto.RPCMethod{
 			Name: "bg",
@@ -82,6 +85,7 @@ func TestNatsRPC(t *testing.T) {
 				err     error
 			)
 
+			// Get time to wait.
 			d := nproto.Passthru(ctx)
 			{
 				v := d[bgTimeKey]
@@ -91,6 +95,8 @@ func TestNatsRPC(t *testing.T) {
 				t, err = time.ParseDuration(v)
 				assert.NoError(err)
 			}
+
+			// Get expect result.
 			{
 				canDone = d[bgCanDoneKey]
 				if canDone == "" {
@@ -98,15 +104,15 @@ func TestNatsRPC(t *testing.T) {
 				}
 			}
 
-			// Emulate a background work needs to wait t.
+			// Start a background job to wait for some time or context timeout.
 			go func() {
 				select {
 				case <-time.After(t):
+					// If wait time is shorter.
 					assert.Equal("true", canDone)
-					return
 				case <-ctx.Done():
+					// If dead line is shorter.
 					assert.Equal("false", canDone)
-					return
 				}
 			}()
 
@@ -114,11 +120,33 @@ func TestNatsRPC(t *testing.T) {
 		}
 	)
 
+	// This method is used to test waiting for active handlers to finish after Close().
+	var (
+		waitMethod = &nproto.RPCMethod{
+			Name: "wait",
+			NewInput: func() proto.Message {
+				return &empty.Empty{}
+			},
+			NewOutput: func() proto.Message {
+				return &empty.Empty{}
+			},
+		}
+		waitc       = make(chan struct{}, 10)
+		waitHandler = func(ctx context.Context, in proto.Message) (out proto.Message, err error) {
+			// Wait a long time.
+			waitc <- struct{}{}
+			time.Sleep(3 * time.Second)
+			return &empty.Empty{}, nil
+		}
+	)
+
 	// Starts test nats server.
 	var res *tstnats.Resource
 	{
 		res, err = tstnats.Run(nil)
-		assert.NoError(err)
+		if err != nil {
+			log.Panic(err)
+		}
 		defer res.Close()
 		log.Printf("Test nats server started: %+q\n", res.NatsURL())
 	}
@@ -129,48 +157,76 @@ func TestNatsRPC(t *testing.T) {
 		nc1, err = res.NatsClient(
 			nats.MaxReconnects(-1),
 		)
-		assert.NoError(err)
+		if err != nil {
+			log.Panic(err)
+		}
 		defer nc1.Close()
 		log.Printf("Connection 1 connected.\n")
 
 		nc2, err = res.NatsClient(
 			nats.MaxReconnects(-1),
 		)
-		assert.NoError(err)
+		if err != nil {
+			log.Panic(err)
+		}
 		defer nc2.Close()
 		log.Printf("Connection 2 connected.\n")
 	}
 
+	var subjectPrefix = "xxx"
+	var group = "yyy"
+
 	// Creates rpc server from nc1.
 	var server *NatsRPCServer
 	{
-		server, err = NewNatsRPCServer(nc1)
-		assert.NoError(err)
+		server, err = NewNatsRPCServer(
+			nc1,
+			ServerOptSubjectPrefix(subjectPrefix),
+			ServerOptLogger(nil),
+			ServerOptGroup(group),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
 		defer server.Close()
 		log.Printf("NatsRPCServer created.\n")
 	}
 
 	// RegistSvc.
-	assert.NoError(server.RegistSvc(svcName, map[*nproto.RPCMethod]nproto.RPCHandler{
-		sqrtMethod: sqrtHandler,
-		bgMethod:   bgHandler,
-	}))
-	defer server.DeregistSvc(svcName)
-	log.Printf("Svc registed.\n")
+	{
+		if err = server.RegistSvc(svcName, map[*nproto.RPCMethod]nproto.RPCHandler{
+			sqrtMethod: sqrtHandler,
+			bgMethod:   bgHandler,
+			waitMethod: waitHandler,
+		}); err != nil {
+			log.Panic(err)
+		}
+		defer server.DeregistSvc(svcName)
+		log.Printf("Svc registed.\n")
+	}
 
 	// Creates two rpc clients.
 	var client1, client2 *NatsRPCClient
 	{
-		client1, err = NewNatsRPCClient(nc1)
-		assert.NoError(err)
+		client1, err = NewNatsRPCClient(
+			nc1,
+			ClientOptPBEncoding(),
+			ClientOptSubjectPrefix(subjectPrefix),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
 		defer client1.Close()
 		log.Printf("NatsRPCClient 1 created.\n")
 
 		client2, err = NewNatsRPCClient(
 			nc2,
-			ClientOptJSONEncoding(), // Use JSON encoding.
+			ClientOptJSONEncoding(),
+			ClientOptSubjectPrefix(subjectPrefix),
 		)
-		assert.NoError(err)
+		if err != nil {
+			log.Panic(err)
+		}
 		defer client2.Close()
 		log.Printf("NatsRPCClient 2 created.\n")
 	}
@@ -186,7 +242,7 @@ func TestNatsRPC(t *testing.T) {
 				assert.Nil(output)
 			}
 		}
-		// Test normal return/error return.
+		// Test normal method.
 		{
 			handler := client.MakeHandler(svcName, sqrtMethod)
 			{
@@ -204,19 +260,20 @@ func TestNatsRPC(t *testing.T) {
 		{
 			handler := client.MakeHandler(svcName, bgMethod)
 			{
+				// Test no passthru.
 				output, err := handler(context.Background(), &empty.Empty{})
 				assert.NoError(err)
 				assert.Equal("0s", output.(*wrappers.StringValue).Value)
 			}
 			{
-				// Test passthru.
+				// Test passthru: passthru contains wait time shorter than context deadline (since context is context.Background()).
 				ctx := nproto.AddPassthru(context.Background(), bgTimeKey, "10ms")
 				output, err := handler(ctx, &empty.Empty{})
 				assert.NoError(err)
 				assert.Equal("10ms", output.(*wrappers.StringValue).Value)
 			}
 			{
-				// Test context timeout.
+				// Test context timeout: passthru contains wait time longer than context deadline.
 				ctx, _ := context.WithTimeout(context.Background(), 100*time.Millisecond)
 				ctx = nproto.AddPassthruDict(ctx, map[string]string{
 					bgTimeKey:    "10s", // 10s is much longer than context timeout, thus the bg work can't be done.
@@ -227,6 +284,24 @@ func TestNatsRPC(t *testing.T) {
 				assert.Equal("10s", output.(*wrappers.StringValue).Value)
 			}
 		}
+	}
+
+	// Test waiting for active handlers to finish after Close.
+	{
+		handler := client1.MakeHandler(svcName, waitMethod)
+
+		// Use a seperated go routine to call the method.
+		go handler(context.Background(), &empty.Empty{})
+
+		// Now close the server. It should wait for the handler to finish.
+		<-waitc
+		t := time.Now()
+		server.Close()
+		d := time.Since(t)
+
+		// Check.
+		log.Printf("** server close wait for %s\n", d.String())
+		assert.True(d > time.Second)
 	}
 
 }
@@ -241,7 +316,9 @@ func TestRegist(t *testing.T) {
 	var res *tstnats.Resource
 	{
 		res, err = tstnats.Run(nil)
-		assert.NoError(err)
+		if err != nil {
+			log.Panic(err)
+		}
 		defer res.Close()
 		log.Printf("Test nats server started: %+q\n", res.NatsURL())
 	}
@@ -252,7 +329,9 @@ func TestRegist(t *testing.T) {
 		nc, err = res.NatsClient(
 			nats.MaxReconnects(-1),
 		)
-		assert.NoError(err)
+		if err != nil {
+			log.Panic(err)
+		}
 		defer nc.Close()
 		log.Printf("Connection connected.\n")
 	}
@@ -261,17 +340,50 @@ func TestRegist(t *testing.T) {
 	var server *NatsRPCServer
 	{
 		server, err = NewNatsRPCServer(nc)
-		assert.NoError(err)
+		if err != nil {
+			log.Panic(err)
+		}
 		defer server.Close()
 		log.Printf("NatsRPCServer created.\n")
 	}
+
+	var (
+		dupMethod = &nproto.RPCMethod{
+			Name: "dup",
+			NewInput: func() proto.Message {
+				return &empty.Empty{}
+			},
+			NewOutput: func() proto.Message {
+				return &empty.Empty{}
+			},
+		}
+		dupMethod2 = &nproto.RPCMethod{
+			Name: "dup",
+			NewInput: func() proto.Message {
+				return &empty.Empty{}
+			},
+			NewOutput: func() proto.Message {
+				return &empty.Empty{}
+			},
+		}
+		dupHandler = func(ctx context.Context, in proto.Message) (proto.Message, error) {
+			return &empty.Empty{}, nil
+		}
+	)
 
 	// Regist should ok.
 	assert.NoError(server.RegistSvc("test1", nil))
 	assert.Len(server.svcs, 1)
 
-	// Regist should failed since duplication.
+	// Regist should failed since service name duplication.
 	assert.Error(server.RegistSvc("test1", nil))
+	assert.Len(server.svcs, 1)
+
+	// Regist should failed since method name duplication.
+	assert.Error(server.RegistSvc("test2", map[*nproto.RPCMethod]nproto.RPCHandler{
+		dupMethod:  dupHandler,
+		dupMethod2: dupHandler,
+	}))
 	assert.Len(server.svcs, 1)
 
 	// Now shut down the connection.

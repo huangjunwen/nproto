@@ -45,6 +45,8 @@ type NatsRPCServer struct {
 	mu   sync.RWMutex
 	nc   *nats.Conn                    // nil if closed
 	svcs map[string]*nats.Subscription // svcName -> Subscription
+
+	wg sync.WaitGroup // wait group for active handlers.
 }
 
 // NatsRPCClient implements RPCClient.
@@ -101,7 +103,7 @@ func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*nproto.RPCMe
 	}
 
 	// Set subscription placeholder.
-	err = func() error {
+	if err = func() error {
 		server.mu.Lock()
 		defer server.mu.Unlock()
 
@@ -113,8 +115,7 @@ func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*nproto.RPCMe
 		}
 		server.svcs[svcName] = nil // NOTE: Set a placeholder so that other can't regist the same name.
 		return nil
-	}()
-	if err != nil {
+	}(); err != nil {
 		return
 	}
 	defer func() {
@@ -168,15 +169,20 @@ func (server *NatsRPCServer) DeregistSvc(svcName string) error {
 	return nil
 }
 
-// Close stops the server and deregist all registed services.
+// Close stops the server and deregist all registed services, then wait all active handlers to finish.
 func (server *NatsRPCServer) Close() error {
-	// Set conn to nil to indicate close.
+	// Set nc to nil to indicate close.
 	server.mu.Lock()
 	nc := server.nc
 	svcs := server.svcs
 	server.nc = nil
 	server.svcs = nil
 	server.mu.Unlock()
+
+	// Already closed.
+	if nc == nil {
+		return ErrServerClosed
+	}
 
 	// Unsubscribe.
 	if len(svcs) != 0 {
@@ -185,10 +191,8 @@ func (server *NatsRPCServer) Close() error {
 		}
 	}
 
-	// Multiple calls to Close.
-	if nc == nil {
-		return ErrServerClosed
-	}
+	// Wait all active handlers to finish.
+	server.wg.Wait()
 	return nil
 }
 
@@ -203,10 +207,21 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nproto.RPCM
 	}
 
 	// Subject prefix.
-	prefix := server.subjectPrefix + "." + svcName + "."
+	prefix := fmt.Sprintf("%s.%s.", server.subjectPrefix, svcName)
 
 	return func(msg *nats.Msg) {
+		// If closed, ignore this msg.
+		server.mu.RLock()
+		nc := server.nc
+		server.mu.RUnlock()
+		if nc == nil {
+			return
+		}
+
 		go func() {
+			server.wg.Add(1)
+			defer server.wg.Done()
+
 			// Subject should be in the form of "subjectPrefix.svcName.enc.method".
 			// Extract encoding and method from it.
 			if !strings.HasPrefix(msg.Subject, prefix) {
@@ -336,7 +351,7 @@ func NewNatsRPCClient(nc *nats.Conn, opts ...ClientOption) (*NatsRPCClient, erro
 func (client *NatsRPCClient) MakeHandler(svcName string, method *nproto.RPCMethod) nproto.RPCHandler {
 
 	encoder := chooseClientEncoder(client.encoding)
-	subj := strings.Join([]string{client.subjectPrefix, svcName, client.encoding, method.Name}, ".")
+	subj := fmt.Sprintf("%s.%s.%s.%s", client.subjectPrefix, svcName, client.encoding, method.Name)
 
 	return func(ctx context.Context, input proto.Message) (proto.Message, error) {
 
