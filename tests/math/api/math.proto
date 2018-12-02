@@ -1,0 +1,19 @@
+syntax = "proto3";
+package math;
+
+option go_package = "github.com/huangjunwen/nproto/tests/math/api;mathapi";
+
+message SumRequest {
+  repeated double args = 1;
+}
+
+message SumReply {
+  double sum = 1;
+}
+
+// Math is a service providing some math functions.
+// @@nprpc@@
+service Math {
+  // Sum returns the sum of a list of arguments.
+  rpc Sum(SumRequest) returns (SumReply);
+}
