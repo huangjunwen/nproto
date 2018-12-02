@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/huangjunwen/nproto/nproto"
+
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/stretchr/testify/assert"
@@ -15,8 +17,8 @@ func TestPBRequest(t *testing.T) {
 	assert := assert.New(t)
 
 	param := *ptypes.TimestampNow()
+	md := nproto.NewMetaDataPairs("a", "z")
 	timeout := 10 * time.Nanosecond
-	passthru := map[string]string{"a": "z"}
 
 	data := []byte{}
 	err := error(nil)
@@ -26,7 +28,7 @@ func TestPBRequest(t *testing.T) {
 		req := &RPCRequest{
 			Param:    &param,
 			Timeout:  &timeout,
-			Passthru: passthru,
+			MetaData: md,
 		}
 
 		data, err = PBClientEncoder{}.EncodeRequest(req)
@@ -45,7 +47,7 @@ func TestPBRequest(t *testing.T) {
 		assert.Equal(param.Seconds, p.Seconds)
 		assert.Equal(param.Nanos, p.Nanos)
 		assert.Equal(timeout, *req.Timeout)
-		assert.Equal(passthru, req.Passthru)
+		assert.Equal(md, req.MetaData)
 	}
 
 	// Panic if Param not set
@@ -131,12 +133,12 @@ func TestPBReply(t *testing.T) {
 func BenchmarkPBEncode(b *testing.B) {
 
 	param := *ptypes.TimestampNow()
+	md := nproto.NewMetaDataPairs("a", "z")
 	timeout := 10 * time.Nanosecond
-	passthru := map[string]string{"a": "z"}
 	req := &RPCRequest{
 		Param:    &param,
 		Timeout:  &timeout,
-		Passthru: passthru,
+		MetaData: md,
 	}
 
 	b.ReportAllocs()
@@ -149,12 +151,12 @@ func BenchmarkPBEncode(b *testing.B) {
 func BenchmarkPBDecode(b *testing.B) {
 
 	param := *ptypes.TimestampNow()
+	md := nproto.NewMetaDataPairs("a", "z")
 	timeout := 10 * time.Nanosecond
-	passthru := map[string]string{"a": "z"}
 	data, _ := PBClientEncoder{}.EncodeRequest(&RPCRequest{
 		Param:    &param,
+		MetaData: md,
 		Timeout:  &timeout,
-		Passthru: passthru,
 	})
 
 	req := &RPCRequest{

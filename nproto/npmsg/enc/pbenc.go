@@ -3,6 +3,8 @@
 package enc
 
 import (
+	"github.com/huangjunwen/nproto/nproto"
+
 	"github.com/golang/protobuf/proto"
 )
 
@@ -28,8 +30,15 @@ func (e PBPublisherEncoder) EncodePayload(payload *MsgPayload) ([]byte, error) {
 		return nil, err
 	}
 
-	// Optional passthru.
-	p.Passthru = payload.Passthru
+	// Optional meta data.
+	if len(payload.MetaData) > 0 {
+		for key, vals := range payload.MetaData {
+			p.MetaData = append(p.MetaData, &PBPayload_MetaDataKV{
+				Key:    key,
+				Values: vals,
+			})
+		}
+	}
 	return proto.Marshal(p)
 }
 
@@ -46,7 +55,12 @@ func (e PBSubscriberEncoder) DecodePayload(data []byte, payload *MsgPayload) err
 		return err
 	}
 
-	// Optional passthru.
-	payload.Passthru = p.Passthru
+	// Optional meta data.
+	if len(p.MetaData) > 0 {
+		payload.MetaData = nproto.MetaData{}
+		for _, kv := range p.MetaData {
+			payload.MetaData[kv.Key] = kv.Values
+		}
+	}
 	return nil
 }

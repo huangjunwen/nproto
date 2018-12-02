@@ -8,10 +8,14 @@ import "google/protobuf/duration.proto";
 message PBRequest {
   // Param is protobuf encoded param.
   bytes param = 1;
+  // MetaData is an optional dict.
+  message MetaDataKV {
+    string key = 1;
+    repeated string values = 2;
+  }
+  repeated MetaDataKV meta_data = 2;
   // Timeout sets an optinal timeout for this RPC.
-  google.protobuf.Duration timeout = 2;
-  // Passthru is an optional dict carrying context values.
-  map<string, string> passthru = 3;
+  google.protobuf.Duration timeout = 3;
 }
 
 // PBReply is reply of a RPC call encoded by protobuf.

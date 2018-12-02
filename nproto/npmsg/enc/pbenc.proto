@@ -5,7 +5,10 @@ package enc;
 message PBPayload {
   // Msg is protobuf encoded message.
   bytes Msg = 1;
-
-  // Passthru is an optional dict carrying context values.
-  map<string, string> passthru = 2;
+  // MetaData is an optional dict.
+  message MetaDataKV {
+    string key = 1;
+    repeated string values = 2;
+  }
+  repeated MetaDataKV meta_data = 2;
 }

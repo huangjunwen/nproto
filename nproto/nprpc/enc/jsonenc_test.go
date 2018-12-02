@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/huangjunwen/nproto/nproto"
+
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/stretchr/testify/assert"
@@ -15,8 +17,8 @@ func TestJSONRequest(t *testing.T) {
 	assert := assert.New(t)
 
 	param := *ptypes.TimestampNow()
+	md := nproto.NewMetaDataPairs("a", "z")
 	timeout := 10 * time.Nanosecond
-	passthru := map[string]string{"a": "z"}
 
 	data := []byte{}
 	err := error(nil)
@@ -25,8 +27,8 @@ func TestJSONRequest(t *testing.T) {
 	{
 		req := &RPCRequest{
 			Param:    &param,
+			MetaData: md,
 			Timeout:  &timeout,
-			Passthru: passthru,
 		}
 
 		data, err = JSONClientEncoder{}.EncodeRequest(req)
@@ -45,7 +47,7 @@ func TestJSONRequest(t *testing.T) {
 		assert.Equal(param.Seconds, p.Seconds)
 		assert.Equal(param.Nanos, p.Nanos)
 		assert.Equal(timeout, *req.Timeout)
-		assert.Equal(passthru, req.Passthru)
+		assert.Equal(md, req.MetaData)
 	}
 
 	// Panic if Param not set
@@ -131,12 +133,12 @@ func TestJSONReply(t *testing.T) {
 func BenchmarkJSONEncode(b *testing.B) {
 
 	param := *ptypes.TimestampNow()
+	md := nproto.NewMetaDataPairs("a", "z")
 	timeout := 10 * time.Nanosecond
-	passthru := map[string]string{"a": "z"}
 	req := &RPCRequest{
 		Param:    &param,
+		MetaData: md,
 		Timeout:  &timeout,
-		Passthru: passthru,
 	}
 
 	b.ReportAllocs()
@@ -149,12 +151,12 @@ func BenchmarkJSONEncode(b *testing.B) {
 func BenchmarkJSONDecode(b *testing.B) {
 
 	param := *ptypes.TimestampNow()
+	md := nproto.NewMetaDataPairs("a", "z")
 	timeout := 10 * time.Nanosecond
-	passthru := map[string]string{"a": "z"}
 	data, _ := JSONClientEncoder{}.EncodeRequest(&RPCRequest{
 		Param:    &param,
+		MetaData: md,
 		Timeout:  &timeout,
-		Passthru: passthru,
 	})
 
 	req := &RPCRequest{

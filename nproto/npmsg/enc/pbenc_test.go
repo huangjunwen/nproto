@@ -3,6 +3,8 @@ package enc
 import (
 	"testing"
 
+	"github.com/huangjunwen/nproto/nproto"
+
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/stretchr/testify/assert"
@@ -11,8 +13,8 @@ import (
 func TestPBEncodeDecode(t *testing.T) {
 
 	assert := assert.New(t)
+	md := nproto.NewMetaDataPairs("a", "z")
 	msg := ptypes.TimestampNow()
-	passthru := map[string]string{"a": "z"}
 
 	data := []byte{}
 	err := error(nil)
@@ -21,7 +23,7 @@ func TestPBEncodeDecode(t *testing.T) {
 	{
 		p := &MsgPayload{
 			Msg:      msg,
-			Passthru: passthru,
+			MetaData: md,
 		}
 
 		data, err = PBPublisherEncoder{}.EncodePayload(p)
@@ -39,7 +41,7 @@ func TestPBEncodeDecode(t *testing.T) {
 
 		assert.Equal(msg.Seconds, m.Seconds)
 		assert.Equal(msg.Nanos, m.Nanos)
-		assert.Equal(passthru, p.Passthru)
+		assert.Equal(md, p.MetaData)
 	}
 
 	// Panic if Msg not set

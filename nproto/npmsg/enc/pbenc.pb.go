@@ -20,19 +20,18 @@ const _ = proto.ProtoPackageIsVersion2 // please upgrade the proto package
 
 type PBPayload struct {
 	// Msg is protobuf encoded message.
-	Msg []byte `protobuf:"bytes,1,opt,name=Msg,proto3" json:"Msg,omitempty"`
-	// Passthru is an optional dict carrying context values.
-	Passthru             map[string]string `protobuf:"bytes,2,rep,name=passthru,proto3" json:"passthru,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
-	XXX_NoUnkeyedLiteral struct{}          `json:"-"`
-	XXX_unrecognized     []byte            `json:"-"`
-	XXX_sizecache        int32             `json:"-"`
+	Msg                  []byte                  `protobuf:"bytes,1,opt,name=Msg,proto3" json:"Msg,omitempty"`
+	MetaData             []*PBPayload_MetaDataKV `protobuf:"bytes,2,rep,name=meta_data,json=metaData,proto3" json:"meta_data,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                `json:"-"`
+	XXX_unrecognized     []byte                  `json:"-"`
+	XXX_sizecache        int32                   `json:"-"`
 }
 
 func (m *PBPayload) Reset()         { *m = PBPayload{} }
 func (m *PBPayload) String() string { return proto.CompactTextString(m) }
 func (*PBPayload) ProtoMessage()    {}
 func (*PBPayload) Descriptor() ([]byte, []int) {
-	return fileDescriptor_pbenc_ce71d0c21be5f13a, []int{0}
+	return fileDescriptor_pbenc_ee8998977401a82e, []int{0}
 }
 func (m *PBPayload) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_PBPayload.Unmarshal(m, b)
@@ -59,30 +58,77 @@ func (m *PBPayload) GetMsg() []byte {
 	return nil
 }
 
-func (m *PBPayload) GetPassthru() map[string]string {
+func (m *PBPayload) GetMetaData() []*PBPayload_MetaDataKV {
 	if m != nil {
-		return m.Passthru
+		return m.MetaData
+	}
+	return nil
+}
+
+// MetaData is an optional dict.
+type PBPayload_MetaDataKV struct {
+	Key                  string   `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Values               []string `protobuf:"bytes,2,rep,name=values,proto3" json:"values,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *PBPayload_MetaDataKV) Reset()         { *m = PBPayload_MetaDataKV{} }
+func (m *PBPayload_MetaDataKV) String() string { return proto.CompactTextString(m) }
+func (*PBPayload_MetaDataKV) ProtoMessage()    {}
+func (*PBPayload_MetaDataKV) Descriptor() ([]byte, []int) {
+	return fileDescriptor_pbenc_ee8998977401a82e, []int{0, 0}
+}
+func (m *PBPayload_MetaDataKV) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_PBPayload_MetaDataKV.Unmarshal(m, b)
+}
+func (m *PBPayload_MetaDataKV) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_PBPayload_MetaDataKV.Marshal(b, m, deterministic)
+}
+func (dst *PBPayload_MetaDataKV) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PBPayload_MetaDataKV.Merge(dst, src)
+}
+func (m *PBPayload_MetaDataKV) XXX_Size() int {
+	return xxx_messageInfo_PBPayload_MetaDataKV.Size(m)
+}
+func (m *PBPayload_MetaDataKV) XXX_DiscardUnknown() {
+	xxx_messageInfo_PBPayload_MetaDataKV.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_PBPayload_MetaDataKV proto.InternalMessageInfo
+
+func (m *PBPayload_MetaDataKV) GetKey() string {
+	if m != nil {
+		return m.Key
+	}
+	return ""
+}
+
+func (m *PBPayload_MetaDataKV) GetValues() []string {
+	if m != nil {
+		return m.Values
 	}
 	return nil
 }
 
 func init() {
 	proto.RegisterType((*PBPayload)(nil), "enc.PBPayload")
-	proto.RegisterMapType((map[string]string)(nil), "enc.PBPayload.PassthruEntry")
+	proto.RegisterType((*PBPayload_MetaDataKV)(nil), "enc.PBPayload.MetaDataKV")
 }
 
-func init() { proto.RegisterFile("pbenc.proto", fileDescriptor_pbenc_ce71d0c21be5f13a) }
+func init() { proto.RegisterFile("pbenc.proto", fileDescriptor_pbenc_ee8998977401a82e) }
 
-var fileDescriptor_pbenc_ce71d0c21be5f13a = []byte{
-	// 150 bytes of a gzipped FileDescriptorProto
+var fileDescriptor_pbenc_ee8998977401a82e = []byte{
+	// 152 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xe2, 0x2e, 0x48, 0x4a, 0xcd,
-	0x4b, 0xd6, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x62, 0x4e, 0xcd, 0x4b, 0x56, 0x9a, 0xc2, 0xc8,
-	0xc5, 0x19, 0xe0, 0x14, 0x90, 0x58, 0x99, 0x93, 0x9f, 0x98, 0x22, 0x24, 0xc0, 0xc5, 0xec, 0x5b,
-	0x9c, 0x2e, 0xc1, 0xa8, 0xc0, 0xa8, 0xc1, 0x13, 0x04, 0x62, 0x0a, 0x59, 0x70, 0x71, 0x14, 0x24,
-	0x16, 0x17, 0x97, 0x64, 0x14, 0x95, 0x4a, 0x30, 0x29, 0x30, 0x6b, 0x70, 0x1b, 0xc9, 0xe8, 0x81,
-	0x8c, 0x80, 0xeb, 0xd1, 0x0b, 0x80, 0x4a, 0xbb, 0xe6, 0x95, 0x14, 0x55, 0x06, 0xc1, 0x55, 0x4b,
-	0x59, 0x73, 0xf1, 0xa2, 0x48, 0x81, 0x0c, 0xcf, 0x4e, 0xad, 0x04, 0x1b, 0xce, 0x19, 0x04, 0x62,
-	0x0a, 0x89, 0x70, 0xb1, 0x96, 0x25, 0xe6, 0x94, 0xa6, 0x4a, 0x30, 0x81, 0xc5, 0x20, 0x1c, 0x2b,
-	0x26, 0x0b, 0xc6, 0x24, 0x36, 0xb0, 0x13, 0x8d, 0x01, 0x01, 0x00, 0x00, 0xff, 0xff, 0x0b, 0x7d,
-	0x2c, 0x51, 0xb1, 0x00, 0x00, 0x00,
+	0x4b, 0xd6, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x62, 0x4e, 0xcd, 0x4b, 0x56, 0xea, 0x65, 0xe4,
+	0xe2, 0x0c, 0x70, 0x0a, 0x48, 0xac, 0xcc, 0xc9, 0x4f, 0x4c, 0x11, 0x12, 0xe0, 0x62, 0xf6, 0x2d,
+	0x4e, 0x97, 0x60, 0x54, 0x60, 0xd4, 0xe0, 0x09, 0x02, 0x31, 0x85, 0xcc, 0xb8, 0x38, 0x73, 0x53,
+	0x4b, 0x12, 0xe3, 0x53, 0x12, 0x4b, 0x12, 0x25, 0x98, 0x14, 0x98, 0x35, 0xb8, 0x8d, 0x24, 0xf5,
+	0x40, 0x66, 0xc0, 0x35, 0xe9, 0xf9, 0xa6, 0x96, 0x24, 0xba, 0x24, 0x96, 0x24, 0x7a, 0x87, 0x05,
+	0x71, 0xe4, 0x42, 0xd9, 0x52, 0x66, 0x5c, 0x5c, 0x08, 0x71, 0x90, 0xb9, 0xd9, 0xa9, 0x95, 0x60,
+	0x73, 0x39, 0x83, 0x40, 0x4c, 0x21, 0x31, 0x2e, 0xb6, 0xb2, 0xc4, 0x9c, 0xd2, 0xd4, 0x62, 0xb0,
+	0xa1, 0x9c, 0x41, 0x50, 0x5e, 0x12, 0x1b, 0xd8, 0x6d, 0xc6, 0x80, 0x00, 0x00, 0x00, 0xff, 0xff,
+	0x90, 0x60, 0x42, 0x06, 0xaa, 0x00, 0x00, 0x00,
 }

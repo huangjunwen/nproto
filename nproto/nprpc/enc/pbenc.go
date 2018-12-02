@@ -5,6 +5,8 @@ package enc
 import (
 	"errors"
 
+	"github.com/huangjunwen/nproto/nproto"
+
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
 )
@@ -33,8 +35,13 @@ func (e PBServerEncoder) DecodeRequest(data []byte, req *RPCRequest) error {
 		return err
 	}
 
-	// Optional passthru.
-	req.Passthru = r.Passthru
+	// Optional meta data.
+	if len(r.MetaData) != 0 {
+		req.MetaData = nproto.MetaData{}
+		for _, kv := range r.MetaData {
+			req.MetaData[kv.Key] = kv.Values
+		}
+	}
 
 	// Optional timeout.
 	if r.Timeout != nil {
@@ -84,8 +91,15 @@ func (e PBClientEncoder) EncodeRequest(req *RPCRequest) ([]byte, error) {
 		return nil, err
 	}
 
-	// Optional passthru.
-	r.Passthru = req.Passthru
+	// Optional meta data.
+	if len(req.MetaData) > 0 {
+		for key, vals := range req.MetaData {
+			r.MetaData = append(r.MetaData, &PBRequest_MetaDataKV{
+				Key:    key,
+				Values: vals,
+			})
+		}
+	}
 
 	// Optional timeout.
 	if req.Timeout != nil {

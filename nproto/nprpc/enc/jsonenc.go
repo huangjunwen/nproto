@@ -6,6 +6,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/huangjunwen/nproto/nproto"
+
 	"github.com/golang/protobuf/jsonpb"
 )
 
@@ -17,9 +19,9 @@ type JSONClientEncoder struct{}
 
 // JSONRequest is request of a RPC call encoded by json.
 type JSONRequest struct {
-	Param    json.RawMessage   `json:"param"`
-	Timeout  string            `json:"timeout,omitempty"`
-	Passthru map[string]string `json:"passthru,omitempty"`
+	Param    json.RawMessage `json:"param"`
+	MetaData nproto.MetaData `json:"metadata,omitempty"`
+	Timeout  string          `json:"timeout,omitempty"`
 }
 
 // JSONReply is reply of a RPC call encoded by json.
@@ -56,8 +58,8 @@ func (e JSONServerEncoder) DecodeRequest(data []byte, req *RPCRequest) error {
 		return err
 	}
 
-	// Optional passthru.
-	req.Passthru = r.Passthru
+	// Optional meta data.
+	req.MetaData = r.MetaData
 
 	// Optional timeout.
 	if r.Timeout != "" {
@@ -103,8 +105,8 @@ func (e JSONClientEncoder) EncodeRequest(req *RPCRequest) ([]byte, error) {
 	}
 	r.Param = []byte(buf.Bytes())
 
-	// Optional passthru.
-	r.Passthru = req.Passthru
+	// Optional meta data.
+	r.MetaData = req.MetaData
 
 	// Optional timeout.
 	if req.Timeout != nil {

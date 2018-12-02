@@ -63,7 +63,7 @@ func TestNatsRPC(t *testing.T) {
 		}
 	)
 
-	// This method is used to test timeout and passthru.
+	// This method is used to test timeout and meta data.
 	var (
 		bgMethod = &nproto.RPCMethod{
 			Name: "bg",
@@ -86,9 +86,9 @@ func TestNatsRPC(t *testing.T) {
 			)
 
 			// Get time to wait.
-			d := nproto.Passthru(ctx)
+			md := nproto.CurrRPCMetaData(ctx)
 			{
-				v := d[bgTimeKey]
+				v := md.Get(bgTimeKey)
 				if v == "" {
 					v = "0s"
 				}
@@ -98,7 +98,7 @@ func TestNatsRPC(t *testing.T) {
 
 			// Get expect result.
 			{
-				canDone = d[bgCanDoneKey]
+				canDone = md.Get(bgCanDoneKey)
 				if canDone == "" {
 					canDone = "true"
 				}
@@ -239,25 +239,25 @@ func TestNatsRPC(t *testing.T) {
 		{
 			handler := client.MakeHandler(svcName, bgMethod)
 			{
-				// Test no passthru.
+				// Test without metadata.
 				output, err := handler(context.Background(), &empty.Empty{})
 				assert.NoError(err)
 				assert.Equal("0s", output.(*wrappers.StringValue).Value)
 			}
 			{
-				// Test passthru: passthru contains wait time shorter than context deadline (since context is context.Background()).
-				ctx := nproto.AddPassthru(context.Background(), bgTimeKey, "10ms")
+				// Test metadata: wait time shorter than context deadline (since context is context.Background()).
+				ctx := nproto.NewOutgoingContext(context.Background(), nproto.NewMetaDataPairs(bgTimeKey, "10ms"))
 				output, err := handler(ctx, &empty.Empty{})
 				assert.NoError(err)
 				assert.Equal("10ms", output.(*wrappers.StringValue).Value)
 			}
 			{
-				// Test context timeout: passthru contains wait time longer than context deadline.
+				// Test context timeout: wait time longer than context deadline.
 				ctx, _ := context.WithTimeout(context.Background(), 100*time.Millisecond)
-				ctx = nproto.AddPassthruDict(ctx, map[string]string{
-					bgTimeKey:    "10s", // 10s is much longer than context timeout, thus the bg work can't be done.
-					bgCanDoneKey: "false",
-				})
+				ctx = nproto.NewOutgoingContext(ctx, nproto.NewMetaDataPairs(
+					bgTimeKey, "10s",
+					bgCanDoneKey, "false",
+				))
 				output, err := handler(ctx, &empty.Empty{})
 				assert.NoError(err)
 				assert.Equal("10s", output.(*wrappers.StringValue).Value)

@@ -73,7 +73,7 @@ func NewMsgPublisher(publisher RawMsgPublisher, encoder enc.MsgPublisherEncoder)
 func (p *defaultMsgPublisher) Publish(ctx context.Context, subject string, msg proto.Message) error {
 	data, err := p.encoder.EncodePayload(&enc.MsgPayload{
 		Msg:      msg,
-		Passthru: nproto.Passthru(ctx),
+		MetaData: nproto.FromOutgoingContext(ctx),
 	})
 	if err != nil {
 		panic(err)
@@ -96,7 +96,7 @@ func NewMsgAsyncPublisher(publisher RawMsgAsyncPublisher, encoder enc.MsgPublish
 func (p *defaultMsgAsyncPublisher) Publish(ctx context.Context, subject string, msg proto.Message) error {
 	data, err := p.encoder.EncodePayload(&enc.MsgPayload{
 		Msg:      msg,
-		Passthru: nproto.Passthru(ctx),
+		MetaData: nproto.FromOutgoingContext(ctx),
 	})
 	if err != nil {
 		panic(err)
@@ -108,7 +108,7 @@ func (p *defaultMsgAsyncPublisher) Publish(ctx context.Context, subject string, 
 func (p *defaultMsgAsyncPublisher) PublishAsync(ctx context.Context, subject string, msg proto.Message, cb func(error)) error {
 	data, err := p.encoder.EncodePayload(&enc.MsgPayload{
 		Msg:      msg,
-		Passthru: nproto.Passthru(ctx),
+		MetaData: nproto.FromOutgoingContext(ctx),
 	})
 	if err != nil {
 		panic(err)
@@ -141,7 +141,7 @@ func (s *defaultMsgSubscriber) Subscribe(subject, queue string, newMsg func() pr
 		}
 
 		// Setup context and run the handler.
-		return handler(nproto.NewMsgCtx(ctx, subj, payload.Passthru), payload.Msg)
+		return handler(nproto.NewMsgCtx(ctx, subj, payload.MetaData), payload.Msg)
 	}
 
 	return s.subscriber.Subscribe(subject, queue, h, opts...)

@@ -3,6 +3,8 @@ package enc
 import (
 	"time"
 
+	"github.com/huangjunwen/nproto/nproto"
+
 	"github.com/golang/protobuf/proto"
 )
 
@@ -24,17 +26,18 @@ type RPCClientEncoder interface {
 
 // RPCRequest is the request of an rpc.
 type RPCRequest struct {
-	// Param is the parameter of this rpc.
+	// Param is the parameter of this rpc. Must be filled with an empty object before decoding.
 	Param proto.Message
 	// Timeout is an optional timeout of this rpc.
 	Timeout *time.Duration
-	// Passthru is an optional context dict passing around.
-	Passthru map[string]string
+	// MetaData is an optional dict.
+	MetaData nproto.MetaData
 }
 
 // RPCReply is the reply of an rpc.
 type RPCReply struct {
 	// Result is the normal result of this rpc. Must set to nil if there is an error.
+	// Must be filled with an empty object before decoding.
 	Result proto.Message
 	// Error is the error result of this rpc. Must set to nil if there is no error.
 	Error error

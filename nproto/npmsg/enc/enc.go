@@ -1,6 +1,8 @@
 package enc
 
 import (
+	"github.com/huangjunwen/nproto/nproto"
+
 	"github.com/golang/protobuf/proto"
 )
 
@@ -20,6 +22,6 @@ type MsgSubscriberEncoder interface {
 type MsgPayload struct {
 	// Msg is the published message.
 	Msg proto.Message
-	// Passthru is an optional context dict passing around.
-	Passthru map[string]string
+	// MetaData is an optional dict.
+	MetaData nproto.MetaData
 }

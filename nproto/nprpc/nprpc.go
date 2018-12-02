@@ -245,7 +245,7 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nproto.RPCM
 			}
 
 			// Setup context.
-			ctx := nproto.NewRPCCtx(context.Background(), svcName, method, req.Passthru)
+			ctx := nproto.NewRPCCtx(context.Background(), svcName, method, req.MetaData)
 			if req.Timeout != nil {
 				var cancel context.CancelFunc
 				ctx, cancel = context.WithTimeout(ctx, *req.Timeout)
@@ -359,9 +359,9 @@ func (client *NatsRPCClient) MakeHandler(svcName string, method *nproto.RPCMetho
 				req.Timeout = &dur
 			}
 		}
-		passthru := nproto.Passthru(ctx)
-		if len(passthru) > 0 {
-			req.Passthru = passthru
+		md := nproto.FromOutgoingContext(ctx)
+		if len(md) > 0 {
+			req.MetaData = md
 		}
 
 		// Encode request.

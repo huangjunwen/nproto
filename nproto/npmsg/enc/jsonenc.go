@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 
+	"github.com/huangjunwen/nproto/nproto"
+
 	"github.com/golang/protobuf/jsonpb"
 )
 
@@ -14,8 +16,8 @@ type JSONPublisherEncoder struct{}
 type JSONSubscriberEncoder struct{}
 
 type JSONPayload struct {
-	Msg      json.RawMessage   `json:"msg"`
-	Passthru map[string]string `json:"passthru,omitempty"`
+	Msg      json.RawMessage `json:"msg"`
+	MetaData nproto.MetaData `json:"metadata"`
 }
 
 var (
@@ -43,8 +45,8 @@ func (e JSONPublisherEncoder) EncodePayload(payload *MsgPayload) ([]byte, error)
 	}
 	p.Msg = json.RawMessage(buf.Bytes())
 
-	// Optional passthru.
-	p.Passthru = payload.Passthru
+	// Optional meta data.
+	p.MetaData = payload.MetaData
 
 	// Encode payload.
 	return json.Marshal(p)
@@ -65,6 +67,6 @@ func (e JSONSubscriberEncoder) DecodePayload(data []byte, payload *MsgPayload) e
 	}
 
 	// Optional passthru.
-	payload.Passthru = p.Passthru
+	payload.MetaData = p.MetaData
 	return nil
 }
