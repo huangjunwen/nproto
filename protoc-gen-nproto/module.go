@@ -14,6 +14,7 @@ var (
 	GenMsgStubLabel = "@@npmsg@@"
 )
 
+// NProtoModule is a module of protoc-gen-star.
 type NProtoModule struct {
 	pgs.ModuleBase
 	ctx         pgsgo.Context
@@ -23,6 +24,7 @@ type NProtoModule struct {
 	npmsgTpl    *template.Template
 }
 
+// InitContext implements pgs.Module interface.
 func (m *NProtoModule) InitContext(c pgs.BuildContext) {
 	m.ModuleBase.InitContext(c)
 	m.ctx = pgsgo.InitContext(c.Parameters())
@@ -60,10 +62,12 @@ func (m *NProtoModule) InitContext(c pgs.BuildContext) {
 	m.npmsgTpl = newTpl("npmsg", npmsgTplText)
 }
 
+// Name implements pgs.Module interface.
 func (m *NProtoModule) Name() string {
 	return "nproto"
 }
 
+// Execute implements pgs.Module interface.
 func (m *NProtoModule) Execute(targets map[string]pgs.File, packages map[string]pgs.Package) []pgs.Artifact {
 	// For each target file.
 	for _, target := range targets {
@@ -158,7 +162,7 @@ type {{ Name $svc }} interface {
 	{{ end }}
 }
 
-// Serve{{ Name $svc }} serves {{ Name $svc }} using a RPC server.
+// Serve{{ Name $svc }} serves {{ Name $svc }} service using a RPC server.
 func Serve{{ Name $svc }}(server nproto.RPCServer, svcName string, svc {{ Name $svc }}) error {
 	return server.RegistSvc(svcName, map[*nproto.RPCMethod]nproto.RPCHandler{
 		{{ range $svc.Methods -}}
