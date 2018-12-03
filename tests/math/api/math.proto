@@ -1,5 +1,5 @@
 syntax = "proto3";
-package math;
+package huangjunwen.nproto.tests.mathapi;
 
 option go_package = "github.com/huangjunwen/nproto/tests/math/api;mathapi";
 
