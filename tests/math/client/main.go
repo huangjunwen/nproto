@@ -2,14 +2,20 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"math/rand"
 	"time"
 
 	mathapi "github.com/huangjunwen/nproto/tests/math/api"
 
+	"github.com/huangjunwen/nproto/nproto"
 	"github.com/huangjunwen/nproto/nproto/nprpc"
 	"github.com/nats-io/go-nats"
+)
+
+const (
+	seqKey = "seq"
 )
 
 func main() {
@@ -28,13 +34,15 @@ func main() {
 	defer client.Close()
 
 	svc := mathapi.InvokeMath(client, mathapi.SvcName)
+	seq := 1
 	for {
 		ctx, _ := context.WithTimeout(context.Background(), time.Second)
+		ctx = nproto.NewOutgoingContext(ctx, nproto.NewMetaDataPairs(seqKey, fmt.Sprintf("%d", seq)))
 		args := make([]float64, rand.Intn(3))
 		for i := 0; i < len(args); i++ {
-			args[i] = rand.Float64()
+			args[i] = float64(rand.Intn(100))
 		}
-		log.Printf("Calling Sum(%v)\n", args)
+		log.Printf("Calling Sum(%v) seq: %+q\n", args, nproto.FromOutgoingContext(ctx).Get(seqKey))
 
 		sum, err := svc.Sum(ctx, &mathapi.SumRequest{Args: args})
 		if err != nil {
@@ -44,5 +52,6 @@ func main() {
 		}
 
 		time.Sleep(time.Second)
+		seq += 1
 	}
 }
