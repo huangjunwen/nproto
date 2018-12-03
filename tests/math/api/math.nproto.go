@@ -18,11 +18,10 @@ var (
 
 // @@protoc_insertion_point(imports)
 
-//Math is a service providing some math functions.
+// Math is a service providing some math functions.
 // @@nprpc@@
 type Math interface {
-
-	//Sum returns the sum of a list of arguments.
+	// Sum returns the sum of a list of arguments.
 	Sum(ctx context.Context, input *SumRequest) (output *SumReply, err error)
 }
 

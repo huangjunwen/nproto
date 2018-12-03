@@ -4,6 +4,7 @@ import (
 	"log"
 	"strings"
 	"text/template"
+	"unicode"
 
 	pgs "github.com/lyft/protoc-gen-star"
 	pgsgo "github.com/lyft/protoc-gen-star/lang/go"
@@ -42,7 +43,7 @@ func (m *NProtoModule) InitContext(c pgs.BuildContext) {
 		"PackageName": m.ctx.PackageName,
 		"ImportPath":  m.ctx.ImportPath,
 		"LeadingComments": func(entity pgs.Entity) string {
-			comments := strings.TrimSpace(entity.SourceCodeInfo().LeadingComments())
+			comments := strings.TrimRightFunc(entity.SourceCodeInfo().LeadingComments(), unicode.IsSpace)
 			if comments == "" {
 				return ""
 			}
@@ -156,7 +157,7 @@ var (
 
 {{ LeadingComments $svc }}
 type {{ Name $svc }} interface {
-	{{ range $svc.Methods }}
+	{{- range $svc.Methods }}
 		{{ LeadingComments . }}
 		{{ Name . }}(ctx context.Context, input *{{ $fctx.PackagePrefixed .Input }}) (output *{{ $fctx.PackagePrefixed .Output }}, err error)
 	{{ end }}
