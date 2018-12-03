@@ -55,4 +55,4 @@ service Math {
 $ protoc --go_out=paths=source_relative:. --nproto_out=paths=source_relative:. *.proto && gofmt -w *.go
 ```
 
-5. Implement your service/message handler, then glue them with the stub code generated, see [this sime exmaple](https://github.com/huangjunwen/nproto/tree/master/tests/math) for detail.
+5. Implement your service/message handler, then glue them with the stub code generated, see [this simple exmaple](https://github.com/huangjunwen/nproto/tree/master/tests/math) for detail.
