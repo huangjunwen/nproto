@@ -1,5 +1,5 @@
 all:
-	protoc --go_out=paths=source_relative:. --nproto_out=paths=source_relative:. *.proto && gofmt -w *.go
+	protoc --go_out=paths=source_relative:. --nproto_out=paths=source_relative:. *.proto 
 
 clean:
-	rm *.go
+	rm math.pb.go math.nproto.go

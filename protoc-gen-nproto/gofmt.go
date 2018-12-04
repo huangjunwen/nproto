@@ -34,21 +34,22 @@ func (p GoFmt) Match(a pgs.Artifact) bool {
 	return strings.HasSuffix(n, ".go")
 }
 
-const fakePkgClause = "package xxxxxxxx\n"
+const fakePkgClause = "package xxxxxxxx\n\n"
 
 func (p GoFmt) Process(in []byte) ([]byte, error) {
 	// Contains 'package xxx' or not?
-	input := in
 	fset := token.NewFileSet()
 	_, err := parser.ParseFile(fset, "", in, parser.PackageClauseOnly)
 	hasPkgClause := err == nil
 
-	// Add a fake package clause if missing.
-	if !hasPkgClause {
-		input = make([]byte, 0, len(fakePkgClause)+len(in))
-		input = append(input, fakePkgClause...)
-		input = append(input, in...)
+	// If has package clause.
+	if hasPkgClause {
+		return format.Source(in)
 	}
+
+	// Otherwise add a fake package clause.
+	input := []byte(fakePkgClause)
+	input = append(input, in...)
 
 	// Format.
 	output, err := format.Source(input)
@@ -56,9 +57,10 @@ func (p GoFmt) Process(in []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	// Trim the fake package clause if any.
-	if !hasPkgClause {
-		return output[len(fakePkgClause):], nil
-	}
+	// Trim the fake package clause.
+	output = output[len(fakePkgClause):]
+
+	// Add one more new line.
+	output = append(output, '\n')
 	return output, nil
 }
