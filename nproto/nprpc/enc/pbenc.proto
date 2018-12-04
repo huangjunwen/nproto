@@ -1,29 +1,30 @@
 syntax = "proto3";
 
-package enc;
+package huangjunwen.nproto.nprpc.enc;
 
-import "google/protobuf/duration.proto";
+option go_package = "github.com/huangjunwen/nproto/nproto/nprpc/enc";
 
 // PBRequest is request of a RPC call encoded by protobuf.
 message PBRequest {
   // Param is protobuf encoded param.
-  bytes param = 1;
-  // MetaData is an optional dict.
-  message MetaDataKV {
-    string key = 1;
-    repeated string values = 2;
-  }
+  bytes               param     = 1;
+  // MetaData dict. NOTE: map value can't be repeated type
+  // See: https://stackoverflow.com/questions/38886789/protobuf3-how-to-describe-map-of-repeated-string
   repeated MetaDataKV meta_data = 2;
-  // Timeout sets an optinal timeout for this RPC.
-  google.protobuf.Duration timeout = 3;
+  // Timeout is timeout in nanoseconds. Use int64 instead of wkt's duration to avoid an extra pointer.
+  int64               timeout   = 3;
+}
+
+// MetaDataKV is a kv pair of meta data.
+message MetaDataKV {
+  string          key    = 1;
+  repeated string values = 2;
 }
 
 // PBReply is reply of a RPC call encoded by protobuf.
 message PBReply {
-  oneof reply {
-    // Result is protobuf encoded result.
-    bytes result = 1;
-    // Error is the error result of this rpc.
-    string error = 2;
-  }
+  // Result is protobuf encoded result.
+  bytes  result = 1;
+  // Error is the error result of this rpc.
+  string error  = 2;
 }

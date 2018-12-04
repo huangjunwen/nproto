@@ -1,14 +1,14 @@
-//go:generate	protoc --go_out=. pbenc.proto
+//go:generate	protoc --go_out=paths=source_relative:. pbenc.proto
 
 package enc
 
 import (
 	"errors"
+	"time"
 
 	"github.com/huangjunwen/nproto/nproto"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes"
 )
 
 // PBServerEncoder is RPCServerEncoder using protobuf encoding.
@@ -35,7 +35,7 @@ func (e PBServerEncoder) DecodeRequest(data []byte, req *RPCRequest) error {
 		return err
 	}
 
-	// Optional meta data.
+	// Meta data.
 	if len(r.MetaData) != 0 {
 		req.MetaData = nproto.MetaData{}
 		for _, kv := range r.MetaData {
@@ -43,13 +43,9 @@ func (e PBServerEncoder) DecodeRequest(data []byte, req *RPCRequest) error {
 		}
 	}
 
-	// Optional timeout.
-	if r.Timeout != nil {
-		dur, err := ptypes.Duration(r.Timeout)
-		if err != nil {
-			return err
-		}
-		req.Timeout = &dur
+	// Timeout.
+	if r.Timeout > 0 {
+		req.Timeout = time.Duration(r.Timeout)
 	}
 
 	return nil
@@ -58,22 +54,17 @@ func (e PBServerEncoder) DecodeRequest(data []byte, req *RPCRequest) error {
 
 // EncodeReply implements RPCServerEncoder interface.
 func (e PBServerEncoder) EncodeReply(reply *RPCReply) ([]byte, error) {
-
 	r := &PBReply{}
 	if reply.Error != nil {
 		// Set error.
-		r.Reply = &PBReply_Error{
-			Error: reply.Error.Error(),
-		}
+		r.Error = reply.Error.Error()
 	} else {
-		// Encode result.
+		// Set result.
 		result, err := proto.Marshal(reply.Result)
 		if err != nil {
 			return nil, err
 		}
-		r.Reply = &PBReply_Result{
-			Result: result,
-		}
+		r.Result = result
 	}
 
 	// Encode reply.
@@ -82,7 +73,6 @@ func (e PBServerEncoder) EncodeReply(reply *RPCReply) ([]byte, error) {
 
 // EncodeRequest implements RPCClientEncoder interface.
 func (e PBClientEncoder) EncodeRequest(req *RPCRequest) ([]byte, error) {
-
 	var err error
 	r := &PBRequest{}
 	// Encode param.
@@ -91,19 +81,19 @@ func (e PBClientEncoder) EncodeRequest(req *RPCRequest) ([]byte, error) {
 		return nil, err
 	}
 
-	// Optional meta data.
-	if len(req.MetaData) > 0 {
+	// Meta data.
+	if len(req.MetaData) != 0 {
 		for key, vals := range req.MetaData {
-			r.MetaData = append(r.MetaData, &PBRequest_MetaDataKV{
+			r.MetaData = append(r.MetaData, &MetaDataKV{
 				Key:    key,
 				Values: vals,
 			})
 		}
 	}
 
-	// Optional timeout.
-	if req.Timeout != nil {
-		r.Timeout = ptypes.DurationProto(*req.Timeout)
+	// Timeout.
+	if req.Timeout > 0 {
+		r.Timeout = int64(req.Timeout)
 	}
 
 	// Encode request.
@@ -113,24 +103,20 @@ func (e PBClientEncoder) EncodeRequest(req *RPCRequest) ([]byte, error) {
 
 // DecodeReply implements RPCClientEncoder interface.
 func (e PBClientEncoder) DecodeReply(data []byte, reply *RPCReply) error {
-
 	// Decode reply.
 	r := &PBReply{}
 	if err := proto.Unmarshal(data, r); err != nil {
 		return err
 	}
 
-	switch x := r.Reply.(type) {
-	case *PBReply_Error:
-		// Error case.
-		reply.Error = errors.New(x.Error)
+	// If there is an error.
+	if r.Error != "" {
 		reply.Result = nil
+		reply.Error = errors.New(r.Error)
 		return nil
-	case *PBReply_Result:
-		// Normal case. Decode result.
-		return proto.Unmarshal(x.Result, reply.Result)
-	default:
-		panic("Shouldn't be here")
 	}
+
+	// Decode result.
+	return proto.Unmarshal(r.Result, reply.Result)
 
 }

@@ -16,7 +16,7 @@ func TestPBRequest(t *testing.T) {
 
 	assert := assert.New(t)
 
-	param := *ptypes.TimestampNow()
+	param := ptypes.TimestampNow()
 	md := nproto.NewMetaDataPairs("a", "z")
 	timeout := 10 * time.Nanosecond
 
@@ -26,8 +26,8 @@ func TestPBRequest(t *testing.T) {
 	// Encode.
 	{
 		req := &RPCRequest{
-			Param:    &param,
-			Timeout:  &timeout,
+			Param:    param,
+			Timeout:  timeout,
 			MetaData: md,
 		}
 
@@ -46,7 +46,7 @@ func TestPBRequest(t *testing.T) {
 
 		assert.Equal(param.Seconds, p.Seconds)
 		assert.Equal(param.Nanos, p.Nanos)
-		assert.Equal(timeout, *req.Timeout)
+		assert.Equal(timeout, req.Timeout)
 		assert.Equal(md, req.MetaData)
 	}
 
@@ -66,7 +66,7 @@ func TestPBReply(t *testing.T) {
 
 	// Normal result.
 	{
-		result := *ptypes.TimestampNow()
+		result := ptypes.TimestampNow()
 
 		data := []byte{}
 		err := error(nil)
@@ -74,7 +74,7 @@ func TestPBReply(t *testing.T) {
 		// Encode.
 		{
 			reply := &RPCReply{
-				Result: &result,
+				Result: result,
 			}
 			data, err = PBServerEncoder{}.EncodeReply(reply)
 			assert.NoError(err)
@@ -132,12 +132,12 @@ func TestPBReply(t *testing.T) {
 
 func BenchmarkPBEncode(b *testing.B) {
 
-	param := *ptypes.TimestampNow()
+	param := ptypes.TimestampNow()
 	md := nproto.NewMetaDataPairs("a", "z")
 	timeout := 10 * time.Nanosecond
 	req := &RPCRequest{
-		Param:    &param,
-		Timeout:  &timeout,
+		Param:    param,
+		Timeout:  timeout,
 		MetaData: md,
 	}
 
@@ -150,13 +150,13 @@ func BenchmarkPBEncode(b *testing.B) {
 
 func BenchmarkPBDecode(b *testing.B) {
 
-	param := *ptypes.TimestampNow()
+	param := ptypes.TimestampNow()
 	md := nproto.NewMetaDataPairs("a", "z")
 	timeout := 10 * time.Nanosecond
 	data, _ := PBClientEncoder{}.EncodeRequest(&RPCRequest{
-		Param:    &param,
+		Param:    param,
 		MetaData: md,
-		Timeout:  &timeout,
+		Timeout:  timeout,
 	})
 
 	req := &RPCRequest{

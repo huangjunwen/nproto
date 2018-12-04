@@ -21,7 +21,7 @@ type JSONClientEncoder struct{}
 type JSONRequest struct {
 	Param    json.RawMessage `json:"param"`
 	MetaData nproto.MetaData `json:"metadata,omitempty"`
-	Timeout  string          `json:"timeout,omitempty"`
+	Timeout  int64           `json:"timeout,omitempty"`
 }
 
 // JSONReply is reply of a RPC call encoded by json.
@@ -58,16 +58,12 @@ func (e JSONServerEncoder) DecodeRequest(data []byte, req *RPCRequest) error {
 		return err
 	}
 
-	// Optional meta data.
+	// Meta data.
 	req.MetaData = r.MetaData
 
-	// Optional timeout.
-	if r.Timeout != "" {
-		dur, err := time.ParseDuration(r.Timeout)
-		if err != nil {
-			return err
-		}
-		req.Timeout = &dur
+	// Timeout.
+	if r.Timeout > 0 {
+		req.Timeout = time.Duration(r.Timeout)
 	}
 
 	return nil
@@ -82,7 +78,7 @@ func (e JSONServerEncoder) EncodeReply(reply *RPCReply) ([]byte, error) {
 		// Set error.
 		r.Error = reply.Error.Error()
 	} else {
-		// Encode result.
+		// Set result.
 		buf := &bytes.Buffer{}
 		if err := jsonMarshaler.Marshal(buf, reply.Result); err != nil {
 			return nil, err
@@ -96,7 +92,6 @@ func (e JSONServerEncoder) EncodeReply(reply *RPCReply) ([]byte, error) {
 
 // EncodeRequest implements RPCClientEncoder interface.
 func (e JSONClientEncoder) EncodeRequest(req *RPCRequest) ([]byte, error) {
-
 	r := &JSONRequest{}
 	// Encode param.
 	buf := &bytes.Buffer{}
@@ -105,12 +100,12 @@ func (e JSONClientEncoder) EncodeRequest(req *RPCRequest) ([]byte, error) {
 	}
 	r.Param = []byte(buf.Bytes())
 
-	// Optional meta data.
+	// Meta data.
 	r.MetaData = req.MetaData
 
-	// Optional timeout.
-	if req.Timeout != nil {
-		r.Timeout = req.Timeout.String()
+	// Timeout.
+	if req.Timeout > 0 {
+		r.Timeout = int64(req.Timeout)
 	}
 
 	// Encode request.
@@ -119,22 +114,21 @@ func (e JSONClientEncoder) EncodeRequest(req *RPCRequest) ([]byte, error) {
 
 // DecodeReply implements RPCClientEncoder interface.
 func (e JSONClientEncoder) DecodeReply(data []byte, reply *RPCReply) error {
-
 	// Decode reply.
 	r := &JSONReply{}
 	if err := json.Unmarshal(data, r); err != nil {
 		return err
 	}
 
+	// If there is an error.
 	if r.Error != "" {
-		// Error case.
-		reply.Error = errors.New(r.Error)
 		reply.Result = nil
+		reply.Error = errors.New(r.Error)
 		return nil
-	} else {
-		// Normal case. Decode result.
-		reader := bytes.NewReader([]byte(r.Result))
-		return jsonUnmarshaler.Unmarshal(reader, reply.Result)
 	}
+
+	// Decode result.
+	reader := bytes.NewReader([]byte(r.Result))
+	return jsonUnmarshaler.Unmarshal(reader, reply.Result)
 
 }
