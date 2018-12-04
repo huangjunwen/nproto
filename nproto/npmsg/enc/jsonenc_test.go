@@ -13,8 +13,9 @@ import (
 func TestJSONEncodeDecode(t *testing.T) {
 
 	assert := assert.New(t)
-	md := nproto.NewMetaDataPairs("a", "z")
+
 	msg := ptypes.TimestampNow()
+	md := nproto.NewMetaDataPairs("a", "z")
 
 	data := []byte{}
 	err := error(nil)

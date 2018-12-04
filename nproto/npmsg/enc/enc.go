@@ -22,6 +22,6 @@ type MsgSubscriberEncoder interface {
 type MsgPayload struct {
 	// Msg is the published message.
 	Msg proto.Message
-	// MetaData is an optional dict.
+	// MetaData is a dict containing extra context information.
 	MetaData nproto.MetaData
 }

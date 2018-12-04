@@ -1,4 +1,4 @@
-//go:generate protoc --go_out=. pbenc.proto
+//go:generate protoc --go_out=paths=source_relative:. pbenc.proto
 
 package enc
 
@@ -30,10 +30,10 @@ func (e PBPublisherEncoder) EncodePayload(payload *MsgPayload) ([]byte, error) {
 		return nil, err
 	}
 
-	// Optional meta data.
-	if len(payload.MetaData) > 0 {
+	// Meta data.
+	if len(payload.MetaData) != 0 {
 		for key, vals := range payload.MetaData {
-			p.MetaData = append(p.MetaData, &PBPayload_MetaDataKV{
+			p.MetaData = append(p.MetaData, &MetaDataKV{
 				Key:    key,
 				Values: vals,
 			})
@@ -55,8 +55,8 @@ func (e PBSubscriberEncoder) DecodePayload(data []byte, payload *MsgPayload) err
 		return err
 	}
 
-	// Optional meta data.
-	if len(p.MetaData) > 0 {
+	// Meta data.
+	if len(p.MetaData) != 0 {
 		payload.MetaData = nproto.MetaData{}
 		for _, kv := range p.MetaData {
 			payload.MetaData[kv.Key] = kv.Values

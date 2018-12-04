@@ -45,7 +45,7 @@ func (e JSONPublisherEncoder) EncodePayload(payload *MsgPayload) ([]byte, error)
 	}
 	p.Msg = json.RawMessage(buf.Bytes())
 
-	// Optional meta data.
+	// Meta data.
 	p.MetaData = payload.MetaData
 
 	// Encode payload.
@@ -66,7 +66,7 @@ func (e JSONSubscriberEncoder) DecodePayload(data []byte, payload *MsgPayload) e
 		return err
 	}
 
-	// Optional passthru.
+	// Meta data.
 	payload.MetaData = p.MetaData
 	return nil
 }

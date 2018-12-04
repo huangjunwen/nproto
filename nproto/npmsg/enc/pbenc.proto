@@ -1,14 +1,20 @@
 syntax = "proto3";
 
-package enc;
+package huangjunwen.nproto.npmsg.enc;
 
+option go_package = "github.com/huangjunwen/nproto/nproto/npmsg/enc";
+
+// PBPayload is the payload encoded by protobuf.
 message PBPayload {
   // Msg is protobuf encoded message.
-  bytes Msg = 1;
-  // MetaData is an optional dict.
-  message MetaDataKV {
-    string key = 1;
-    repeated string values = 2;
-  }
+  bytes               Msg       = 1;
+  // MetaData dict. NOTE: map value can't be repeated type
+  // See: https://stackoverflow.com/questions/38886789/protobuf3-how-to-describe-map-of-repeated-string
   repeated MetaDataKV meta_data = 2;
+}
+
+// MetaDataKV is a kv pair of meta data.
+message MetaDataKV {
+  string          key    = 1;
+  repeated string values = 2;
 }
