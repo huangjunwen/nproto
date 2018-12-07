@@ -52,7 +52,7 @@ service Math {
 4. Run `protoc-gen-nproto`, for example:
 
 ```bash
-$ protoc --go_out=paths=source_relative:. --nproto_out=paths=source_relative:. *.proto && gofmt -w *.go
+$ protoc --go_out=paths=source_relative:. --nproto_out=paths=source_relative:. *.proto
 ```
 
 5. Implement your service/message handler, then glue them with the stub code generated, see [this simple exmaple](https://github.com/huangjunwen/nproto/tree/master/tests/math) for detail.
