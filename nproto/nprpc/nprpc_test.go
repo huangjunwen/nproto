@@ -354,3 +354,70 @@ func TestRegist(t *testing.T) {
 	assert.Error(server.RegistSvc("test2", nil))
 	assert.Len(server.svcs, 1)
 }
+
+func BenchmarkNatsRPC(b *testing.B) {
+	var err error
+
+	var (
+		svcName = "ping"
+	)
+
+	var (
+		pingMethod = &nproto.RPCMethod{
+			Name: "ping",
+			NewInput: func() proto.Message {
+				return &empty.Empty{}
+			},
+			NewOutput: func() proto.Message {
+				return &empty.Empty{}
+			},
+		}
+		pingHandler = func(ctx context.Context, in proto.Message) (proto.Message, error) {
+			return &empty.Empty{}, nil
+		}
+	)
+
+	nc, err := nats.Connect(nats.DefaultURL, nats.MaxReconnects(-1))
+	if err != nil {
+		log.Panic(err)
+	}
+	defer nc.Close()
+
+	var server *NatsRPCServer
+	{
+		server, err = NewNatsRPCServer(nc)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer server.Close()
+	}
+
+	{
+		if err = server.RegistSvc(svcName, map[*nproto.RPCMethod]nproto.RPCHandler{
+			pingMethod: pingHandler,
+		}); err != nil {
+			log.Panic(err)
+		}
+		defer server.DeregistSvc(svcName)
+	}
+
+	var client *NatsRPCClient
+	{
+		client, err = NewNatsRPCClient(nc)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer client.Close()
+	}
+
+	ping := client.MakeHandler(svcName, pingMethod)
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_, err := ping(context.Background(), &empty.Empty{})
+			if err != nil {
+				log.Panic(err)
+			}
+		}
+	})
+}
