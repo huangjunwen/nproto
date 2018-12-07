@@ -13,7 +13,8 @@ var (
 // TaskRunner is an interface to run tasks.
 type TaskRunner interface {
 	// Run runs t. If there is not enough resouce to run t immediately,
-	// it should wait unless ctx is done. Returns an error if t can't be run.
+	// it should wait unless ctx is done or any other error occured.
+	// Returns an error if t can't be run.
 	Run(ctx context.Context, t func()) error
 }
 
