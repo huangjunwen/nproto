@@ -6,9 +6,9 @@ import (
 	"errors"
 	"time"
 
-	"github.com/huangjunwen/nproto/nproto"
-
 	"github.com/golang/protobuf/proto"
+
+	"github.com/huangjunwen/nproto/nproto"
 )
 
 // PBServerEncoder is RPCServerEncoder using protobuf encoding.

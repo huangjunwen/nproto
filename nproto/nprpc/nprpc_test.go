@@ -8,14 +8,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/huangjunwen/nproto/nproto"
-
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/golang/protobuf/ptypes/wrappers"
 	tstnats "github.com/huangjunwen/tstsvc/nats"
 	"github.com/nats-io/go-nats"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/huangjunwen/nproto/nproto"
 )
 
 func TestNatsRPC(t *testing.T) {

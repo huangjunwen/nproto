@@ -3,9 +3,9 @@ package enc
 import (
 	"time"
 
-	"github.com/huangjunwen/nproto/nproto"
-
 	"github.com/golang/protobuf/proto"
+
+	"github.com/huangjunwen/nproto/nproto"
 )
 
 // RPCRequest is the request of an rpc.

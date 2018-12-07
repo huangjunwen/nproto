@@ -3,9 +3,9 @@
 package enc
 
 import (
-	"github.com/huangjunwen/nproto/nproto"
-
 	"github.com/golang/protobuf/proto"
+
+	"github.com/huangjunwen/nproto/nproto"
 )
 
 // PBPublisherEncoder is MsgPublisherEncoder using protobuf encoding.

@@ -11,14 +11,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/huangjunwen/nproto/nproto/npmsg"
-	"github.com/huangjunwen/nproto/nproto/npmsg/durconn"
-
 	tstmysql "github.com/huangjunwen/tstsvc/mysql"
 	tststan "github.com/huangjunwen/tstsvc/stan"
 	"github.com/nats-io/go-nats"
 	"github.com/nats-io/go-nats-streaming"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/huangjunwen/nproto/nproto/npmsg"
+	"github.com/huangjunwen/nproto/nproto/npmsg/durconn"
 )
 
 type UnstableAsyncPublisher struct {

@@ -8,12 +8,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/huangjunwen/nproto/nproto/npmsg"
-
 	"github.com/nats-io/go-nats"
 	"github.com/nats-io/go-nats-streaming"
 	"github.com/rs/xid"
 	"github.com/rs/zerolog"
+
+	"github.com/huangjunwen/nproto/nproto/npmsg"
 )
 
 var (

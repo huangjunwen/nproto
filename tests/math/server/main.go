@@ -6,11 +6,11 @@ import (
 	"os"
 	"os/signal"
 
-	mathapi "github.com/huangjunwen/nproto/tests/math/api"
-
 	"github.com/huangjunwen/nproto/nproto"
 	"github.com/huangjunwen/nproto/nproto/nprpc"
 	"github.com/nats-io/go-nats"
+
+	mathapi "github.com/huangjunwen/nproto/tests/math/api"
 )
 
 const (

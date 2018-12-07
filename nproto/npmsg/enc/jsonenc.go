@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 
-	"github.com/huangjunwen/nproto/nproto"
-
 	"github.com/golang/protobuf/jsonpb"
+
+	"github.com/huangjunwen/nproto/nproto"
 )
 
 // JSONPublisherEncoder is MsgPublisherEncoder using json encoding.

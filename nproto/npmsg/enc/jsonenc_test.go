@@ -3,11 +3,11 @@ package enc
 import (
 	"testing"
 
-	"github.com/huangjunwen/nproto/nproto"
-
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/huangjunwen/nproto/nproto"
 )
 
 func TestJSONEncodeDecode(t *testing.T) {

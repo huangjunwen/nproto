@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/huangjunwen/nproto/nproto/npmsg"
-
 	"github.com/rs/xid"
 	"github.com/rs/zerolog"
+
+	"github.com/huangjunwen/nproto/nproto/npmsg"
 )
 
 var (

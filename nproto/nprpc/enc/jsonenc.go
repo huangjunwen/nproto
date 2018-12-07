@@ -6,9 +6,9 @@ import (
 	"errors"
 	"time"
 
-	"github.com/huangjunwen/nproto/nproto"
-
 	"github.com/golang/protobuf/jsonpb"
+
+	"github.com/huangjunwen/nproto/nproto"
 )
 
 // JSONServerEncoder is RPCServerEncoder using json encoding.
