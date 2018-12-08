@@ -40,11 +40,24 @@ type DefaultTaskRunner struct {
 	maxQueue       int // maximum queue tasks, unlimited if < 0
 
 	cond   *sync.Cond
-	mu     sync.Mutex
+	mu     sync.Mutex // protect the following
 	closed bool
 	c      int       // current running go routines: c <= maxConcurrency
 	q      taskQueue // current task queue: q.n <= maxQueue if maxQueue >= 0
 }
+
+// NOTE: Some implementation notes about DefaultTaskRunner, there are three major mutex blocks:
+//
+//   - "add task" block: add task to run or queue.
+//   - "done task" block: run queued task or quit.
+//   - "close" block: set closed and wait. In fact, there are two mutex blocks here since
+//                    cond.wait will release the lock internal.
+//
+// Correctness should be kept under any execution order of these blocks.
+//
+//   - After "close" block, any "add task" block will return ErrClosed, thus no new task will be added.
+//     "done task" blocks will run all queued tasks then quit one by one until c become 0. The last
+//     cond.Signal will make the condition become true.
 
 type taskQueue struct {
 	head *taskNode
@@ -126,7 +139,7 @@ func (r *DefaultTaskRunner) taskLoop(firstTask func()) {
 			r.c -= 1
 			stop = true
 
-			// Wakes Close if any.
+			// Signal quit.
 			r.cond.Signal()
 
 		}
