@@ -1,6 +1,7 @@
 package task
 
 import (
+	"fmt"
 	"log"
 	"sync"
 	"testing"
@@ -23,21 +24,31 @@ func BenchmarkRawGoroutines(b *testing.B) {
 }
 
 func BenchmarkLimitedTaskRunner(b *testing.B) {
-	wg := &sync.WaitGroup{}
-	wg.Add(b.N)
-	f := func() {
-		wg.Done()
-	}
-	runner := NewLimitedTaskRunner(b.N)
+	bench := func(logMaxConcurrency uint) {
+		b.Run(fmt.Sprintf("2**%d", logMaxConcurrency), func(b *testing.B) {
+			maxConcurrency := 1 << logMaxConcurrency
+			wg := &sync.WaitGroup{}
+			wg.Add(b.N)
+			f := func() {
+				wg.Done()
+			}
+			runner := NewLimitedTaskRunner(int(maxConcurrency), -1)
 
-	b.ReportAllocs()
-	b.ResetTimer()
+			b.ReportAllocs()
+			b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
-		err := runner.Run(f)
-		if err != nil {
-			log.Fatal(err)
-		}
+			for i := 0; i < b.N; i++ {
+				err := runner.Submit(f)
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+			wg.Wait()
+		})
 	}
-	wg.Wait()
+	bench(0)
+	bench(4)
+	bench(8)
+	bench(10)
+	bench(14)
 }
