@@ -1,21 +1,24 @@
 package task
 
 import (
-	"context"
 	"errors"
 	"sync"
 )
 
 var (
-	ErrClosed = errors.New("nproto.task.LimitedTaskRunner: Closed.")
+	ErrClosed  = errors.New("nproto.task.LimitedTaskRunner: Closed.")
+	ErrTooBusy = errors.New("nproto.task.LimitedTaskRunner: Too busy.")
+)
+
+var (
+	DefaultMaxConcurrency = 10 * 1024
 )
 
 // TaskRunner is an interface to run tasks.
 type TaskRunner interface {
-	// Run runs t. If there is not enough resouce to run t immediately,
-	// it should wait unless ctx is done or any other error occured.
-	// Returns an error if t can't be run.
-	Run(ctx context.Context, t func()) error
+	// Run runs t. It should return an error if t can't be run.
+	// The call MUST not block.
+	Run(t func()) error
 }
 
 // LimitedTaskRunner limits max concurrency (go routines) to run tasks.
@@ -30,8 +33,12 @@ var (
 	_ TaskRunner = (*LimitedTaskRunner)(nil)
 )
 
-// NewLimitedTaskRunner creates a new LimitedTaskRunner.
+// NewLimitedTaskRunner creates a new LimitedTaskRunner. If maxConcurrency <= 0,
+// then DefaultMaxConcurrency will be used.
 func NewLimitedTaskRunner(maxConcurrency int) *LimitedTaskRunner {
+	if maxConcurrency <= 0 {
+		maxConcurrency = DefaultMaxConcurrency
+	}
 	return &LimitedTaskRunner{
 		sem: make(chan struct{}, maxConcurrency),
 	}
@@ -43,13 +50,12 @@ func (r *LimitedTaskRunner) taskDone() {
 }
 
 // Run implements TaskRunner interface.
-func (r *LimitedTaskRunner) Run(ctx context.Context, t func()) error {
-	// Wait semaphore or context done.
+func (r *LimitedTaskRunner) Run(t func()) error {
+	// Wait semaphore.
 	select {
 	case r.sem <- struct{}{}:
-		break
-	case <-ctx.Done():
-		return ctx.Err()
+	default:
+		return ErrTooBusy
 	}
 
 	// NOTE: Don't put this after checking closed. Otherwise
