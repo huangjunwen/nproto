@@ -233,7 +233,7 @@ func (dc *DurConn) connect(wait bool) {
 			}
 			if err != nil {
 				if err == ErrClosed {
-					logger.Info().Msg("closed")
+					logger.Info().Msg("DurConn closed when reseting connection")
 					return
 				}
 				panic(err)
@@ -256,11 +256,11 @@ func (dc *DurConn) connect(wait bool) {
 		sc, err := stan.Connect(dc.clusterID, xid.New().String(), opts...)
 		if err != nil {
 			// Reconnect immediately.
-			logger.Error().Err(err).Msg("connect failed")
+			logger.Error().Err(err).Msg("Connect failed")
 			dc.connect(true)
 			return
 		}
-		logger.Info().Msg("connected")
+		logger.Info().Msg("Connected")
 		dc.connectCb(sc)
 
 		// Update to the new connection.
@@ -271,7 +271,7 @@ func (dc *DurConn) connect(wait bool) {
 				sc.Close() // Release the new one.
 				close(stalec)
 				if err == ErrClosed {
-					logger.Info().Msg("closed")
+					logger.Info().Msg("DurConn closed when updating connection")
 					return
 				}
 				panic(err)
@@ -305,7 +305,10 @@ func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, stalec chan struct
 				m.Ack()
 			}
 		}); err != nil {
-			dc.logger.Error().Err(err).Msg("task runner failed to submit handler")
+			dc.logger.Error().
+				Str("fn", "msgHandler").
+				Err(err).
+				Msg("Submit handler failed")
 		}
 	}
 
@@ -328,15 +331,15 @@ func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, stalec chan struct
 		// We don't need the returned stan.Subscription object since no Unsubscribe.
 		_, err := sc.QueueSubscribe(fullSubject, sub.queue, handler, opts...)
 		if err == nil {
-			logger.Info().Msg("subscription success")
+			logger.Info().Msg("Subscription success")
 			sub.subscribeCb(sc, sub.subject, sub.queue)
 			return
 		}
 
-		logger.Error().Err(err).Msg("subscription error")
+		logger.Error().Err(err).Msg("Subscription error")
 		select {
 		case <-stalec:
-			logger.Info().Msg("subscription stale")
+			logger.Info().Msg("Subscription stale")
 			return
 		case <-time.After(sub.retryWait):
 			// Submit this subscription task again after some while.

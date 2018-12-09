@@ -234,7 +234,10 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nproto.RPCM
 				break
 			}
 
-			server.logger.Error().Str("subject", msg.Subject).Msg("unexpected rpc subject")
+			server.logger.Error().
+				Str("fn", "msgHandler").
+				Str("subject", msg.Subject).
+				Msg("Unexpected RPC subject")
 			return
 		}
 
@@ -274,6 +277,10 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nproto.RPCM
 
 		}); err != nil {
 			server.replyError(msg.Reply, ErrSvcUnavailable, encoder)
+			server.logger.Error().
+				Str("fn", "msgHandler").
+				Err(err).
+				Msg("Submit handler failed")
 		}
 	}, nil
 }
@@ -320,7 +327,10 @@ func (server *NatsRPCServer) reply(subj string, r *enc.RPCReply, encoder enc.RPC
 	return
 
 Err:
-	server.logger.Error().Err(err).Msg("")
+	server.logger.Error().
+		Str("fn", "reply").
+		Err(err).
+		Msg("Reply error")
 	return
 }
 

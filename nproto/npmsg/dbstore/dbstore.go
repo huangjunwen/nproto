@@ -200,7 +200,7 @@ func (store *DBStore) getConn() (conn *sql.Conn, err error) {
 		if err == nil {
 			return
 		}
-		logger.Error().Str("fn", "getConn").Err(err).Msg("get db conn error")
+		logger.Error().Str("fn", "getConn").Err(err).Msg("Get db error")
 
 		select {
 		case <-store.closeCtx.Done():
@@ -221,7 +221,7 @@ func (store *DBStore) getLock(conn *sql.Conn) (err error) {
 			return nil
 		}
 		if err != nil {
-			logger.Error().Str("fn", "getLock").Err(err).Msg("get db lock error")
+			logger.Error().Str("fn", "getLock").Err(err).Msg("Get lock error")
 			return err
 		}
 
@@ -249,10 +249,10 @@ L:
 		// Context maybe done during publishing.
 		select {
 		case <-ctx.Done():
-			logger.Warn().Msg("context done during publishing")
+			logger.Warn().Msg("Context done during publishing")
 			break L
 		case <-store.closeCtx.Done():
-			logger.Warn().Msg("close during publishing")
+			logger.Warn().Msg("Close during publishing")
 			break L
 		default:
 		}
@@ -268,7 +268,7 @@ L:
 		cb := func(err error) {
 			if err != nil {
 				// Release the msg if err.
-				logger.Error().Err(err).Msg("publish error")
+				logger.Error().Err(err).Msg("Publish error")
 			} else {
 				// Append to success list.
 				mu.Lock()
@@ -343,10 +343,10 @@ L:
 		// Context maybe done during publishing.
 		select {
 		case <-ctx.Done():
-			logger.Warn().Msg("context done during publishing")
+			logger.Warn().Msg("Context done during publishing")
 			break L
 		case <-store.closeCtx.Done():
-			logger.Warn().Msg("close during publishing")
+			logger.Warn().Msg("Close during publishing")
 			break L
 		case taskc <- struct{}{}:
 		}
@@ -355,7 +355,7 @@ L:
 		msg, err := stream(true)
 		if msg == nil {
 			if err != nil {
-				logger.Error().Err(err).Msg("msg stream error")
+				logger.Error().Err(err).Msg("Msg stream error")
 			}
 			<-taskc
 			break
@@ -367,7 +367,7 @@ L:
 			if err != nil {
 				// Release the msg if err.
 				<-taskc
-				logger.Error().Err(err).Msg("publish error")
+				logger.Error().Err(err).Msg("Publish error")
 			} else {
 				// Append to success list.
 				mu.Lock()
@@ -424,7 +424,7 @@ func (store *DBStore) deleteMsgs(list *msgList, idsBuff []int64, taskc chan stru
 
 		// Delete.
 		if err := store.dialect.DeleteMsgs(context.Background(), store.db, store.table, idsBuff); err != nil {
-			store.logger.Error().Err(err).Str("fn", "deleteMsgs").Msg("delete msg error")
+			store.logger.Error().Str("fn", "deleteMsgs").Err(err).Msg("Delete msg error")
 		}
 
 		// If there is a task channel, finish them.
