@@ -6,8 +6,8 @@ import (
 )
 
 var (
-	ErrClosed  = errors.New("nproto.task.DefaultTaskRunner: Closed.")
-	ErrTooBusy = errors.New("nproto.task.DefaultTaskRunner: Too busy.")
+	ErrClosed  = errors.New("nproto.task.LimitedRunner: Closed.")
+	ErrTooBusy = errors.New("nproto.task.LimitedRunner: Too busy.")
 )
 
 var (
@@ -21,7 +21,7 @@ type TaskRunner interface {
 	Submit(task func()) error
 }
 
-// DefaultTaskRunner implements TaskRunner interface. It has two parameters:
+// LimitedRunner implements TaskRunner interface. It has two parameters:
 //
 //   - maxConcurrency: the maximum number of concurrent go routines, at least 1
 //   - maxQueue: the maximum number of queued tasks, if < 0 then the queue is unlimited, 0 for no queue, > 0 for limited queue
@@ -35,7 +35,7 @@ type TaskRunner interface {
 //
 // When a go routine finish one task, it will check the queue, if there are queued tasks, the first
 // task will be popped and run directly. It will exit only when there is no queued task.
-type DefaultTaskRunner struct {
+type LimitedRunner struct {
 	maxConcurrency int // maximum concurrent go routines: maxConcurrency > 0
 	maxQueue       int // maximum queue tasks, unlimited if < 0
 
@@ -46,7 +46,7 @@ type DefaultTaskRunner struct {
 	q      taskQueue // current task queue: q.n <= maxQueue if maxQueue >= 0
 }
 
-// NOTE: Some implementation notes about DefaultTaskRunner, there are three major mutex blocks:
+// NOTE: Some implementation notes about LimitedRunner, there are three major mutex blocks:
 //
 //   - "add task" block: add task to run or queue.
 //   - "done task" block: run queued task or quit.
@@ -70,12 +70,12 @@ type taskNode struct {
 	next *taskNode
 }
 
-// NewDefaultTaskRunner creates a new DefaultTaskRunner. If maxConcurrency <= 0, then DefaultMaxConcurrency will be used.
-func NewDefaultTaskRunner(maxConcurrency, maxQueue int) *DefaultTaskRunner {
+// NewLimitedRunner creates a new LimitedRunner. If maxConcurrency <= 0, then DefaultMaxConcurrency will be used.
+func NewLimitedRunner(maxConcurrency, maxQueue int) *LimitedRunner {
 	if maxConcurrency <= 0 {
 		maxConcurrency = DefaultMaxConcurrency
 	}
-	r := &DefaultTaskRunner{
+	r := &LimitedRunner{
 		maxConcurrency: maxConcurrency,
 		maxQueue:       maxQueue,
 	}
@@ -83,8 +83,8 @@ func NewDefaultTaskRunner(maxConcurrency, maxQueue int) *DefaultTaskRunner {
 	return r
 }
 
-// Submit implements TaskRunner interface.
-func (r *DefaultTaskRunner) Submit(task func()) error {
+// Submit implements TaskRunner interface. It returns error when queued full or closed.
+func (r *LimitedRunner) Submit(task func()) error {
 	var (
 		canRun bool
 		err    error
@@ -120,7 +120,7 @@ func (r *DefaultTaskRunner) Submit(task func()) error {
 	return nil
 }
 
-func (r *DefaultTaskRunner) taskLoop(firstTask func()) {
+func (r *LimitedRunner) taskLoop(firstTask func()) {
 	task := firstTask
 	stop := false
 
@@ -149,7 +149,7 @@ func (r *DefaultTaskRunner) taskLoop(firstTask func()) {
 }
 
 // Close stops the runner and wait all ongoing and queued tasks to finish.
-func (r *DefaultTaskRunner) Close() {
+func (r *LimitedRunner) Close() {
 	// The "close" block.
 	r.mu.Lock()
 	if !r.closed {

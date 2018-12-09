@@ -2,7 +2,6 @@ package taskrunner
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"sync"
 	"testing"
@@ -68,7 +67,7 @@ func TestTaskQueue(t *testing.T) {
 
 func TestNoQueue(t *testing.T) {
 	assert := assert.New(t)
-	runner := NewDefaultTaskRunner(1, 0)
+	runner := NewLimitedRunner(1, 0)
 
 	assert.NoError(runner.Submit(func() {
 		time.Sleep(100 * time.Microsecond)
@@ -80,7 +79,7 @@ func TestNoQueue(t *testing.T) {
 
 func TestLimitQueue(t *testing.T) {
 	assert := assert.New(t)
-	runner := NewDefaultTaskRunner(1, 1)
+	runner := NewLimitedRunner(1, 1)
 
 	assert.NoError(runner.Submit(func() {
 		time.Sleep(100 * time.Microsecond)
@@ -95,7 +94,7 @@ func TestLimitQueue(t *testing.T) {
 
 func TestClose(t *testing.T) {
 	assert := assert.New(t)
-	runner := NewDefaultTaskRunner(2, -1)
+	runner := NewLimitedRunner(2, -1)
 	n := 10
 	mu := &sync.Mutex{}
 	remain := n
@@ -117,10 +116,15 @@ func TestClose(t *testing.T) {
 
 }
 
+var (
+	benchWaitTime = 1 * time.Microsecond
+	benchTasks    = 100000
+)
+
 func BenchmarkRawGoroutines(b *testing.B) {
 	wg := &sync.WaitGroup{}
 	f := func() {
-		time.Sleep(100 * time.Microsecond)
+		time.Sleep(benchWaitTime)
 		wg.Done()
 	}
 
@@ -128,34 +132,38 @@ func BenchmarkRawGoroutines(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		wg.Add(1)
-		go f()
+		wg.Add(benchTasks)
+		for j := 0; j < benchTasks; j++ {
+			go f()
+		}
+		wg.Wait()
 	}
-	wg.Wait()
 }
 
-func BenchmarkDefaultTaskRunner(b *testing.B) {
-	bench := func(logMaxConcurrency int) {
-		b.Run(fmt.Sprintf("10**%d", logMaxConcurrency), func(b *testing.B) {
-			maxConcurrency := int(math.Pow10(logMaxConcurrency))
+func BenchmarkSemaphore(b *testing.B) {
+	bench := func(logMaxConcurrency float64) {
+		b.Run(fmt.Sprintf("10**%v", logMaxConcurrency), func(b *testing.B) {
+			maxConcurrency := int(math.Pow(10, logMaxConcurrency))
+
+			sem := make(chan struct{}, maxConcurrency)
 			wg := &sync.WaitGroup{}
-			wg.Add(b.N)
 			f := func() {
-				time.Sleep(100 * time.Microsecond)
+				time.Sleep(benchWaitTime)
 				wg.Done()
+				<-sem
 			}
-			runner := NewDefaultTaskRunner(maxConcurrency, -1)
 
 			b.ReportAllocs()
 			b.ResetTimer()
 
 			for i := 0; i < b.N; i++ {
-				err := runner.Submit(f)
-				if err != nil {
-					log.Fatal(err)
+				wg.Add(benchTasks)
+				for j := 0; j < benchTasks; j++ {
+					sem <- struct{}{}
+					go f()
 				}
+				wg.Wait()
 			}
-			wg.Wait()
 		})
 	}
 	bench(0)
@@ -163,5 +171,41 @@ func BenchmarkDefaultTaskRunner(b *testing.B) {
 	bench(2)
 	bench(3)
 	bench(4)
+	bench(4.4)
+	bench(4.7)
+	bench(5)
+}
+
+func BenchmarkLimitedRunner(b *testing.B) {
+	bench := func(logMaxConcurrency float64) {
+		b.Run(fmt.Sprintf("10**%v", logMaxConcurrency), func(b *testing.B) {
+			maxConcurrency := int(math.Pow(10, logMaxConcurrency))
+
+			wg := &sync.WaitGroup{}
+			f := func() {
+				time.Sleep(benchWaitTime)
+				wg.Done()
+			}
+
+			b.ReportAllocs()
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				runner := NewLimitedRunner(maxConcurrency, -1)
+				wg.Add(benchTasks)
+				for j := 0; j < benchTasks; j++ {
+					runner.Submit(f)
+				}
+				wg.Wait()
+			}
+		})
+	}
+	bench(0)
+	bench(1)
+	bench(2)
+	bench(3)
+	bench(4)
+	bench(4.4)
+	bench(4.7)
 	bench(5)
 }
