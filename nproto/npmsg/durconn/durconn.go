@@ -303,6 +303,11 @@ func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, stalec chan struct
 			if err := sub.handler(context.Background(), subject, m.Data); err == nil {
 				// Ack only when no error.
 				m.Ack()
+			} else {
+				dc.logger.Error().
+					Str("fn", "msgHandler").
+					Err(err).
+					Msg("MsgHandler error")
 			}
 		}); err != nil {
 			dc.logger.Error().
