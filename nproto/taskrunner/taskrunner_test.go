@@ -117,11 +117,11 @@ func TestClose(t *testing.T) {
 }
 
 var (
-	benchWaitTime = 1 * time.Microsecond
+	benchWaitTime = 10 * time.Microsecond
 	benchTasks    = 100000
 )
 
-func BenchmarkRawGoroutines(b *testing.B) {
+func BenchmarkUnlimitedGoroutines(b *testing.B) {
 	wg := &sync.WaitGroup{}
 	f := func() {
 		time.Sleep(benchWaitTime)
@@ -140,7 +140,7 @@ func BenchmarkRawGoroutines(b *testing.B) {
 	}
 }
 
-func BenchmarkSemaphore(b *testing.B) {
+func BenchmarkUseSemaphore(b *testing.B) {
 	bench := func(logMaxConcurrency float64) {
 		b.Run(fmt.Sprintf("10**%v", logMaxConcurrency), func(b *testing.B) {
 			maxConcurrency := int(math.Pow(10, logMaxConcurrency))
@@ -170,6 +170,8 @@ func BenchmarkSemaphore(b *testing.B) {
 	bench(1)
 	bench(2)
 	bench(3)
+	bench(3.4)
+	bench(3.7)
 	bench(4)
 	bench(4.4)
 	bench(4.7)
@@ -204,6 +206,8 @@ func BenchmarkLimitedRunner(b *testing.B) {
 	bench(1)
 	bench(2)
 	bench(3)
+	bench(3.4)
+	bench(3.7)
 	bench(4)
 	bench(4.4)
 	bench(4.7)
