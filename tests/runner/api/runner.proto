@@ -1,0 +1,13 @@
+syntax = "proto3";
+package huangjunwen.nproto.tests.runnerapi;
+
+option go_package = "github.com/huangjunwen/nproto/tests/runner/api;runnerapi";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
+
+// @@nprpc@@
+service Runner {
+  // Sleep sleeps a while and returns.
+  rpc Sleep(google.protobuf.Duration) returns (google.protobuf.Empty);
+}
