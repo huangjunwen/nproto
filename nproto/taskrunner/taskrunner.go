@@ -11,7 +11,12 @@ var (
 )
 
 var (
-	DefaultMaxConcurrency = 10 * 1024
+	DefaultMaxConcurrency = 5 * 1024
+)
+
+var (
+	// DefaultTaskRunner is the default task runner used by nproto packages.
+	DefaultTaskRunner = NewLimitedRunner(DefaultMaxConcurrency, 10*DefaultMaxConcurrency)
 )
 
 // TaskRunner is an interface to run tasks.

@@ -92,6 +92,24 @@ func TestLimitQueue(t *testing.T) {
 	}))
 }
 
+func TestSubmitInsideTask(t *testing.T) {
+	assert := assert.New(t)
+	runner := NewLimitedRunner(1, -1)
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+
+	done := false
+	assert.NoError(runner.Submit(func() {
+		assert.NoError(runner.Submit(func() {
+			done = true
+			wg.Done()
+		}))
+		time.Sleep(10 * time.Millisecond)
+	}))
+	wg.Wait()
+	assert.True(done)
+}
+
 func TestClose(t *testing.T) {
 	assert := assert.New(t)
 	runner := NewLimitedRunner(2, -1)
