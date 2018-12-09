@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/huangjunwen/nproto/nproto"
+	"github.com/huangjunwen/nproto/nproto/taskrunner"
 )
 
 func TestNatsRPC(t *testing.T) {
@@ -264,6 +265,107 @@ func TestNatsRPC(t *testing.T) {
 			}
 		}
 	}
+
+}
+
+func TestSvcUnavailable(t *testing.T) {
+	log.Printf("\n")
+	log.Printf(">>> TestSvcUnavailable.\n")
+	assert := assert.New(t)
+	var err error
+
+	// Starts the test nats server.
+	var res *tstnats.Resource
+	{
+		res, err = tstnats.Run(nil)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer res.Close()
+		log.Printf("Test nats server started: %+q\n", res.NatsURL())
+	}
+
+	// Creates connection.
+	var nc *nats.Conn
+	{
+		nc, err = res.NatsClient(
+			nats.MaxReconnects(-1),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer nc.Close()
+		log.Printf("Connection connected.\n")
+	}
+
+	// Creates rpc server.
+	var server *NatsRPCServer
+	var runner = taskrunner.NewLimitedRunner(1, 0)
+	{
+		server, err = NewNatsRPCServer(
+			nc,
+			ServerOptTaskRunner(runner),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer server.Close()
+		log.Printf("NatsRPCServer created.\n")
+	}
+
+	// Creates rpc client.
+	var client *NatsRPCClient
+	{
+		client, err = NewNatsRPCClient(nc)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer client.Close()
+		log.Printf("NatsRPCClient created.\n")
+	}
+
+	var (
+		svcName = "busy"
+	)
+
+	var (
+		busyMethod = &nproto.RPCMethod{
+			Name: "Busy",
+			NewInput: func() proto.Message {
+				return &empty.Empty{}
+			},
+			NewOutput: func() proto.Message {
+				return &empty.Empty{}
+			},
+		}
+		busyc       = make(chan struct{}, 10)
+		busyHandler = func(ctx context.Context, in proto.Message) (proto.Message, error) {
+			busyc <- struct{}{}
+			time.Sleep(10000 * time.Second) // Never finish.
+			return &empty.Empty{}, nil
+		}
+	)
+
+	// RegistSvc.
+	{
+		if err = server.RegistSvc(svcName, map[*nproto.RPCMethod]nproto.RPCHandler{
+			busyMethod: busyHandler,
+		}); err != nil {
+			log.Panic(err)
+		}
+		defer server.DeregistSvc(svcName)
+		log.Printf("Svc registed.\n")
+	}
+
+	handler := client.MakeHandler(svcName, busyMethod)
+
+	// Make the first call. It should never finish.
+	go handler(context.Background(), &empty.Empty{})
+	<-busyc
+
+	output, err := handler(context.Background(), &empty.Empty{})
+	assert.Equal(ErrSvcUnavailable.Error(), err.Error())
+	assert.Nil(output)
 
 }
 

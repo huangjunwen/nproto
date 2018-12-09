@@ -221,22 +221,23 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nproto.RPCM
 			methodName string
 		)
 
-		methodName = strings.TrimPrefix(msg.Subject, pbPrefix)
-		if len(methodName) != len(msg.Subject) {
-			encoder = enc.PBServerEncoder{}
-			goto SUBMIT
+		for {
+			methodName = strings.TrimPrefix(msg.Subject, pbPrefix)
+			if len(methodName) != len(msg.Subject) {
+				encoder = enc.PBServerEncoder{}
+				break
+			}
+
+			methodName = strings.TrimPrefix(msg.Subject, jsonPrefix)
+			if len(methodName) != len(msg.Subject) {
+				encoder = enc.JSONServerEncoder{}
+				break
+			}
+
+			server.logger.Error().Str("subject", msg.Subject).Msg("unexpected rpc subject")
+			return
 		}
 
-		methodName = strings.TrimPrefix(msg.Subject, jsonPrefix)
-		if len(methodName) != len(msg.Subject) {
-			encoder = enc.JSONServerEncoder{}
-			goto SUBMIT
-		}
-
-		server.logger.Error().Str("subject", msg.Subject).Msg("unexpected rpc subject")
-		return
-
-	SUBMIT:
 		if err := server.runner.Submit(func() {
 			// Check method.
 			method, found := methodNames[methodName]
