@@ -2,6 +2,8 @@ package nprpc
 
 import (
 	"github.com/rs/zerolog"
+
+	"github.com/huangjunwen/nproto/nproto/taskrunner"
 )
 
 // ServerOptLogger sets logger.
@@ -28,6 +30,14 @@ func ServerOptSubjectPrefix(subjPrefix string) ServerOption {
 func ServerOptGroup(group string) ServerOption {
 	return func(server *NatsRPCServer) error {
 		server.group = group
+		return nil
+	}
+}
+
+// ServerOptTaskRunner sets the task runner to run handlers.
+func ServerOptTaskRunner(runner taskrunner.TaskRunner) ServerOption {
+	return func(server *NatsRPCServer) error {
+		server.runner = runner
 		return nil
 	}
 }

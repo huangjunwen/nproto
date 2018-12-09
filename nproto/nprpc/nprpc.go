@@ -14,12 +14,18 @@ import (
 
 	"github.com/huangjunwen/nproto/nproto"
 	"github.com/huangjunwen/nproto/nproto/nprpc/enc"
+	"github.com/huangjunwen/nproto/nproto/taskrunner"
 )
 
 var (
 	DefaultSubjectPrefix = "nprpc"
 	DefaultGroup         = "def"
 	DefaultEncoding      = "pb"
+)
+
+var (
+	ErrSvcUnavailable = errors.New("SVC_UNAVAILABLE")
+	ErrMethodNotFound = errors.New("METHO_NOT_FOUND")
 )
 
 var (
@@ -40,6 +46,7 @@ type NatsRPCServer struct {
 	logger        zerolog.Logger
 	subjectPrefix string
 	group         string // server group
+	runner        taskrunner.TaskRunner
 
 	// Mutable fields.
 	mu   sync.RWMutex
@@ -79,6 +86,7 @@ func NewNatsRPCServer(nc *nats.Conn, opts ...ServerOption) (*NatsRPCServer, erro
 	server := &NatsRPCServer{
 		subjectPrefix: DefaultSubjectPrefix,
 		group:         DefaultGroup,
+		runner:        taskrunner.DefaultTaskRunner,
 		logger:        zerolog.Nop(),
 		nc:            nc,
 		svcs:          make(map[string]*nats.Subscription),
@@ -201,36 +209,39 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nproto.RPCM
 		methodNames[method.Name] = method
 	}
 
-	// Subject prefix.
+	// Full subject is in the form of "subjectPrefix.svcName.enc.method"
 	prefix := fmt.Sprintf("%s.%s.", server.subjectPrefix, svcName)
+	pbPrefix := prefix + "pb."
+	jsonPrefix := prefix + "json."
 
 	return func(msg *nats.Msg) {
-		go func() {
-			// Subject should be in the form of "subjectPrefix.svcName.enc.method".
-			// Extract encoding and method from it.
-			if !strings.HasPrefix(msg.Subject, prefix) {
-				server.logger.Error().Err(fmt.Errorf("Unexpected msg with subject: %+q", msg.Subject)).Msg("")
-				return
-			}
-			parts := strings.Split(msg.Subject[len(prefix):], ".")
-			if len(parts) != 2 {
-				// Ignore.
-				return
-			}
-			encoding, methodName := parts[0], parts[1]
+		// Get methodName and encoder.
+		var (
+			encoder    enc.RPCServerEncoder
+			methodName string
+		)
 
-			// Check encoding.
-			switch encoding {
-			case "pb", "json":
-			default:
-				// Ignore.
-				return
-			}
+		methodName = strings.TrimPrefix(msg.Subject, pbPrefix)
+		if len(methodName) != len(msg.Subject) {
+			encoder = enc.PBServerEncoder{}
+			goto SUBMIT
+		}
 
+		methodName = strings.TrimPrefix(msg.Subject, jsonPrefix)
+		if len(methodName) != len(msg.Subject) {
+			encoder = enc.JSONServerEncoder{}
+			goto SUBMIT
+		}
+
+		server.logger.Error().Str("subject", msg.Subject).Msg("unexpected rpc subject")
+		return
+
+	SUBMIT:
+		if err := server.runner.Submit(func() {
 			// Check method.
 			method, found := methodNames[methodName]
 			if !found {
-				server.replyError(msg.Reply, fmt.Errorf("Method %+q not found", methodName), encoding)
+				server.replyError(msg.Reply, ErrMethodNotFound, encoder)
 				return
 			}
 			handler := methods[method]
@@ -239,8 +250,8 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nproto.RPCM
 			req := &enc.RPCRequest{
 				Param: method.NewInput(),
 			}
-			if err := chooseServerEncoder(encoding).DecodeRequest(msg.Data, req); err != nil {
-				server.replyError(msg.Reply, err, encoding)
+			if err := encoder.DecodeRequest(msg.Data, req); err != nil {
+				server.replyError(msg.Reply, err, encoder)
 				return
 			}
 
@@ -255,28 +266,30 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nproto.RPCM
 			// Handle.
 			result, err := handler(ctx, req.Param)
 			if err != nil {
-				server.replyError(msg.Reply, err, encoding)
+				server.replyError(msg.Reply, err, encoder)
 			} else {
-				server.replyResult(msg.Reply, result, encoding)
+				server.replyResult(msg.Reply, result, encoder)
 			}
 
-		}()
+		}); err != nil {
+			server.replyError(msg.Reply, ErrSvcUnavailable, encoder)
+		}
 	}, nil
 }
 
-func (server *NatsRPCServer) replyResult(subj string, result proto.Message, encoding string) {
+func (server *NatsRPCServer) replyResult(subj string, result proto.Message, encoder enc.RPCServerEncoder) {
 	server.reply(subj, &enc.RPCReply{
 		Result: result,
-	}, encoding)
+	}, encoder)
 }
 
-func (server *NatsRPCServer) replyError(subj string, err error, encoding string) {
+func (server *NatsRPCServer) replyError(subj string, err error, encoder enc.RPCServerEncoder) {
 	server.reply(subj, &enc.RPCReply{
 		Error: err,
-	}, encoding)
+	}, encoder)
 }
 
-func (server *NatsRPCServer) reply(subj string, r *enc.RPCReply, encoding string) {
+func (server *NatsRPCServer) reply(subj string, r *enc.RPCReply, encoder enc.RPCServerEncoder) {
 
 	var (
 		data []byte
@@ -293,7 +306,7 @@ func (server *NatsRPCServer) reply(subj string, r *enc.RPCReply, encoding string
 	}
 
 	// Encode reply.
-	data, err = chooseServerEncoder(encoding).EncodeReply(r)
+	data, err = encoder.EncodeReply(r)
 	if err != nil {
 		goto Err
 	}
@@ -334,8 +347,14 @@ func NewNatsRPCClient(nc *nats.Conn, opts ...ClientOption) (*NatsRPCClient, erro
 // MakeHandler implements RPCClient interface.
 func (client *NatsRPCClient) MakeHandler(svcName string, method *nproto.RPCMethod) nproto.RPCHandler {
 
-	encoder := chooseClientEncoder(client.encoding)
-	subj := fmt.Sprintf("%s.%s.%s.%s", client.subjectPrefix, svcName, client.encoding, method.Name)
+	var encoder enc.RPCClientEncoder
+	switch client.encoding {
+	case "json":
+		encoder = enc.JSONClientEncoder{}
+	default:
+		encoder = enc.PBClientEncoder{}
+	}
+	fullSubject := fmt.Sprintf("%s.%s.%s.%s", client.subjectPrefix, svcName, client.encoding, method.Name)
 
 	return func(ctx context.Context, input proto.Message) (proto.Message, error) {
 
@@ -371,7 +390,7 @@ func (client *NatsRPCClient) MakeHandler(svcName string, method *nproto.RPCMetho
 		}
 
 		// Send request.
-		msg, err := nc.RequestWithContext(ctx, subj, data)
+		msg, err := nc.RequestWithContext(ctx, fullSubject, data)
 		if err != nil {
 			return nil, err
 		}
@@ -400,22 +419,4 @@ func (client *NatsRPCClient) Close() error {
 		return ErrClientClosed
 	}
 	return nil
-}
-
-func chooseServerEncoder(encoding string) enc.RPCServerEncoder {
-	switch encoding {
-	case "json":
-		return enc.JSONServerEncoder{}
-	default:
-		return enc.PBServerEncoder{}
-	}
-}
-
-func chooseClientEncoder(encoding string) enc.RPCClientEncoder {
-	switch encoding {
-	case "json":
-		return enc.JSONClientEncoder{}
-	default:
-		return enc.PBClientEncoder{}
-	}
 }
