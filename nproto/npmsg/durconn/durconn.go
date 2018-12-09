@@ -14,6 +14,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/huangjunwen/nproto/nproto/npmsg"
+	"github.com/huangjunwen/nproto/nproto/taskrunner"
 )
 
 var (
@@ -51,6 +52,8 @@ type DurConn struct {
 	subjectPrefix string
 	connectCb     func(stan.Conn)
 	disconnectCb  func(stan.Conn)
+	hRunner       taskrunner.TaskRunner // used to run handlers.
+	sRunner       taskrunner.TaskRunner // used to run subscription.
 	stanOptions   []stan.Option
 
 	// Immutable fields.
@@ -103,6 +106,8 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) (*DurConn, erro
 		subjectPrefix: DefaultSubjectPrefix,
 		connectCb:     func(_ stan.Conn) {},
 		disconnectCb:  func(_ stan.Conn) {},
+		hRunner:       taskrunner.DefaultTaskRunner,
+		sRunner:       taskrunner.NewLimitedRunner(10, -1),
 		stanOptions: []stan.Option{
 			stan.PubAckWait(DefaultPubAckWait),
 		},
@@ -286,56 +291,68 @@ func (dc *DurConn) connect(wait bool) {
 // subscribe keeps subscribing unless success or the stan connection is stale
 // (e.g. disconnected or closed).
 func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, stalec chan struct{}) {
-	// Use a seperated go routine.
-	go func() {
-		logger := dc.logger.With().
-			Str("fn", "subscribe").
-			Str("subject", sub.subject).
-			Str("queue", sub.queue).
-			Logger()
 
-		// Wrap sub.handler to stan.MsgHandler.
-		prefix := dc.subjectPrefix + "."
-		handler := func(m *stan.Msg) {
-			go func() {
-				subject := strings.TrimPrefix(m.Subject, prefix)
-				// Ack when no error.
-				if err := sub.handler(context.Background(), subject, m.Data); err == nil {
-					m.Ack()
-				}
-			}()
+	prefix := fmt.Sprintf("%s.", dc.subjectPrefix)
+	fullSubject := fmt.Sprintf("%s.%s", dc.subjectPrefix, sub.subject)
+
+	// Wrap handler.
+	handler := func(m *stan.Msg) {
+		// Use task runner to run the handler.
+		if err := dc.hRunner.Submit(func() {
+			subject := strings.TrimPrefix(m.Subject, prefix)
+			if err := sub.handler(context.Background(), subject, m.Data); err == nil {
+				// Ack only when no error.
+				m.Ack()
+			}
+		}); err != nil {
+			dc.logger.Error().Err(err).Msg("task runner failed to submit handler")
+		}
+	}
+
+	// Collect options.
+	opts := []stan.SubscriptionOption{}
+	opts = append(opts, sub.stanOptions...)
+	opts = append(opts, stan.SetManualAckMode())     // Use manual ack mode. See above handler.
+	opts = append(opts, stan.DurableName(sub.queue)) // Queue as durable name.
+
+	// Sub logger.
+	logger := dc.logger.With().
+		Str("fn", "subscribe").
+		Str("subject", sub.subject).
+		Str("queue", sub.queue).
+		Logger()
+
+	// Subscription task.
+	var task func()
+	task = func() {
+		// We don't need the returned stan.Subscription object since no Unsubscribe.
+		_, err := sc.QueueSubscribe(fullSubject, sub.queue, handler, opts...)
+		if err == nil {
+			logger.Info().Msg("subscription success")
+			sub.subscribeCb(sc, sub.subject, sub.queue)
+			return
 		}
 
-		opts := []stan.SubscriptionOption{}
-		opts = append(opts, sub.stanOptions...)
-		opts = append(opts, stan.SetManualAckMode())     // Use manual ack mode. See above handler.
-		opts = append(opts, stan.DurableName(sub.queue)) // Queue as durable name.
-
-		// Loop until success or the stan connection is stale (e.g. scStaleC is closed).
-		for {
-			// We don't need the returned stan.Subscription object since no Unsubscribe.
-			_, err := sc.QueueSubscribe(
-				fmt.Sprintf("%s.%s", dc.subjectPrefix, sub.subject),
-				sub.queue,
-				handler,
-				opts...,
-			)
-			if err == nil {
-				logger.Info().Msg("subscribed")
-				sub.subscribeCb(sc, sub.subject, sub.queue)
-				return
-			}
-			logger.Error().Err(err).Msg("subscribe failed")
-
-			select {
-			case <-stalec:
-				logger.Info().Msg("stale")
-				return
-			case <-time.After(sub.retryWait):
+		logger.Error().Err(err).Msg("subscription error")
+		select {
+		case <-stalec:
+			logger.Info().Msg("subscription stale")
+			return
+		case <-time.After(sub.retryWait):
+			// Submit this subscription task again after some while.
+			if err := dc.sRunner.Submit(task); err != nil {
+				// NOTE: sRunner is never closed, so there should be no error.
+				panic(err)
 			}
 		}
+	}
 
-	}()
+	// Submit.
+	if err := dc.sRunner.Submit(task); err != nil {
+		// NOTE: sRunner is never closed, so there should be no error.
+		panic(err)
+	}
+
 }
 
 // reset gets lock then reset stan connection.

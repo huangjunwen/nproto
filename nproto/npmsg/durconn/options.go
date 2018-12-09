@@ -5,6 +5,8 @@ import (
 
 	"github.com/nats-io/go-nats-streaming"
 	"github.com/rs/zerolog"
+
+	"github.com/huangjunwen/nproto/nproto/taskrunner"
 )
 
 // OptLogger sets structured logger.
@@ -48,6 +50,22 @@ func OptConnectCb(fn func(sc stan.Conn)) Option {
 func OptDisconnectCb(fn func(sc stan.Conn)) Option {
 	return func(dc *DurConn) error {
 		dc.disconnectCb = fn
+		return nil
+	}
+}
+
+// OptTaskRunner sets the task runner for handlers.
+func OptTaskRunner(runner taskrunner.TaskRunner) Option {
+	return func(dc *DurConn) error {
+		dc.hRunner = runner
+		return nil
+	}
+}
+
+// OptMaxConcurrentResubscription sets the maximum concurrent subscription number.
+func OptMaxConcurrentResubscription(n int) Option {
+	return func(dc *DurConn) error {
+		dc.sRunner = taskrunner.NewLimitedRunner(n, -1)
 		return nil
 	}
 }
