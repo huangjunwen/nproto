@@ -1,6 +1,7 @@
 # NProto
 
 [![GoDoc](https://godoc.org/github.com/huangjunwen/nproto?status.svg)](http://godoc.org/github.com/huangjunwen/nproto)
+[![Go Report](https://goreportcard.com/badge/github.com/huangjunwen/nproto)](https://goreportcard.com/report/github.com/huangjunwen/nproto)
 
 Some common patterns using [NATS](https://nats.io) ([gnatsd](https://github.com/nats-io/gnatsd)/[nats-streaming-server](https://github.com/nats-io/nats-streaming-server)) with [protocol-buffer](https://developers.google.com/protocol-buffers/).
 
