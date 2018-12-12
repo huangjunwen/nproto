@@ -58,6 +58,12 @@ func main() {
 
 	wg := &sync.WaitGroup{}
 	wg.Add(clientNum)
+
+	mu := &sync.Mutex{}
+	totalSuccCnt := 0
+	totalErrCnt := 0
+	totalDur := time.Duration(0)
+
 	for i := 0; i < clientNum; i++ {
 		go func(i int) {
 			nc, err := nats.Connect(
@@ -94,12 +100,20 @@ func main() {
 				}
 			}
 			dur := time.Since(start)
-			avg := dur / time.Duration(rpcNum)
 
-			log.Printf("Client %d: succ=%d err=%d time=%s, avg=%s\n", i, succCnt, errCnt, dur.String(), avg.String())
+			mu.Lock()
+			totalSuccCnt += succCnt
+			totalErrCnt += errCnt
+			totalDur += dur
+			mu.Unlock()
+
 			wg.Done()
 		}(i)
 	}
 
 	wg.Wait()
+
+	avg := totalDur / time.Duration(clientNum*rpcNum)
+	log.Printf("Succ=%d Err=%d Avg=%s\n", totalSuccCnt, totalErrCnt, avg.String())
+
 }
