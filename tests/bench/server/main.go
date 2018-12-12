@@ -29,6 +29,7 @@ func (svc Bench) Echo(ctx context.Context, input *benchapi.EchoMsg) (output *ben
 var (
 	serverNum      int
 	maxConcurrency int
+	addr           string
 )
 
 func main() {
@@ -40,6 +41,7 @@ func main() {
 
 	flag.IntVar(&serverNum, "s", 10, "Server number")
 	flag.IntVar(&maxConcurrency, "x", 5000, "Max concurrency")
+	flag.StringVar(&addr, "u", nats.DefaultURL, "gnatsd addr.")
 	flag.Parse()
 
 	runner := taskrunner.NewLimitedRunner(maxConcurrency, -1)
@@ -48,7 +50,7 @@ func main() {
 	log.Printf("Launching %d server.\n", serverNum)
 	for i := 0; i < serverNum; i++ {
 		nc, err := nats.Connect(
-			nats.DefaultURL,
+			addr,
 			nats.MaxReconnects(-1),
 			nats.Name(fmt.Sprintf("server-%d-%d", os.Getpid(), i)),
 		)

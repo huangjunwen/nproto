@@ -21,6 +21,7 @@ var (
 	rpcNum     int
 	clientNum  int
 	timeoutSec int
+	addr       string
 )
 
 func main() {
@@ -34,6 +35,7 @@ func main() {
 	flag.IntVar(&rpcNum, "n", 1000, "RPC number per client.")
 	flag.IntVar(&clientNum, "c", 10, "Client number.")
 	flag.IntVar(&timeoutSec, "t", 3, "RPC timeout in seconds.")
+	flag.StringVar(&addr, "u", nats.DefaultURL, "gnatsd addr.")
 	flag.Parse()
 
 	log.Printf("Payload length (-l): %d\n", payloadLen)
@@ -59,7 +61,7 @@ func main() {
 	for i := 0; i < clientNum; i++ {
 		go func(i int) {
 			nc, err := nats.Connect(
-				nats.DefaultURL,
+				addr,
 				nats.MaxReconnects(-1),
 				nats.Name(fmt.Sprintf("client-%d-%d", os.Getpid(), i)),
 			)
