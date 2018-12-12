@@ -3,8 +3,6 @@ package huangjunwen.nproto.tests.benchapi;
 
 option go_package = "github.com/huangjunwen/nproto/tests/bench/api;benchapi";
 
-import "google/protobuf/empty.proto";
-
 
 message EchoMsg {
   string msg = 1;
@@ -12,9 +10,6 @@ message EchoMsg {
 
 // @@nprpc@@
 service Bench {
-  // Nop receives empty and returns empty.
-  rpc Nop(google.protobuf.Empty) returns (google.protobuf.Empty);
-
   // Echo echos string.
   rpc Echo(EchoMsg) returns (EchoMsg);
 }

@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/huangjunwen/nproto/nproto/nprpc"
 	"github.com/huangjunwen/nproto/nproto/taskrunner"
 	"github.com/nats-io/go-nats"
@@ -17,10 +16,6 @@ import (
 )
 
 type Bench struct{}
-
-func (svc Bench) Nop(ctx context.Context, input *empty.Empty) (output *empty.Empty, err error) {
-	return input, nil
-}
 
 func (svc Bench) Echo(ctx context.Context, input *benchapi.EchoMsg) (output *benchapi.EchoMsg, err error) {
 	return input, nil
