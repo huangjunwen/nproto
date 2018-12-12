@@ -32,14 +32,14 @@ func main() {
 	}()
 
 	flag.IntVar(&payloadLen, "l", 1000, "Payload length.")
-	flag.IntVar(&rpcNum, "n", 1000, "RPC number per client.")
+	flag.IntVar(&rpcNum, "n", 10000, "Total RPC number.")
 	flag.IntVar(&clientNum, "c", 10, "Client number.")
 	flag.IntVar(&timeoutSec, "t", 3, "RPC timeout in seconds.")
 	flag.StringVar(&addr, "u", nats.DefaultURL, "gnatsd addr.")
 	flag.Parse()
 
 	log.Printf("Payload length (-l): %d\n", payloadLen)
-	log.Printf("RPC num per client (-n): %d\n", rpcNum)
+	log.Printf("Total RPC number (-n): %d\n", rpcNum)
 	log.Printf("Client number (-c): %d\n", clientNum)
 	log.Printf("RPC timeout in seconds (-t): %d\n", timeoutSec)
 
@@ -55,6 +55,7 @@ func main() {
 		payload = p.String()
 	}
 	timeout := time.Duration(timeoutSec) * time.Second
+	rpcPerClientNum := rpcNum / clientNum
 
 	wg := &sync.WaitGroup{}
 	wg.Add(clientNum)
@@ -88,7 +89,7 @@ func main() {
 			errCnt := 0
 
 			start := time.Now()
-			for j := 0; j < rpcNum; j++ {
+			for j := 0; j < rpcPerClientNum; j++ {
 				ctx, _ := context.WithTimeout(context.Background(), timeout)
 				_, err := svc.Echo(ctx, &benchapi.EchoMsg{
 					Msg: payload,
