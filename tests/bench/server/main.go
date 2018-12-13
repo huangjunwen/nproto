@@ -42,7 +42,9 @@ func main() {
 	runner := taskrunner.NewLimitedRunner(maxConcurrency, -1)
 	defer runner.Close()
 
+	log.Printf("Nats URL: %+q\n", addr)
 	log.Printf("Launching %d server.\n", serverNum)
+
 	for i := 0; i < serverNum; i++ {
 		nc, err := nats.Connect(
 			addr,

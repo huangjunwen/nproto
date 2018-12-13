@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/codahale/hdrhistogram"
 	"github.com/huangjunwen/nproto/nproto/nprpc"
 	"github.com/nats-io/go-nats"
 
@@ -38,6 +40,7 @@ func main() {
 	flag.StringVar(&addr, "u", nats.DefaultURL, "gnatsd addr.")
 	flag.Parse()
 
+	log.Printf("Nats URL: %+q\n", addr)
 	log.Printf("Payload length (-l): %d\n", payloadLen)
 	log.Printf("Total RPC number (-n): %d\n", rpcNum)
 	log.Printf("Client number (-c): %d\n", clientNum)
@@ -49,13 +52,14 @@ func main() {
 		for i := 0; i < payloadLen; i++ {
 			_, err := p.WriteString("x")
 			if err != nil {
-				log.Panic(err)
+				panic(err)
 			}
 		}
 		payload = p.String()
 	}
 	timeout := time.Duration(timeoutSec) * time.Second
-	rpcPerClientNum := rpcNum / clientNum
+	rpcNumPerClient := rpcNum / clientNum
+	durations := make([]time.Duration, clientNum*rpcNumPerClient)
 
 	wg := &sync.WaitGroup{}
 	wg.Add(clientNum)
@@ -63,10 +67,19 @@ func main() {
 	mu := &sync.Mutex{}
 	totalSuccCnt := 0
 	totalErrCnt := 0
-	totalDur := time.Duration(0)
 
+	start := time.Now()
 	for i := 0; i < clientNum; i++ {
 		go func(i int) {
+			defer func() {
+				if err := recover(); err != nil {
+					log.Fatal(err)
+				}
+			}()
+
+			// Filling durations[offset: offset+rpcNumPerClient]
+			offset := i * rpcNumPerClient
+
 			nc, err := nats.Connect(
 				addr,
 				nats.MaxReconnects(-1),
@@ -88,33 +101,52 @@ func main() {
 			succCnt := 0
 			errCnt := 0
 
-			start := time.Now()
-			for j := 0; j < rpcPerClientNum; j++ {
+			for j := 0; j < rpcNumPerClient; j++ {
 				ctx, _ := context.WithTimeout(context.Background(), timeout)
+
+				start := time.Now()
 				_, err := svc.Echo(ctx, &benchapi.EchoMsg{
 					Msg: payload,
 				})
+				durations[offset+j] = time.Since(start)
+
 				if err != nil {
 					errCnt += 1
 				} else {
 					succCnt += 1
 				}
 			}
-			dur := time.Since(start)
 
 			mu.Lock()
 			totalSuccCnt += succCnt
 			totalErrCnt += errCnt
-			totalDur += dur
 			mu.Unlock()
 
 			wg.Done()
 		}(i)
 	}
 
+	log.Printf("=== Wating ===\n")
 	wg.Wait()
+	elapse := time.Since(start)
 
-	avg := totalDur / time.Duration(rpcPerClientNum*clientNum)
-	log.Printf("Succ=%d Err=%d Avg=%s\n", totalSuccCnt, totalErrCnt, avg.String())
+	sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
+	h := hdrhistogram.New(1, int64(durations[len(durations)-1]), 5)
+	for _, d := range durations {
+		h.RecordValue(int64(d))
+	}
+
+	log.Printf("Elapse=%s Succ=%d Err=%d\n", elapse, totalSuccCnt, totalErrCnt)
+	log.Printf("Latency HDR Percentiles:\n")
+	log.Printf("10:       %v\n", time.Duration(h.ValueAtQuantile(10)))
+	log.Printf("50:       %v\n", time.Duration(h.ValueAtQuantile(50)))
+	log.Printf("75:       %v\n", time.Duration(h.ValueAtQuantile(75)))
+	log.Printf("90:       %v\n", time.Duration(h.ValueAtQuantile(90)))
+	log.Printf("99:       %v\n", time.Duration(h.ValueAtQuantile(99)))
+	log.Printf("99.99:    %v\n", time.Duration(h.ValueAtQuantile(99.99)))
+	log.Printf("99.999:   %v\n", time.Duration(h.ValueAtQuantile(99.999)))
+	log.Printf("99.9999:  %v\n", time.Duration(h.ValueAtQuantile(99.9999)))
+	log.Printf("99.99999: %v\n", time.Duration(h.ValueAtQuantile(99.99999)))
+	log.Printf("100:      %v\n", time.Duration(h.ValueAtQuantile(100.0)))
 
 }
