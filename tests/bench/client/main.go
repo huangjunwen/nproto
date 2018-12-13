@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime/pprof"
 	"sort"
 	"strings"
 	"sync"
@@ -24,6 +25,7 @@ var (
 	clientNum  int
 	timeoutSec int
 	addr       string
+	cpuprofile string
 )
 
 func main() {
@@ -38,6 +40,7 @@ func main() {
 	flag.IntVar(&clientNum, "c", 10, "Client number.")
 	flag.IntVar(&timeoutSec, "t", 3, "RPC timeout in seconds.")
 	flag.StringVar(&addr, "u", nats.DefaultURL, "gnatsd addr.")
+	flag.StringVar(&cpuprofile, "cpu", "", "CPU profile file name.")
 	flag.Parse()
 
 	log.Printf("Nats URL: %+q\n", addr)
@@ -60,6 +63,18 @@ func main() {
 	timeout := time.Duration(timeoutSec) * time.Second
 	rpcNumPerClient := rpcNum / clientNum
 	durations := make([]time.Duration, clientNum*rpcNumPerClient)
+
+	if cpuprofile != "" {
+		f, err := os.Create(cpuprofile)
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
+
+		if err := pprof.StartCPUProfile(f); err != nil {
+			panic(err)
+		}
+	}
 
 	wg := &sync.WaitGroup{}
 	wg.Add(clientNum)
@@ -129,6 +144,10 @@ func main() {
 	log.Printf("=== Wating ===\n")
 	wg.Wait()
 	elapse := time.Since(start)
+
+	if cpuprofile != "" {
+		pprof.StopCPUProfile()
+	}
 
 	sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
 	h := hdrhistogram.New(1, int64(durations[len(durations)-1]), 5)
