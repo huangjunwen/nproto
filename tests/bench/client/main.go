@@ -114,7 +114,7 @@ func main() {
 
 	wg.Wait()
 
-	avg := totalDur / time.Duration(clientNum*rpcNum)
+	avg := totalDur / time.Duration(rpcPerClientNum*clientNum)
 	log.Printf("Succ=%d Err=%d Avg=%s\n", totalSuccCnt, totalErrCnt, avg.String())
 
 }
