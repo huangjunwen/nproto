@@ -51,6 +51,9 @@ type LimitedRunner struct {
 	q      taskQueue // current task queue: q.n <= maxQueue if maxQueue >= 0
 }
 
+// UnlimitedRunner starts a goroutine for each submitted task.
+type UnlimitedRunner struct{}
+
 // NOTE: Some implementation notes about LimitedRunner, there are three major mutex blocks:
 //
 //   - "add task" block: add task to run or queue.
@@ -165,6 +168,12 @@ func (r *LimitedRunner) Close() {
 		}
 	}
 	r.mu.Unlock()
+}
+
+// Submit implements TaskRunner interface.
+func (r UnlimitedRunner) Submit(task func()) error {
+	go task()
+	return nil
 }
 
 func (q *taskQueue) enqueue(t func()) {
