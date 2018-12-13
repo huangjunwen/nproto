@@ -5,6 +5,7 @@ require (
 	github.com/Microsoft/go-winio v0.4.11 // indirect
 	github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da // indirect
 	github.com/boltdb/bolt v1.3.1 // indirect
+	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd
 	github.com/golang/protobuf v1.2.0
 	github.com/google/go-cmp v0.2.0 // indirect
 	github.com/gotestyourself/gotestyourself v2.2.0+incompatible // indirect
