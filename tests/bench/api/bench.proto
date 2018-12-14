@@ -5,7 +5,7 @@ option go_package = "github.com/huangjunwen/nproto/tests/bench/api;benchapi";
 
 
 message EchoMsg {
-  string msg = 1;
+  bytes payload = 1;
 }
 
 // @@nprpc@@
