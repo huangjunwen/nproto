@@ -19,11 +19,14 @@ import (
 	benchapi "github.com/huangjunwen/nproto/tests/bench/api"
 )
 
+const fsecs = float64(time.Second)
+
 var (
 	addr       string
 	payloadLen int
 	rpcNum     int
 	clientNum  int
+	callRate   int
 	timeoutSec int
 	cpuprofile string
 )
@@ -39,6 +42,7 @@ func main() {
 	flag.IntVar(&payloadLen, "l", 1000, "Payload length.")
 	flag.IntVar(&rpcNum, "n", 10000, "Total RPC number.")
 	flag.IntVar(&clientNum, "c", 10, "Client number.")
+	flag.IntVar(&callRate, "r", 1000, "Call rate of each client per second.")
 	flag.IntVar(&timeoutSec, "t", 3, "RPC timeout in seconds.")
 	flag.StringVar(&cpuprofile, "cpu", "", "CPU profile file name.")
 	flag.Parse()
@@ -58,7 +62,9 @@ func main() {
 	log.Printf("Payload length (-l): %d\n", payloadLen)
 	log.Printf("Total RPC number (-n): %d\n", rpcNumActual)
 	log.Printf("Client number (-c): %d\n", clientNum)
+	log.Printf("Call rate for each client per second (-r): %d\n", callRate)
 	log.Printf("RPC timeout in seconds (-t): %d\n", timeoutSec)
+	log.Printf("Target throughput: %d RPC/sec\n", callRate*clientNum)
 
 	// Start.
 	if cpuprofile != "" {
@@ -80,7 +86,7 @@ func main() {
 	totalSuccCnt := 0
 	totalErrCnt := 0
 
-	start := time.Now()
+	elapseStart := time.Now()
 	for i := 0; i < clientNum; i++ {
 		go func(i int) {
 			defer func() {
@@ -88,9 +94,6 @@ func main() {
 					log.Fatal(err)
 				}
 			}()
-
-			// Filling durations[offset: offset+rpcNumPerClient]
-			offset := i * rpcNumPerClient
 
 			nc, err := nats.Connect(
 				addr,
@@ -110,17 +113,39 @@ func main() {
 
 			svc := benchapi.InvokeBench(client, benchapi.SvcName)
 
+			// Copy from github.com/nats-io/latency-tests/latency.go with modification.
+			delay := time.Second / time.Duration(callRate)
+			clientStart := time.Now()
+			adjustAndSleep := func(count int) {
+				r := int(float64(count) / (float64(time.Since(clientStart)) / fsecs))
+				adj := delay / 20 // 5%
+				if adj == 0 {
+					adj = 1 // 1ns min
+				}
+				if r < callRate {
+					delay -= adj
+				} else if r > callRate {
+					delay += adj
+				}
+				if delay < 0 {
+					delay = 0
+				}
+				time.Sleep(delay)
+			}
+
+			// Filling durations[offset: offset+rpcNumPerClient]
+			offset := i * rpcNumPerClient
 			succCnt := 0
 			errCnt := 0
 
 			for j := 0; j < rpcNumPerClient; j++ {
 				ctx, _ := context.WithTimeout(context.Background(), timeout)
 
-				start := time.Now()
+				callStart := time.Now()
 				_, err := svc.Echo(ctx, &benchapi.EchoMsg{
 					Payload: payload,
 				})
-				durations[offset+j] = time.Since(start)
+				durations[offset+j] = time.Since(callStart)
 
 				if err != nil {
 					log.Fatal(err)
@@ -128,6 +153,7 @@ func main() {
 				} else {
 					succCnt += 1
 				}
+				adjustAndSleep(j + 1)
 			}
 
 			mu.Lock()
@@ -142,7 +168,7 @@ func main() {
 	// Wait.
 	log.Printf("=== Wating ===\n")
 	wg.Wait()
-	elapse := time.Since(start)
+	elapse := time.Since(elapseStart)
 	if cpuprofile != "" {
 		pprof.StopCPUProfile()
 	}
@@ -163,7 +189,7 @@ func main() {
 	log.Printf("Succ Count=%d\n", totalSuccCnt)
 	log.Printf("Err Count=%d\n", totalErrCnt)
 	log.Printf("Elapse=%v\n", elapse.String())
-	log.Printf("Throughput=%6.3f rpc/sec\n", throughput)
+	log.Printf("Actual throughput=%6.3f RPC/sec\n", throughput)
 	log.Printf("Median latency=%v\n", m)
 	log.Printf("Actual concurency=%6.3f\n", concurrencyActual)
 	log.Printf("Latency HDR Percentiles:\n")
