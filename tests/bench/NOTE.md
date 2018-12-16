@@ -166,53 +166,7 @@ Count: 264977  Min:  16.5  Max: 151.5  Avg: 37.76
 [       33.394148,       151.454313)  222492   84.0%  100.0%  ########
 [      151.454313,              inf)       1    0.0%  100.0%
 ```
-~/gowork/src/github.com/huangjunwen/nproto/tests/bench/client$ ./client -c 1 -l 1024 -p 100 -n 100000 -r 100000
-2018/12/16 16:20:37 Nats URL: "nats://localhost:4222"
-2018/12/16 16:20:37 Payload length (-l): 1024
-2018/12/16 16:20:37 Total RPC number (-n): 100000
-2018/12/16 16:20:37 Client number (-c): 1
-2018/12/16 16:20:37 Parallel go routines (-p): 100
-2018/12/16 16:20:37 Target call rate per second (-r): 100000
-2018/12/16 16:20:37 RPC timeout in seconds (-t): 3
-2018/12/16 16:20:37 === Wating ===
-2018/12/16 16:20:41 Elapse=3.927018713s
-2018/12/16 16:20:41 Actual call rate=25464.610 RPC/sec
-2018/12/16 16:20:41 Median latency=3.23512ms
-2018/12/16 16:20:41 Actual concurency=82.381
-2018/12/16 16:20:41 Latency HDR Percentiles:
-2018/12/16 16:20:41 10:       1.750791ms
-2018/12/16 16:20:41 50:       3.235103ms
-2018/12/16 16:20:41 75:       4.545855ms
-2018/12/16 16:20:41 80:       5.042303ms
-2018/12/16 16:20:41 90:       6.849855ms
-2018/12/16 16:20:41 95:       8.695295ms
-2018/12/16 16:20:41 99:       13.262271ms
-2018/12/16 16:20:41 99.99:    22.145919ms
-2018/12/16 16:20:41 99.999:   23.211263ms
-2018/12/16 16:20:41 100:      23.241087ms~/gowork/src/github.com/huangjunwen/nproto/tests/bench/client$ ./client -c 1 -l 1024 -p 100 -n 100000 -r 100000
-2018/12/16 16:20:37 Nats URL: "nats://localhost:4222"
-2018/12/16 16:20:37 Payload length (-l): 1024
-2018/12/16 16:20:37 Total RPC number (-n): 100000
-2018/12/16 16:20:37 Client number (-c): 1
-2018/12/16 16:20:37 Parallel go routines (-p): 100
-2018/12/16 16:20:37 Target call rate per second (-r): 100000
-2018/12/16 16:20:37 RPC timeout in seconds (-t): 3
-2018/12/16 16:20:37 === Wating ===
-2018/12/16 16:20:41 Elapse=3.927018713s
-2018/12/16 16:20:41 Actual call rate=25464.610 RPC/sec
-2018/12/16 16:20:41 Median latency=3.23512ms
-2018/12/16 16:20:41 Actual concurency=82.381
-2018/12/16 16:20:41 Latency HDR Percentiles:
-2018/12/16 16:20:41 10:       1.750791ms
-2018/12/16 16:20:41 50:       3.235103ms
-2018/12/16 16:20:41 75:       4.545855ms
-2018/12/16 16:20:41 80:       5.042303ms
-2018/12/16 16:20:41 90:       6.849855ms
-2018/12/16 16:20:41 95:       8.695295ms
-2018/12/16 16:20:41 99:       13.262271ms
-2018/12/16 16:20:41 99.99:    22.145919ms
-2018/12/16 16:20:41 99.999:   23.211263ms
-2018/12/16 16:20:41 100:      23.241087ms
+
 ```
 ~/gowork/src/github.com/huangjunwen/nproto/tests/bench/client$ ./client -c 1 -l 1024 -p 1000 -n 100000 -r 100000
 2018/12/16 16:19:22 Nats URL: "nats://localhost:4222"
