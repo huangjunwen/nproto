@@ -26,23 +26,19 @@ var (
 	payloadLen int
 	rpcNum     int
 	clientNum  int
+	parallel   int
 	callRate   int
 	timeoutSec int
 	cpuprofile string
 )
 
 func main() {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Fatal(err)
-		}
-	}()
-
 	flag.StringVar(&addr, "u", nats.DefaultURL, "gnatsd addr.")
 	flag.IntVar(&payloadLen, "l", 1000, "Payload length.")
 	flag.IntVar(&rpcNum, "n", 10000, "Total RPC number.")
 	flag.IntVar(&clientNum, "c", 10, "Client number.")
-	flag.IntVar(&callRate, "r", 1000, "Call rate of each client per second.")
+	flag.IntVar(&parallel, "p", 10, "Parallel go routines.")
+	flag.IntVar(&callRate, "r", 1000, "Call rate in each go routine per second.")
 	flag.IntVar(&timeoutSec, "t", 3, "RPC timeout in seconds.")
 	flag.StringVar(&cpuprofile, "cpu", "", "CPU profile file name.")
 	flag.Parse()
@@ -53,18 +49,44 @@ func main() {
 		payload = make([]byte, payloadLen)
 		rand.Read(payload)
 	}
-	rpcNumPerClient := rpcNum / clientNum
-	rpcNumActual := rpcNumPerClient * clientNum
+	rpcNumPerGoroutine := rpcNum / parallel
+	rpcNumActual := rpcNumPerGoroutine * parallel
 	timeout := time.Duration(timeoutSec) * time.Second
 	durations := make([]time.Duration, rpcNumActual)
+	svcs := make([]benchapi.Bench, clientNum)
+	for i := 0; i < clientNum; i++ {
+		nc, err := nats.Connect(
+			addr,
+			nats.MaxReconnects(-1),
+			nats.Name(fmt.Sprintf("client-%d-%d", os.Getpid(), i)),
+		)
+		if err != nil {
+			panic(err)
+		}
+		defer nc.Close()
+
+		client, err := nprpc.NewNatsRPCClient(nc)
+		if err != nil {
+			panic(err)
+		}
+		defer client.Close()
+
+		svcs[i] = benchapi.InvokeBench(client, benchapi.SvcName)
+	}
+	wg := &sync.WaitGroup{}
+	wg.Add(parallel)
+	mu := &sync.Mutex{}
+	totalSuccCnt := 0
+	totalErrCnt := 0
 
 	log.Printf("Nats URL: %+q\n", addr)
 	log.Printf("Payload length (-l): %d\n", payloadLen)
 	log.Printf("Total RPC number (-n): %d\n", rpcNumActual)
 	log.Printf("Client number (-c): %d\n", clientNum)
-	log.Printf("Call rate for each client per second (-r): %d\n", callRate)
+	log.Printf("Parallel go routines (-p): %d\n", parallel)
+	log.Printf("Call rate in each go routine per second (-r): %d\n", callRate)
 	log.Printf("RPC timeout in seconds (-t): %d\n", timeoutSec)
-	log.Printf("Target throughput: %d RPC/sec\n", callRate*clientNum)
+	log.Printf("Target throughput: %d RPC/sec\n", callRate*parallel)
 
 	// Start.
 	if cpuprofile != "" {
@@ -79,45 +101,20 @@ func main() {
 		}
 	}
 
-	wg := &sync.WaitGroup{}
-	wg.Add(clientNum)
-
-	mu := &sync.Mutex{}
-	totalSuccCnt := 0
-	totalErrCnt := 0
-
 	elapseStart := time.Now()
-	for i := 0; i < clientNum; i++ {
+	for i := 0; i < parallel; i++ {
 		go func(i int) {
-			defer func() {
-				if err := recover(); err != nil {
-					log.Fatal(err)
-				}
-			}()
-
-			nc, err := nats.Connect(
-				addr,
-				nats.MaxReconnects(-1),
-				nats.Name(fmt.Sprintf("client-%d-%d", os.Getpid(), i)),
-			)
-			if err != nil {
-				panic(err)
-			}
-			defer nc.Close()
-
-			client, err := nprpc.NewNatsRPCClient(nc)
-			if err != nil {
-				panic(err)
-			}
-			defer client.Close()
-
-			svc := benchapi.InvokeBench(client, benchapi.SvcName)
+			svc := svcs[i%clientNum]
+			// Filling durations[offset: offset+rpcNumPerGoroutine]
+			offset := i * rpcNumPerGoroutine
+			succCnt := 0
+			errCnt := 0
 
 			// Copy from github.com/nats-io/latency-tests/latency.go with modification.
 			delay := time.Second / time.Duration(callRate)
-			clientStart := time.Now()
+			start := time.Now()
 			adjustAndSleep := func(count int) {
-				r := int(float64(count) / (float64(time.Since(clientStart)) / fsecs))
+				r := int(float64(count) / (float64(time.Since(start)) / fsecs))
 				adj := delay / 20 // 5%
 				if adj == 0 {
 					adj = 1 // 1ns min
@@ -133,12 +130,7 @@ func main() {
 				time.Sleep(delay)
 			}
 
-			// Filling durations[offset: offset+rpcNumPerClient]
-			offset := i * rpcNumPerClient
-			succCnt := 0
-			errCnt := 0
-
-			for j := 0; j < rpcNumPerClient; j++ {
+			for j := 0; j < rpcNumPerGoroutine; j++ {
 				ctx, _ := context.WithTimeout(context.Background(), timeout)
 
 				callStart := time.Now()
