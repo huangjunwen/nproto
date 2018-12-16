@@ -15,6 +15,8 @@ import (
 	"github.com/codahale/hdrhistogram"
 	"github.com/huangjunwen/nproto/nproto/nprpc"
 	"github.com/nats-io/go-nats"
+	//"go.uber.org/ratelimit"
+	"github.com/juju/ratelimit"
 
 	benchapi "github.com/huangjunwen/nproto/tests/bench/api"
 )
@@ -38,7 +40,7 @@ func main() {
 	flag.IntVar(&rpcNum, "n", 10000, "Total RPC number.")
 	flag.IntVar(&clientNum, "c", 10, "Client number.")
 	flag.IntVar(&parallel, "p", 10, "Parallel go routines.")
-	flag.IntVar(&callRate, "r", 1000, "Call rate in each go routine per second.")
+	flag.IntVar(&callRate, "r", 10000, "Target call rate per second.")
 	flag.IntVar(&timeoutSec, "t", 3, "RPC timeout in seconds.")
 	flag.StringVar(&cpuprofile, "cpu", "", "CPU profile file name.")
 	flag.Parse()
@@ -53,6 +55,8 @@ func main() {
 	rpcNumActual := rpcNumPerGoroutine * parallel
 	timeout := time.Duration(timeoutSec) * time.Second
 	durations := make([]time.Duration, rpcNumActual)
+	//rl := ratelimit.New(callRate)
+	rl := ratelimit.NewBucketWithRate(float64(callRate), int64(parallel))
 	svcs := make([]benchapi.Bench, clientNum)
 	for i := 0; i < clientNum; i++ {
 		nc, err := nats.Connect(
@@ -73,20 +77,14 @@ func main() {
 
 		svcs[i] = benchapi.InvokeBench(client, benchapi.SvcName)
 	}
-	wg := &sync.WaitGroup{}
-	wg.Add(parallel)
-	mu := &sync.Mutex{}
-	totalSuccCnt := 0
-	totalErrCnt := 0
 
 	log.Printf("Nats URL: %+q\n", addr)
 	log.Printf("Payload length (-l): %d\n", payloadLen)
 	log.Printf("Total RPC number (-n): %d\n", rpcNumActual)
 	log.Printf("Client number (-c): %d\n", clientNum)
 	log.Printf("Parallel go routines (-p): %d\n", parallel)
-	log.Printf("Call rate in each go routine per second (-r): %d\n", callRate)
+	log.Printf("Target call rate per second (-r): %d\n", callRate)
 	log.Printf("RPC timeout in seconds (-t): %d\n", timeoutSec)
-	log.Printf("Target throughput: %d RPC/sec\n", callRate*parallel)
 
 	// Start.
 	if cpuprofile != "" {
@@ -101,38 +99,21 @@ func main() {
 		}
 	}
 
+	wg := &sync.WaitGroup{}
+	wg.Add(parallel)
 	elapseStart := time.Now()
 	for i := 0; i < parallel; i++ {
 		go func(i int) {
+			// Choose one client.
 			svc := svcs[i%clientNum]
 			// Filling durations[offset: offset+rpcNumPerGoroutine]
 			offset := i * rpcNumPerGoroutine
-			succCnt := 0
-			errCnt := 0
-
-			// Copy from github.com/nats-io/latency-tests/latency.go with modification.
-			delay := time.Second / time.Duration(callRate)
-			start := time.Now()
-			adjustAndSleep := func(count int) {
-				r := int(float64(count) / (float64(time.Since(start)) / fsecs))
-				adj := delay / 20 // 5%
-				if adj == 0 {
-					adj = 1 // 1ns min
-				}
-				if r < callRate {
-					delay -= adj
-				} else if r > callRate {
-					delay += adj
-				}
-				if delay < 0 {
-					delay = 0
-				}
-				time.Sleep(delay)
-			}
 
 			for j := 0; j < rpcNumPerGoroutine; j++ {
 				ctx, _ := context.WithTimeout(context.Background(), timeout)
 
+				//rl.Take()
+				rl.Wait(1)
 				callStart := time.Now()
 				_, err := svc.Echo(ctx, &benchapi.EchoMsg{
 					Payload: payload,
@@ -141,17 +122,8 @@ func main() {
 
 				if err != nil {
 					log.Fatal(err)
-					errCnt += 1
-				} else {
-					succCnt += 1
 				}
-				adjustAndSleep(j + 1)
 			}
-
-			mu.Lock()
-			totalSuccCnt += succCnt
-			totalErrCnt += errCnt
-			mu.Unlock()
 
 			wg.Done()
 		}(i)
@@ -169,7 +141,7 @@ func main() {
 	sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
 
 	// http://vanillajava.blogspot.com/2012/04/what-is-latency-throughput-and-degree.html
-	throughput := float64(totalSuccCnt) / elapse.Seconds() // How many success calls per second.
+	throughput := float64(rpcNumActual) / elapse.Seconds() // How many calls per second.
 	m := median(durations)                                 // Median latency value.
 	concurrencyActual := throughput * m.Seconds()
 
@@ -178,10 +150,8 @@ func main() {
 		h.RecordValue(int64(d))
 	}
 
-	log.Printf("Succ Count=%d\n", totalSuccCnt)
-	log.Printf("Err Count=%d\n", totalErrCnt)
 	log.Printf("Elapse=%v\n", elapse.String())
-	log.Printf("Actual throughput=%6.3f RPC/sec\n", throughput)
+	log.Printf("Actual call rate=%6.3f RPC/sec\n", throughput)
 	log.Printf("Median latency=%v\n", m)
 	log.Printf("Actual concurency=%6.3f\n", concurrencyActual)
 	log.Printf("Latency HDR Percentiles:\n")
