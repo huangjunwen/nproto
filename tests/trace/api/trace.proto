@@ -1,0 +1,18 @@
+syntax = "proto3";
+package huangjunwen.nproto.tests.traceapi;
+
+option go_package = "github.com/huangjunwen/nproto/tests/trace/api;traceapi";
+
+message RecursiveRequest {
+  int32 depth = 1;
+}
+
+message RecursiveReply {
+  int32 result = 1;
+}
+
+// @@nprpc@@
+service Trace {
+  // Recursive calls this method recursively.
+  rpc Recursive(RecursiveRequest) returns (RecursiveReply);
+}
