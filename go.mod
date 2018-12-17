@@ -13,6 +13,7 @@ require (
 	github.com/hashicorp/go-msgpack v0.0.0-20150518234257-fa3f63826f7c // indirect
 	github.com/hashicorp/raft v1.0.0 // indirect
 	github.com/huangjunwen/tstsvc v0.2.0
+	github.com/juju/ratelimit v1.0.1
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/lib/pq v1.0.0 // indirect
 	github.com/lyft/protoc-gen-star v0.4.5
@@ -20,6 +21,7 @@ require (
 	github.com/nats-io/go-nats v1.6.0
 	github.com/nats-io/go-nats-streaming v0.4.0
 	github.com/nats-io/nats-streaming-server v0.11.2 // indirect
+	github.com/opentracing/opentracing-go v1.0.2
 	github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c // indirect
 	github.com/rs/xid v1.2.1
 	github.com/rs/zerolog v1.11.0

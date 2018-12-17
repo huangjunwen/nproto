@@ -195,3 +195,19 @@ func (md MetaData) Append(key string, vals ...string) {
 func (md MetaData) Len() int {
 	return len(md)
 }
+
+// Copy returns a copy of MetaData.
+func (md MetaData) Copy() MetaData {
+	return Join(md)
+}
+
+// Join joins a number of MetaDatas into one.
+func Join(mds ...MetaData) MetaData {
+	ret := MetaData{}
+	for _, md := range mds {
+		for key, vals := range md {
+			ret[key] = append(ret[key], vals...)
+		}
+	}
+	return ret
+}
