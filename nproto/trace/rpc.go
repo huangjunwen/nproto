@@ -11,16 +11,24 @@ import (
 	"github.com/huangjunwen/nproto/nproto"
 )
 
+// TraceRPCClient wraps an RPCClient with an opentracing tracer.
 type TraceRPCClient struct {
 	Client nproto.RPCClient
 	Tracer opentracing.Tracer
 }
 
+// TraceRPCServer wraps an RPCServer with an opentracing tracer.
 type TraceRPCServer struct {
 	Server nproto.RPCServer
 	Tracer opentracing.Tracer
 }
 
+var (
+	_ nproto.RPCServer = (*TraceRPCServer)(nil)
+	_ nproto.RPCClient = (*TraceRPCClient)(nil)
+)
+
+// MakeHandler implements nproto.RPCClient interface.
 func (client *TraceRPCClient) MakeHandler(svcName string, method *nproto.RPCMethod) nproto.RPCHandler {
 	fullMethodName := fmt.Sprintf("%s.%s", svcName, method.Name)
 	handler := client.Client.MakeHandler(svcName, method)
@@ -57,6 +65,7 @@ func (client *TraceRPCClient) MakeHandler(svcName string, method *nproto.RPCMeth
 	}
 }
 
+// RegistSvc implements nproto.RPCServer interface.
 func (server *TraceRPCServer) RegistSvc(svcName string, methods map[*nproto.RPCMethod]nproto.RPCHandler) error {
 	methods2 := make(map[*nproto.RPCMethod]nproto.RPCHandler)
 	for method, handler := range methods {
@@ -89,6 +98,7 @@ func (server *TraceRPCServer) RegistSvc(svcName string, methods map[*nproto.RPCM
 	return server.Server.RegistSvc(svcName, methods2)
 }
 
+// DeregistSvc implements nproto.RPCServer interface.
 func (server *TraceRPCServer) DeregistSvc(svcName string) error {
 	return server.Server.DeregistSvc(svcName)
 }
