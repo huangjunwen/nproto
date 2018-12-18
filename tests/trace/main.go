@@ -86,7 +86,7 @@ func main() {
 		log.Printf("NatsRPCServer created.\n")
 		defer server.Close()
 
-		tserver := &trace.TraceRPCServer{
+		tserver := &trace.TracedRPCServer{
 			Server: server,
 			Tracer: tracer,
 		}
@@ -104,7 +104,7 @@ func main() {
 		log.Printf("NatsRPCClient created.\n")
 		defer client.Close()
 
-		tclient := &trace.TraceRPCClient{
+		tclient := &trace.TracedRPCClient{
 			Client: client,
 			Tracer: tracer,
 		}
