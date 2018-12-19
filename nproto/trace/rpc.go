@@ -7,9 +7,15 @@ import (
 	"github.com/golang/protobuf/proto"
 	ot "github.com/opentracing/opentracing-go"
 	otext "github.com/opentracing/opentracing-go/ext"
-	otlog "github.com/opentracing/opentracing-go/log"
 
 	"github.com/huangjunwen/nproto/nproto"
+)
+
+var (
+	rpcComponentTag = ot.Tag{
+		Key:   string(otext.Component),
+		Value: "nproto.rpc",
+	}
 )
 
 // TracedRPCClient wraps an RPCClient with an opentracing tracer.
@@ -29,46 +35,54 @@ var (
 	_ nproto.RPCClient = (*TracedRPCClient)(nil)
 )
 
+// NewTracedRPCClient creates a new TracedRPCClient.
+func NewTracedRPCClient(client nproto.RPCClient, tracer ot.Tracer) *TracedRPCClient {
+	return &TracedRPCClient{
+		Client: client,
+		Tracer: tracer,
+	}
+}
+
 // MakeHandler implements nproto.RPCClient interface.
 func (client *TracedRPCClient) MakeHandler(svcName string, method *nproto.RPCMethod) nproto.RPCHandler {
 	fullMethodName := fmt.Sprintf("%s.%s", svcName, method.Name)
 	handler := client.Client.MakeHandler(svcName, method)
 	return func(ctx context.Context, input proto.Message) (output proto.Message, err error) {
-		// Extract current span context.
-		var parentCtx ot.SpanContext
-		if parentSpan := ot.SpanFromContext(ctx); parentSpan != nil {
-			parentCtx = parentSpan.Context()
-		}
+		// Extract current span context, maybe nil.
+		curSpanCtx := spanCtxFromCtx(ctx)
 
 		// Start a client span.
 		clientSpan := client.Tracer.StartSpan(
 			fullMethodName,
-			ot.ChildOf(parentCtx),
+			ot.ChildOf(curSpanCtx),
 			otext.SpanKindRPCClient,
-			ComponentTag,
+			rpcComponentTag,
 		)
 		defer clientSpan.Finish()
 
 		// Inject span context.
-		md := nproto.FromOutgoingContext(ctx)
-		if md == nil {
-			md = nproto.NewMetaDataPairs()
-		} else {
-			md = md.Copy()
-		}
-		mdRW := mdReaderWriter{md}
-		if err := client.Tracer.Inject(clientSpan.Context(), ot.TextMap, mdRW); err != nil {
+		md, err := injectSpanCtx(
+			client.Tracer,
+			clientSpan.Context(),
+			nproto.FromOutgoingContext(ctx),
+		)
+		if err != nil {
 			return nil, err
 		}
+		ctx = nproto.NewOutgoingContext(ctx, md)
 
 		// Handle.
-		output, err = handler(nproto.NewOutgoingContext(ctx, md), input)
-		if err != nil {
-			otext.Error.Set(clientSpan, true)
-			clientSpan.LogFields(otlog.String("event", "error"), otlog.String("message", err.Error()))
-		}
-
+		output, err = handler(ctx, input)
+		setSpanError(clientSpan, err)
 		return
+	}
+}
+
+// NewTracedRPCServer creates a new TracedRPCServer.
+func NewTracedRPCServer(server nproto.RPCServer, tracer ot.Tracer) *TracedRPCServer {
+	return &TracedRPCServer{
+		Server: server,
+		Tracer: tracer,
 	}
 }
 
@@ -78,12 +92,11 @@ func (server *TracedRPCServer) RegistSvc(svcName string, methods map[*nproto.RPC
 	for method, handler := range methods {
 		fullMethodName := fmt.Sprintf("%s.%s", svcName, method.Name)
 		h := func(ctx context.Context, input proto.Message) (output proto.Message, err error) {
-			// Extract span context.
-			md := nproto.CurrRPCMetaData(ctx)
-			if md == nil {
-				md = nproto.NewMetaDataPairs()
-			}
-			spanCtx, err := server.Tracer.Extract(ot.TextMap, mdReaderWriter{md})
+			// Extract current span context, maybe nil.
+			curSpanCtx, err := extractSpanCtx(
+				server.Tracer,
+				nproto.CurrRPCMetaData(ctx),
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -91,18 +104,16 @@ func (server *TracedRPCServer) RegistSvc(svcName string, methods map[*nproto.RPC
 			// Start a server span.
 			serverSpan := server.Tracer.StartSpan(
 				fullMethodName,
-				otext.RPCServerOption(spanCtx),
-				ComponentTag,
+				ot.ChildOf(curSpanCtx),
+				rpcComponentTag,
 				otext.SpanKindRPCServer,
 			)
 			defer serverSpan.Finish()
+			ctx = ot.ContextWithSpan(ctx, serverSpan)
 
 			// Handle.
-			output, err = handler(ot.ContextWithSpan(ctx, serverSpan), input)
-			if err != nil {
-				otext.Error.Set(serverSpan, true)
-				serverSpan.LogFields(otlog.String("event", "error"), otlog.String("message", err.Error()))
-			}
+			output, err = handler(ctx, input)
+			setSpanError(serverSpan, err)
 			return
 
 		}

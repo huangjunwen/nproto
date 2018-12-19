@@ -86,11 +86,7 @@ func main() {
 		log.Printf("NatsRPCServer created.\n")
 		defer server.Close()
 
-		tserver := &trace.TracedRPCServer{
-			Server: server,
-			Tracer: tracer,
-		}
-
+		tserver := trace.NewTracedRPCServer(server, tracer)
 		if err := traceapi.ServeTrace(tserver, traceapi.SvcName, Trace{}); err != nil {
 			log.Panic(err)
 		}
@@ -104,11 +100,7 @@ func main() {
 		log.Printf("NatsRPCClient created.\n")
 		defer client.Close()
 
-		tclient := &trace.TracedRPCClient{
-			Client: client,
-			Tracer: tracer,
-		}
-
+		tclient := trace.NewTracedRPCClient(client, tracer)
 		svc = traceapi.InvokeTrace(tclient, traceapi.SvcName)
 	}
 
@@ -133,7 +125,6 @@ func main() {
 				if reply.Result != runCase.ExpectResult {
 					log.Panic("Expect result %v, but got %v", runCase.ExpectError, reply.Result)
 				}
-
 			}
 
 		}
