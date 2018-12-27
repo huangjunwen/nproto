@@ -20,14 +20,14 @@ var (
 
 // TracedRPCClient wraps an RPCClient with an opentracing tracer.
 type TracedRPCClient struct {
-	Client nproto.RPCClient
-	Tracer ot.Tracer
+	client nproto.RPCClient
+	tracer ot.Tracer
 }
 
 // TracedRPCServer wraps an RPCServer with an opentracing tracer.
 type TracedRPCServer struct {
-	Server nproto.RPCServer
-	Tracer ot.Tracer
+	server nproto.RPCServer
+	tracer ot.Tracer
 }
 
 var (
@@ -38,21 +38,21 @@ var (
 // NewTracedRPCClient creates a new TracedRPCClient.
 func NewTracedRPCClient(client nproto.RPCClient, tracer ot.Tracer) *TracedRPCClient {
 	return &TracedRPCClient{
-		Client: client,
-		Tracer: tracer,
+		client: client,
+		tracer: tracer,
 	}
 }
 
 // MakeHandler implements nproto.RPCClient interface.
 func (client *TracedRPCClient) MakeHandler(svcName string, method *nproto.RPCMethod) nproto.RPCHandler {
 	fullMethodName := fmt.Sprintf("%s.%s", svcName, method.Name)
-	handler := client.Client.MakeHandler(svcName, method)
+	handler := client.client.MakeHandler(svcName, method)
 	return func(ctx context.Context, input proto.Message) (output proto.Message, err error) {
 		// Extract current span context, maybe nil.
 		curSpanCtx := spanCtxFromCtx(ctx)
 
 		// Start a client span.
-		clientSpan := client.Tracer.StartSpan(
+		clientSpan := client.tracer.StartSpan(
 			fullMethodName,
 			ot.ChildOf(curSpanCtx),
 			otext.SpanKindRPCClient,
@@ -62,7 +62,7 @@ func (client *TracedRPCClient) MakeHandler(svcName string, method *nproto.RPCMet
 
 		// Inject span context.
 		md, err := injectSpanCtx(
-			client.Tracer,
+			client.tracer,
 			clientSpan.Context(),
 			nproto.FromOutgoingContext(ctx),
 		)
@@ -81,8 +81,8 @@ func (client *TracedRPCClient) MakeHandler(svcName string, method *nproto.RPCMet
 // NewTracedRPCServer creates a new TracedRPCServer.
 func NewTracedRPCServer(server nproto.RPCServer, tracer ot.Tracer) *TracedRPCServer {
 	return &TracedRPCServer{
-		Server: server,
-		Tracer: tracer,
+		server: server,
+		tracer: tracer,
 	}
 }
 
@@ -94,7 +94,7 @@ func (server *TracedRPCServer) RegistSvc(svcName string, methods map[*nproto.RPC
 		h := func(ctx context.Context, input proto.Message) (output proto.Message, err error) {
 			// Extract current span context, maybe nil.
 			curSpanCtx, err := extractSpanCtx(
-				server.Tracer,
+				server.tracer,
 				nproto.CurrRPCMetaData(ctx),
 			)
 			if err != nil {
@@ -102,7 +102,7 @@ func (server *TracedRPCServer) RegistSvc(svcName string, methods map[*nproto.RPC
 			}
 
 			// Start a server span.
-			serverSpan := server.Tracer.StartSpan(
+			serverSpan := server.tracer.StartSpan(
 				fullMethodName,
 				ot.ChildOf(curSpanCtx),
 				rpcComponentTag,
@@ -119,10 +119,10 @@ func (server *TracedRPCServer) RegistSvc(svcName string, methods map[*nproto.RPC
 		}
 		methods2[method] = h
 	}
-	return server.Server.RegistSvc(svcName, methods2)
+	return server.server.RegistSvc(svcName, methods2)
 }
 
 // DeregistSvc implements nproto.RPCServer interface.
 func (server *TracedRPCServer) DeregistSvc(svcName string) error {
-	return server.Server.DeregistSvc(svcName)
+	return server.server.DeregistSvc(svcName)
 }

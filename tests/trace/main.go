@@ -64,7 +64,6 @@ func main() {
 		}
 		log.Printf("NATS connected.\n")
 		defer nc.Close()
-
 	}
 
 	var tracer opentracing.Tracer
@@ -110,6 +109,7 @@ func main() {
 			ExpectResult int32
 			ExpectError  bool
 		}{
+			{0, 1, false},
 			{0, 1, false},
 			{3, 4, false},
 			{-1, 0, true},
