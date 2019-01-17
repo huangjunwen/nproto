@@ -39,7 +39,7 @@ type msgCtxMetaDataKey struct{}
 
 type outgoingMetaDataKey struct{}
 
-// CurrRPCSvcName returns the service name of current RPC call of "" if not found.
+// CurrRPCSvcName returns the service name of current RPC call or "" if not found.
 // This function is usually called inside a server side handler.
 func CurrRPCSvcName(ctx context.Context) string {
 	v := ctx.Value(rpcCtxSvcNameKey{})
@@ -98,7 +98,7 @@ func (ctx *rpcCtx) Value(key interface{}) interface{} {
 	}
 }
 
-// CurrMsgSubject returns the subject of in current msg delivery or "" if not found.
+// CurrMsgSubject returns the subject of current msg delivery or "" if not found.
 // This function is usually called inside a subscriber side handler.
 func CurrMsgSubject(ctx context.Context) string {
 	v := ctx.Value(msgCtxSubjectKey{})
