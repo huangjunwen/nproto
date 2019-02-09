@@ -169,7 +169,8 @@ func main() {
 		log.Printf("Subscribed.\n")
 	}
 
-	nc.Flush()
+	// Wait a while.
+	time.Sleep(time.Second)
 
 	{
 		for _, runCase := range []struct {
