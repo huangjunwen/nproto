@@ -1,5 +1,6 @@
 package traceapi
 
 const (
-	SvcName = "trace"
+	SvcName  = "trace"
+	SubjName = "trace.neg.depth"
 )

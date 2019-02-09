@@ -61,4 +61,19 @@ func (svc *clientTrace) Recursive(ctx context.Context, input *RecursiveRequest) 
 
 // @@protoc_insertion_point(nprpc)
 
+// SubscribeRecursiveDepthNegative subscribes to the specified message channel.
+func SubscribeRecursiveDepthNegative(subscriber nproto.MsgSubscriber, subject, queue string, handler func(context.Context, *RecursiveDepthNegative) error, opts ...interface{}) error {
+	return subscriber.Subscribe(
+		subject,
+		queue,
+		func() proto.Message {
+			return &RecursiveDepthNegative{}
+		},
+		func(ctx context.Context, m proto.Message) error {
+			return handler(ctx, m.(*RecursiveDepthNegative))
+		},
+		opts...,
+	)
+}
+
 // @@protoc_insertion_point(npmsg)

@@ -5,7 +5,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"time"
 
+	"github.com/huangjunwen/nproto/nproto"
+	"github.com/huangjunwen/nproto/nproto/npmsg"
+	"github.com/huangjunwen/nproto/nproto/npmsg/durconn"
 	"github.com/huangjunwen/nproto/nproto/nprpc"
 	"github.com/huangjunwen/nproto/nproto/trace"
 	"github.com/nats-io/go-nats"
@@ -17,14 +21,21 @@ import (
 )
 
 var (
-	svc traceapi.Trace // client service
+	publisher nproto.MsgPublisher
+	svc       traceapi.Trace // client service
+	wait      chan struct{}
 )
 
 type Trace struct{}
 
 func (t Trace) Recursive(ctx context.Context, input *traceapi.RecursiveRequest) (output *traceapi.RecursiveReply, err error) {
 	if input.Depth < 0 {
-		return nil, fmt.Errorf("Expect postive depth, but got %d", input.Depth)
+		err := fmt.Errorf("Expect postive depth, but got %d", input.Depth)
+		publisher.Publish(ctx, traceapi.SubjName, &traceapi.RecursiveDepthNegative{
+			Depth: input.Depth,
+		})
+		log.Println(err)
+		return nil, err
 	}
 
 	result := int32(0)
@@ -42,6 +53,13 @@ func (t Trace) Recursive(ctx context.Context, input *traceapi.RecursiveRequest) 
 	}, nil
 }
 
+func HandleRecursiveNegDepth(ctx context.Context, msg *traceapi.RecursiveDepthNegative) error {
+	log.Printf("Got negative recursive depth: %d\n", msg.Depth)
+	time.Sleep(2 * time.Second)
+	close(wait)
+	return nil
+}
+
 func NewTracer(service string) (opentracing.Tracer, io.Closer, error) {
 	cfg := jaegercfg.Configuration{
 		Sampler: &jaegercfg.SamplerConfig{
@@ -56,6 +74,8 @@ func NewTracer(service string) (opentracing.Tracer, io.Closer, error) {
 func main() {
 	var err error
 
+	wait = make(chan struct{})
+
 	var nc *nats.Conn
 	{
 		nc, err = nats.Connect(nats.DefaultURL, nats.MaxReconnects(-1))
@@ -63,7 +83,10 @@ func main() {
 			log.Panic(err)
 		}
 		log.Printf("NATS connected.\n")
-		defer nc.Close()
+		defer func() {
+			nc.Close()
+			log.Printf("NATS closed.\n")
+		}()
 	}
 
 	var tracer opentracing.Tracer
@@ -74,7 +97,10 @@ func main() {
 			log.Panic(err)
 		}
 		log.Printf("Tracer created.\n")
-		defer tracerCloser.Close()
+		defer func() {
+			tracerCloser.Close()
+			log.Printf("Tracer closed.\n")
+		}()
 	}
 
 	{
@@ -83,7 +109,10 @@ func main() {
 			log.Panic(err)
 		}
 		log.Printf("NatsRPCServer created.\n")
-		defer server.Close()
+		defer func() {
+			server.Close()
+			log.Printf("NatsRPCServer closed.\n")
+		}()
 
 		tserver := trace.NewTracedRPCServer(server, tracer)
 		if err := traceapi.ServeTrace(tserver, traceapi.SvcName, Trace{}); err != nil {
@@ -97,11 +126,50 @@ func main() {
 			log.Panic(err)
 		}
 		log.Printf("NatsRPCClient created.\n")
-		defer client.Close()
+		defer func() {
+			client.Close()
+			log.Printf("NatsRPCClient closed.\n")
+		}()
 
 		tclient := trace.NewTracedRPCClient(client, tracer)
 		svc = traceapi.InvokeTrace(tclient, traceapi.SvcName)
 	}
+
+	var dc *durconn.DurConn
+	{
+		dc, err = durconn.NewDurConn(nc, "test-cluster")
+		if err != nil {
+			log.Panic(err)
+		}
+		log.Printf("DurConn created.\n")
+		defer func() {
+			dc.Close()
+			log.Printf("DurConn closed.\n")
+		}()
+		defer dc.Close()
+	}
+
+	{
+		publisher = trace.NewTracedMsgPublisher(npmsg.NewMsgPublisher(dc, nil), tracer)
+		log.Printf("Publisher created.\n")
+	}
+
+	{
+		subscriber := trace.NewTracedMsgSubscriber(npmsg.NewMsgSubscriber(dc, nil), tracer)
+		log.Printf("Subscriber created.\n")
+		err = traceapi.SubscribeRecursiveDepthNegative(
+			subscriber,
+			traceapi.SubjName,
+			"default",
+			HandleRecursiveNegDepth,
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		log.Printf("Subscribed.\n")
+	}
+
+	nc.Flush()
 
 	{
 		for _, runCase := range []struct {
@@ -112,7 +180,7 @@ func main() {
 			{0, 1, false},
 			{0, 1, false},
 			{3, 4, false},
-			{-1, 0, true},
+			{-3, 0, true},
 		} {
 			reply, err := svc.Recursive(context.Background(), &traceapi.RecursiveRequest{
 				Depth: runCase.Depth,
@@ -129,5 +197,9 @@ func main() {
 
 		}
 	}
+
+	<-wait
+
+	log.Printf("End..\n")
 
 }

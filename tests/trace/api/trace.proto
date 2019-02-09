@@ -11,6 +11,11 @@ message RecursiveReply {
   int32 result = 1;
 }
 
+// @@npmsg@@
+message RecursiveDepthNegative {
+  int32 depth = 1;
+}
+
 // @@nprpc@@
 service Trace {
   // Recursive calls this method recursively.
