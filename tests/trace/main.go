@@ -12,7 +12,7 @@ import (
 	"github.com/huangjunwen/nproto/nproto/npmsg/durconn"
 	"github.com/huangjunwen/nproto/nproto/nprpc"
 	"github.com/huangjunwen/nproto/nproto/trace"
-	"github.com/nats-io/go-nats"
+	nats "github.com/nats-io/go-nats"
 	opentracing "github.com/opentracing/opentracing-go"
 	jaeger "github.com/uber/jaeger-client-go"
 	jaegercfg "github.com/uber/jaeger-client-go/config"
@@ -30,7 +30,7 @@ type Trace struct{}
 
 func (t Trace) Recursive(ctx context.Context, input *traceapi.RecursiveRequest) (output *traceapi.RecursiveReply, err error) {
 	if input.Depth < 0 {
-		err := fmt.Errorf("Expect postive depth, but got %d", input.Depth)
+		err := fmt.Errorf("Expect 0 or positive depth, but got %d", input.Depth)
 		publisher.Publish(ctx, traceapi.SubjName, &traceapi.RecursiveDepthNegative{
 			Depth: input.Depth,
 		})

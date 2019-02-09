@@ -12,7 +12,7 @@ import (
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/golang/protobuf/ptypes/wrappers"
 	tstnats "github.com/huangjunwen/tstsvc/nats"
-	"github.com/nats-io/go-nats"
+	nats "github.com/nats-io/go-nats"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/huangjunwen/nproto/nproto"
@@ -182,7 +182,7 @@ func TestNatsRPC(t *testing.T) {
 			log.Panic(err)
 		}
 		defer server.DeregistSvc(svcName)
-		log.Printf("Svc registed.\n")
+		log.Printf("Svc registered.\n")
 	}
 
 	// Creates two rpc clients.
@@ -354,7 +354,7 @@ func TestSvcUnavailable(t *testing.T) {
 			log.Panic(err)
 		}
 		defer server.DeregistSvc(svcName)
-		log.Printf("Svc registed.\n")
+		log.Printf("Svc registered.\n")
 	}
 
 	handler := client.MakeHandler(svcName, busyMethod)

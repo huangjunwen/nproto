@@ -309,7 +309,7 @@ func (store *DBStore) flushMsgStream(ctx context.Context, stream msgStream) {
 	succList := &msgList{}
 	procList := &msgList{}
 
-	// Start a seperate goroutine for deleting msgs.
+	// Start a separated goroutine for deleting msgs.
 	delwg := &sync.WaitGroup{}
 	delwg.Add(1)
 	go func() {

@@ -175,7 +175,7 @@ func (server *NatsRPCServer) DeregistSvc(svcName string) error {
 	return nil
 }
 
-// Close stops the server and deregist all registed services, then wait all active handlers to finish.
+// Close stops the server and deregist all registered services, then wait all active handlers to finish.
 func (server *NatsRPCServer) Close() error {
 	// Set nc to nil to indicate close.
 	server.mu.Lock()

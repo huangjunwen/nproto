@@ -11,7 +11,7 @@ import (
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/huangjunwen/nproto/nproto/nprpc"
 	"github.com/huangjunwen/nproto/nproto/taskrunner"
-	"github.com/nats-io/go-nats"
+	nats "github.com/nats-io/go-nats"
 
 	runnerapi "github.com/huangjunwen/nproto/tests/runner/api"
 )
@@ -58,7 +58,7 @@ func main() {
 	if err := runnerapi.ServeRunner(server, runnerapi.SvcName, Runner{}); err != nil {
 		log.Panic(err)
 	}
-	log.Printf("Svc registed.\n")
+	log.Printf("Svc registered.\n")
 
 	// Creates the client.
 	client, err := nprpc.NewNatsRPCClient(nc)

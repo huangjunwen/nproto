@@ -13,8 +13,8 @@ import (
 
 	tstmysql "github.com/huangjunwen/tstsvc/mysql"
 	tststan "github.com/huangjunwen/tstsvc/stan"
-	"github.com/nats-io/go-nats"
-	"github.com/nats-io/go-nats-streaming"
+	nats "github.com/nats-io/go-nats"
+	stan "github.com/nats-io/go-nats-streaming"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/huangjunwen/nproto/nproto/npmsg"
@@ -100,7 +100,7 @@ func TestFlush(t *testing.T) {
 		log.Printf("Stan server started.\n")
 	}
 
-	// Connects to embeded nats server.
+	// Connects to embedded nats server.
 	var nc *nats.Conn
 	{
 		nc, err = resStan.NatsClient(
@@ -177,7 +177,7 @@ func TestFlush(t *testing.T) {
 					log.Panic(err)
 				}
 
-				// Multiply prime and product only when prime has not been multipled.
+				// Multiply prime and product only when prime has not been multiplied.
 				// This make the process idempotent: re-delivery the same prime number does not change the product.
 				updated := false
 				mu.Lock()
