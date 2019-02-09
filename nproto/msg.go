@@ -12,11 +12,8 @@ type MsgPublisher interface {
 	Publish(ctx context.Context, subject string, msg proto.Message) error
 }
 
-// MsgAsyncPublisher extends MsgPublisher with async API.
+// MsgAsyncPublisher is similar to MsgPublisher but in async manner.
 type MsgAsyncPublisher interface {
-	// It's trivial to implement a sync publish if it supports async publish.
-	MsgPublisher
-
 	// PublishAsync publishes a message to the given subject asynchronously.
 	// The final result is returned by cb.
 	// NOTE: This method must be non-blocking.
@@ -34,28 +31,3 @@ type MsgSubscriber interface {
 
 // MsgHandler handles the message. The message should be redelivered if it returns an error.
 type MsgHandler func(context.Context, proto.Message) error
-
-// MsgMiddleware is used to decorate MsgHandler.
-type MsgMiddleware func(MsgHandler) MsgHandler
-
-type decMsgSubscriber struct {
-	MsgSubscriber
-	mws []MsgMiddleware
-}
-
-// DecorateMsgSubscriber decorates a MsgSubscriber with MsgMiddlewares.
-func DecorateMsgSubscriber(subscriber MsgSubscriber, mws ...MsgMiddleware) MsgSubscriber {
-	return &decMsgSubscriber{
-		MsgSubscriber: subscriber,
-		mws:           mws,
-	}
-}
-
-// Subscribe implements MsgSubscriber interface.
-func (subscriber *decMsgSubscriber) Subscribe(subject, queue string, newMsg func() proto.Message, handler MsgHandler, opts ...interface{}) error {
-	// Decorate handler.
-	for i := len(subscriber.mws) - 1; i >= 0; i-- {
-		handler = subscriber.mws[i](handler)
-	}
-	return subscriber.MsgSubscriber.Subscribe(subject, queue, newMsg, handler, opts...)
-}

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/nats-io/go-nats"
+	nats "github.com/nats-io/go-nats"
 	"github.com/rs/zerolog"
 
 	"github.com/huangjunwen/nproto/nproto"
@@ -385,9 +385,8 @@ func (client *NatsRPCClient) MakeHandler(svcName string, method *nproto.RPCMetho
 			dur := dl.Sub(time.Now())
 			if dur <= 0 {
 				return nil, context.DeadlineExceeded
-			} else {
-				req.Timeout = dur
 			}
+			req.Timeout = dur
 		}
 		md := nproto.FromOutgoingContext(ctx)
 		if len(md) > 0 {

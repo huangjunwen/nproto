@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nats-io/go-nats"
-	"github.com/nats-io/go-nats-streaming"
+	nats "github.com/nats-io/go-nats"
+	stan "github.com/nats-io/go-nats-streaming"
 	"github.com/rs/xid"
 	"github.com/rs/zerolog"
 
@@ -39,6 +39,7 @@ var (
 )
 
 var (
+	_ npmsg.RawMsgPublisher      = (*DurConn)(nil)
 	_ npmsg.RawMsgAsyncPublisher = (*DurConn)(nil)
 	_ npmsg.RawMsgSubscriber     = (*DurConn)(nil)
 )
@@ -192,23 +193,7 @@ func (dc *DurConn) PublishAsync(ctx context.Context, subject string, data []byte
 
 // Publish implements npmsg.RawMsgPublisher interface.
 func (dc *DurConn) Publish(ctx context.Context, subject string, data []byte) error {
-	var (
-		err  error
-		errc = make(chan struct{})
-	)
-	if e1 := dc.PublishAsync(ctx, subject, data, func(e2 error) {
-		err = e2
-		close(errc)
-	}); e1 != nil {
-		return e1
-	}
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-errc:
-		return err
-	}
+	return npmsg.SyncPublish(dc, ctx, subject, data)
 }
 
 // connect is used to make a new stan connection.

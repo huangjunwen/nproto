@@ -18,8 +18,6 @@ type RawMsgPublisher interface {
 
 // RawMsgAsyncPublisher is similar to MsgAsyncPublisher but operates on lower level.
 type RawMsgAsyncPublisher interface {
-	RawMsgPublisher
-
 	// PublishAsync publishes a message to the given subject asynchronously.
 	// The final result is returned by cb.
 	// NOTE: This method must be non-blocking.
@@ -92,18 +90,6 @@ func NewMsgAsyncPublisher(publisher RawMsgAsyncPublisher, encoder enc.MsgPublish
 	}
 }
 
-// Publish implements MsgAsyncPublisher interface.
-func (p *defaultMsgAsyncPublisher) Publish(ctx context.Context, subject string, msg proto.Message) error {
-	data, err := p.encoder.EncodePayload(&enc.MsgPayload{
-		Msg:      msg,
-		MetaData: nproto.FromOutgoingContext(ctx),
-	})
-	if err != nil {
-		panic(err)
-	}
-	return p.publisher.Publish(ctx, subject, data)
-}
-
 // PublishAsync implements MsgAsyncPublisher interface.
 func (p *defaultMsgAsyncPublisher) PublishAsync(ctx context.Context, subject string, msg proto.Message, cb func(error)) error {
 	data, err := p.encoder.EncodePayload(&enc.MsgPayload{
@@ -145,4 +131,25 @@ func (s *defaultMsgSubscriber) Subscribe(subject, queue string, newMsg func() pr
 	}
 
 	return s.subscriber.Subscribe(subject, queue, h, opts...)
+}
+
+// SyncPublish publish a message in sync manner using a RawMsgAsyncPublisher.
+func SyncPublish(p RawMsgAsyncPublisher, ctx context.Context, subject string, data []byte) error {
+	var (
+		err  error
+		errc = make(chan struct{})
+	)
+	if e1 := p.PublishAsync(ctx, subject, data, func(err2 error) {
+		err = err2
+		close(errc)
+	}); e1 != nil {
+		return e1
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-errc:
+		return err
+	}
 }
