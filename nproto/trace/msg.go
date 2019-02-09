@@ -68,7 +68,7 @@ func (publisher *TracedMsgPublisher) Publish(ctx context.Context, subject string
 	ctx = nproto.NewOutgoingContext(ctx, md)
 
 	// Publish.
-	err = publisher.Publish(ctx, subject, msg)
+	err = publisher.publisher.Publish(ctx, subject, msg)
 	setSpanError(pubSpan, err)
 	return err
 }
