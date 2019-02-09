@@ -212,7 +212,7 @@ type client{{ Name $svc }} struct {
 	npmsgTplText = `
 {{- $msg := .Message -}}
 // Subscribe{{ Name $msg }} subscribes to the specified message channel.
-func Suscribe{{ Name $msg }}(subscriber nproto.MsgSubscriber, subject, queue string, handler func(context.Context, *{{ Name $msg }}) error, opts ...interface{}) error {
+func Subscribe{{ Name $msg }}(subscriber nproto.MsgSubscriber, subject, queue string, handler func(context.Context, *{{ Name $msg }}) error, opts ...interface{}) error {
 	return subscriber.Subscribe(
 		subject, 
 		queue, 
