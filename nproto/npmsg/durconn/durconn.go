@@ -44,7 +44,7 @@ var (
 )
 
 // DurConn implements a "durable" connection to nats-streaming server: auto reconnection/auto resubscription.
-// Implements RawMsgPublisher/RawBatchMsgPublisher/RawMsgSubscriber interfaces.
+// Implements RawMsgAsyncPublisher/RawMsgSubscriber interfaces.
 type DurConn struct {
 	// Options.
 	logger        zerolog.Logger
