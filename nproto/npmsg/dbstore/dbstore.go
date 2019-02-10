@@ -15,26 +15,64 @@ import (
 )
 
 var (
+	// DefaultMaxDelBulkSz is the default value of OptMaxDelBulkSz.
 	DefaultMaxDelBulkSz = 1000
-	DefaultMaxInflight  = 2048
-	DefaultMaxBuf       = 512
-	DefaultRetryWait    = 2 * time.Second
-	DefaultFlushWait    = 15 * time.Second
+	// DefaultMaxInflight is the default value of OptMaxInflight.
+	DefaultMaxInflight = 2048
+	// DefaultMaxBuf is the default value of OptMaxBuf.
+	DefaultMaxBuf = 512
+	// DefaultRetryWait is the default value of OptRetryWait.
+	DefaultRetryWait = 2 * time.Second
+	// DefaultFlushWait is the default value of OptFlushWait.
+	DefaultFlushWait = 15 * time.Second
 )
 
 var (
+	// ErrMaxInflightAndBuf is returned if OptMaxBuf > OptMaxInflight.
 	ErrMaxInflightAndBuf = errors.New("nproto.npmsg.dbstore.DBStore: MaxBuf should be <= MaxInflight")
-	ErrUnknownDialect    = func(dialect string) error {
+	// ErrUnknownDialect is returned if the dialect is not supported.
+	ErrUnknownDialect = func(dialect string) error {
 		return fmt.Errorf("nproto.npmsg.dbstore.DBStore: Unknown dialect: %+q", dialect)
 	}
 )
 
+// DBStore is used to publishing messages from RDBMS to downstream publisher.
+//
+// Consider the following scenario:
+//
+//    /* pseudocode */
+//
+//    tx := db.begin()
+//    // downstream.Publish(msg) // (1)
+//    ...
+//    tx.Commit()                // or tx.Rollback()
+//    // downstream.Publish(msg) // (2)
+//
+// `msg` is related to the transaction (`tx`). It can't be published inside the transaction (1) since
+// `tx` maybe failed to commit later (unexpected message).
+// And it can't be published after the transaction (2) either since the program maybe failed
+// after `tx.Commit()` but before the publishing (message lost).
+//
+// To solve this problem, the `msg` should be saved into the db alone with the transaction for persistent:
+//
+//    /* pseudocode */
+//
+//    tx := db.begin()
+//    p := dbstore.NewPublisher(tx)
+//    p.Publish(msg) // Save the msg into the db as well.
+//    ...
+//    tx.Commit()    // or tx.Rollback()
+//    if committed {
+//      p.Flush()    // Flush msg to downstream and delete it in the database.
+//    }
+//
+// The dbstore has a background redelivery loop to flush saved messages as well. This ensure that the msg
+// will be delivered to downstream at least once even `p.Flush()` fail to execute.
 type DBStore struct {
 	logger           zerolog.Logger
 	maxDelBulkSz     int
 	maxInflight      int
 	maxBuf           int
-	createTable      bool
 	retryWait        time.Duration
 	flushWait        time.Duration
 	noRedeliveryLoop bool
@@ -51,6 +89,7 @@ type DBStore struct {
 	closeFunc context.CancelFunc
 }
 
+// DBPublisher is used to "publish" messages to the database.
 type DBPublisher struct {
 	// Immutable fields.
 	store *DBStore
@@ -80,12 +119,20 @@ type dbStoreDialect interface {
 	ReleaseLock(ctx context.Context, conn *sql.Conn, table string) error
 }
 
+// Option is used when createing DBStore.
 type Option func(*DBStore) error
 
 var (
 	_ npmsg.RawMsgPublisher = (*DBPublisher)(nil)
 )
 
+// NewDBStore creates a new DBStore.
+// `downstream` can be npmsg.RawMsgPublisher/npmsg.RawMsgAsyncPublisher.
+// Current supported dialects are:
+//   "mysql"
+// `db` is the database where to store messages.
+// `table` is the name of the table to store messages.
+// If `OptNoRedeliveryLoop` is given in `opts` then the redelivery loop will not be run.
 func NewDBStore(downstream npmsg.RawMsgPublisher, dialect string, db *sql.DB, table string, opts ...Option) (*DBStore, error) {
 	ret := &DBStore{
 		logger:       zerolog.Nop(),
@@ -116,10 +163,8 @@ func NewDBStore(downstream npmsg.RawMsgPublisher, dialect string, db *sql.DB, ta
 		return nil, ErrMaxInflightAndBuf
 	}
 
-	if ret.createTable {
-		if err := ret.dialect.CreateTable(context.Background(), db, table); err != nil {
-			return nil, err
-		}
+	if err := ret.dialect.CreateTable(context.Background(), db, table); err != nil {
+		return nil, err
 	}
 
 	ret.closeCtx, ret.closeFunc = context.WithCancel(context.Background())
@@ -131,11 +176,13 @@ func NewDBStore(downstream npmsg.RawMsgPublisher, dialect string, db *sql.DB, ta
 	return ret, nil
 }
 
+// Close close the DBStore and wait the redeliveryLoop exits (if exists).
 func (store *DBStore) Close() {
 	store.closeFunc()
 	store.loopWg.Wait()
 }
 
+// NewPublisher creates a DBPublisher. `q` must be connecting to the same database as DBStore.db.
 func (store *DBStore) NewPublisher(q Queryer) *DBPublisher {
 
 	return &DBPublisher{
@@ -463,6 +510,8 @@ func (store *DBStore) deleteMsgs(list *msgList, idsBuff []int64, taskc chan stru
 	}
 }
 
+// Publish implements npmsg.RawMsgPublisher interface. This method should be called only
+// during the life time of the transaction given in `NewPublisher`. NOTE: the message maybe rollback later.
 func (p *DBPublisher) Publish(ctx context.Context, subject string, data []byte) error {
 	// First save to db.
 	store := p.store
@@ -486,6 +535,8 @@ func (p *DBPublisher) Publish(ctx context.Context, subject string, data []byte) 
 	return nil
 }
 
+// Flush is used to flush messages to downstream. IMPORTANT: call this method
+// ONLY after the transaction has been committed successfully.
 func (p *DBPublisher) Flush(ctx context.Context) {
 	p.mu.Lock()
 	n := p.n

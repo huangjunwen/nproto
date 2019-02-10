@@ -13,7 +13,7 @@ Some common patterns using [NATS](https://nats.io) ([gnatsd](https://github.com/
 - [ ] Message stream over nats
 - [x] Reliable message delivery over nats-streaming with json/protobuf encoding: [npmsg](https://godoc.org/github.com/huangjunwen/nproto/nproto/npmsg)
   - [x] Auto reconnection/resubscription client for nats-streaming: [durconn](https://godoc.org/github.com/huangjunwen/nproto/nproto/npmsg/durconn)
-  - [x] Reliable message delivery from RDBMS to underly publisher: [dbstore](https://godoc.org/github.com/huangjunwen/nproto/nproto/npmsg/dbstore)
+  - [x] Reliable message delivery from RDBMS to downstream publisher: [dbstore](https://godoc.org/github.com/huangjunwen/nproto/nproto/npmsg/dbstore)
 - [x] Protoc plugin to generate stub code for above libraries: protoc-gen-nproto
 - [x] Opentracing support: [trace](https://godoc.org/github.com/huangjunwen/nproto/nproto/trace)
 

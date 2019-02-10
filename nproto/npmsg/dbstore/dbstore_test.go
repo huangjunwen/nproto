@@ -197,7 +197,6 @@ func TestFlush(t *testing.T) {
 		store, err := NewDBStore(downstream, "mysql", db, table,
 			OptMaxInflight(3),
 			OptMaxBuf(2),
-			OptCreateTable(),
 			OptFlushWait(500*time.Millisecond), // Short flush wait.
 			OptNoRedeliveryLoop(),              // Don't run the delivery loop.
 		)

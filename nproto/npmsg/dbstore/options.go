@@ -15,6 +15,7 @@ func OptLogger(logger *zerolog.Logger) Option {
 	}
 }
 
+// OptMaxDelBulkSz sets the max number of messages to delete each time after delivered to downstream.
 func OptMaxDelBulkSz(bulkSize int) Option {
 	return func(store *DBStore) error {
 		if bulkSize <= 0 {
@@ -25,6 +26,7 @@ func OptMaxDelBulkSz(bulkSize int) Option {
 	}
 }
 
+// OptMaxInflight sets the max number of messages to publish to downstream before acknowledgement.
 func OptMaxInflight(maxInflight int) Option {
 	return func(store *DBStore) error {
 		if maxInflight <= 0 {
@@ -35,6 +37,7 @@ func OptMaxInflight(maxInflight int) Option {
 	}
 }
 
+// OptMaxBuf sets the max number of messages buffered in memory.
 func OptMaxBuf(maxBuf int) Option {
 	return func(store *DBStore) error {
 		if maxBuf < 0 {
@@ -45,13 +48,7 @@ func OptMaxBuf(maxBuf int) Option {
 	}
 }
 
-func OptCreateTable() Option {
-	return func(store *DBStore) error {
-		store.createTable = true
-		return nil
-	}
-}
-
+// OptRetryWait sets the interval between getting db connection and lock.
 func OptRetryWait(t time.Duration) Option {
 	return func(store *DBStore) error {
 		store.retryWait = t
@@ -59,6 +56,7 @@ func OptRetryWait(t time.Duration) Option {
 	}
 }
 
+// OptFlushWait sets the interval between redelivery.
 func OptFlushWait(t time.Duration) Option {
 	return func(store *DBStore) error {
 		store.flushWait = t
@@ -66,6 +64,7 @@ func OptFlushWait(t time.Duration) Option {
 	}
 }
 
+// OptNoRedeliveryLoop prevent DBStore to launch the redelivery loop.
 func OptNoRedeliveryLoop() Option {
 	return func(store *DBStore) error {
 		store.noRedeliveryLoop = true

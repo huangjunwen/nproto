@@ -18,18 +18,27 @@ import (
 )
 
 var (
+	// DefaultReconnectWait is the default value of OptReconnectWait.
 	DefaultReconnectWait = 2 * time.Second
-	DefaultSubRetryWait  = 2 * time.Second
-	DefaultPubAckWait    = 2 * time.Second
+	// DefaultSubRetryWait is the default value of SubOptRetryWait.
+	DefaultSubRetryWait = 2 * time.Second
+	// DefaultPubAckWait is the default value of OptPubAckWait.
+	DefaultPubAckWait = 2 * time.Second
+	// DefaultSubjectPrefix is the default value of OptSubjectPrefix.
 	DefaultSubjectPrefix = "npmsg"
 )
 
 var (
-	ErrNCMaxReconnect     = errors.New("nproto.npmsg.durconn.NewDurConn: nats.Conn should have MaxReconnects < 0")
-	ErrClosed             = errors.New("nproto.npmsg.durconn.DurConn: Closed.")
-	ErrNotConnected       = errors.New("nproto.npmsg.durconn.DurConn: Not connected.")
+	// ErrNCMaxReconnect is returned if nc has MaxReconnects < 0.
+	ErrNCMaxReconnect = errors.New("nproto.npmsg.durconn.NewDurConn: nats.Conn should have MaxReconnects < 0")
+	// ErrClosed is returned when the DurConn has been closed.
+	ErrClosed = errors.New("nproto.npmsg.durconn.DurConn: Closed.")
+	// ErrNotConnected is returned when the underly connection has not been established.
+	ErrNotConnected = errors.New("nproto.npmsg.durconn.DurConn: Not connected.")
+	// ErrBadSubscriptionOpt.
 	ErrBadSubscriptionOpt = errors.New("nproto.npmsg.durconn.DurConn: Expect durconn.SubOption.")
-	ErrDupSubscription    = func(subject, queue string) error {
+	// ErrDupSubscription is returned when duplicated (subject, queue) pair.
+	ErrDupSubscription = func(subject, queue string) error {
 		return fmt.Errorf(
 			"nproto.npmsg.durconn.DurConn: Duplicated subscription (%q, %q)",
 			subject,
