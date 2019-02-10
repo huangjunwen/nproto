@@ -40,7 +40,7 @@ type DBStore struct {
 	noRedeliveryLoop bool
 
 	// Immutable fields.
-	downstream npmsg.RawMsgAsyncPublisher
+	downstream npmsg.RawMsgPublisher
 	dialect    dbStoreDialect
 	db         *sql.DB
 	table      string
@@ -86,7 +86,7 @@ var (
 	_ npmsg.RawMsgPublisher = (*DBPublisher)(nil)
 )
 
-func NewDBStore(downstream npmsg.RawMsgAsyncPublisher, dialect string, db *sql.DB, table string, opts ...Option) (*DBStore, error) {
+func NewDBStore(downstream npmsg.RawMsgPublisher, dialect string, db *sql.DB, table string, opts ...Option) (*DBStore, error) {
 	ret := &DBStore{
 		logger:       zerolog.Nop(),
 		maxDelBulkSz: DefaultMaxDelBulkSz,
@@ -240,10 +240,26 @@ func (store *DBStore) flushMsgList(ctx context.Context, list *msgList) {
 	}
 	logger := store.logger.With().Str("fn", "flushMsgList").Logger()
 
+	// Use PublishAsync if downstream is RawMsgAsyncPublisher for higher throughput.
+	var publish func(*msgNode, func(error))
+	switch downstream := store.downstream.(type) {
+	case npmsg.RawMsgAsyncPublisher:
+		publish = func(msg *msgNode, cb func(error)) {
+			if err := downstream.PublishAsync(ctx, msg.Subject, msg.Data, cb); err != nil {
+				cb(err)
+			}
+		}
+	default:
+		publish = func(msg *msgNode, cb func(error)) {
+			cb(downstream.Publish(ctx, msg.Subject, msg.Data))
+		}
+	}
+
 	// Publish loop.
 	pubwg := &sync.WaitGroup{}
 	mu := &sync.Mutex{}
 	succList := msgList{}
+
 L:
 	for {
 		// Context maybe done during publishing.
@@ -279,10 +295,8 @@ L:
 			pubwg.Done()
 		}
 
-		// PublishAsync.
-		if err := store.downstream.PublishAsync(ctx, msg.Subject, msg.Data, cb); err != nil {
-			cb(err)
-		}
+		// Publish.
+		publish(msg, cb)
 	}
 
 	// Wait all publish done.
@@ -298,6 +312,21 @@ L:
 
 func (store *DBStore) flushMsgStream(ctx context.Context, stream msgStream) {
 	logger := store.logger.With().Str("fn", "flushMsgStream").Logger()
+
+	// Use PublishAsync if downstream is RawMsgAsyncPublisher for higher throughput.
+	var publish func(*msgNode, func(error))
+	switch downstream := store.downstream.(type) {
+	case npmsg.RawMsgAsyncPublisher:
+		publish = func(msg *msgNode, cb func(error)) {
+			if err := downstream.PublishAsync(ctx, msg.Subject, msg.Data, cb); err != nil {
+				cb(err)
+			}
+		}
+	default:
+		publish = func(msg *msgNode, cb func(error)) {
+			cb(downstream.Publish(ctx, msg.Subject, msg.Data))
+		}
+	}
 
 	// This channel is used to control flush speed.
 	taskc := make(chan struct{}, store.maxInflight)
@@ -383,10 +412,8 @@ L:
 			pubwg.Done()
 		}
 
-		// PublishAsync.
-		if err := store.downstream.PublishAsync(ctx, msg.Subject, msg.Data, cb); err != nil {
-			cb(err)
-		}
+		// Publish.
+		publish(msg, cb)
 	}
 
 	// Close the stream.

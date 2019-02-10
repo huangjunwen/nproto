@@ -21,13 +21,20 @@ import (
 	"github.com/huangjunwen/nproto/nproto/npmsg/durconn"
 )
 
+// UnstableAsyncPublisher makes half publish failed.
 type UnstableAsyncPublisher struct {
 	npmsg.RawMsgAsyncPublisher
 	cnt int64
 }
 
+// SyncPublisher shadows PublishAsync method.
+type SyncPublisher struct {
+	publisher npmsg.RawMsgAsyncPublisher
+}
+
 var (
 	_           npmsg.RawMsgAsyncPublisher = (*UnstableAsyncPublisher)(nil)
+	_           npmsg.RawMsgPublisher      = (*SyncPublisher)(nil)
 	errUnstable error                      = errors.New("Unstable error")
 )
 
@@ -37,8 +44,8 @@ func NewUnstableAsyncPublisher(p npmsg.RawMsgAsyncPublisher) *UnstableAsyncPubli
 	}
 }
 
-func (p *UnstableAsyncPublisher) ResetCounter() {
-	p.cnt = 0
+func (p *UnstableAsyncPublisher) Publish(ctx context.Context, subject string, data []byte) error {
+	return npmsg.RawMsgAsyncPublisherFunc(p.PublishAsync).Publish(ctx, subject, data)
 }
 
 func (p *UnstableAsyncPublisher) PublishAsync(ctx context.Context, subject string, data []byte, cb func(error)) error {
@@ -57,6 +64,16 @@ func (p *UnstableAsyncPublisher) PublishAsync(ctx context.Context, subject strin
 		}
 	}
 	return p.RawMsgAsyncPublisher.PublishAsync(ctx, subject, data, cb)
+}
+
+func NewSyncPublisher(p npmsg.RawMsgAsyncPublisher) *SyncPublisher {
+	return &SyncPublisher{
+		publisher: p,
+	}
+}
+
+func (p *SyncPublisher) Publish(ctx context.Context, subject string, data []byte) error {
+	return p.publisher.Publish(ctx, subject, data)
 }
 
 func TestFlush(t *testing.T) {
@@ -124,33 +141,6 @@ func TestFlush(t *testing.T) {
 		log.Printf("DurConn created.\n")
 	}
 
-	// Creates DBStore with small MaxInflight/MaxBuf/FlushWait.
-	var store *DBStore
-	table := "msgstore"
-	{
-		{
-			store, err = NewDBStore(dc, "mysql", db, table,
-				OptMaxInflight(100),
-				OptMaxBuf(101),
-			)
-			assert.Error(err)
-			assert.Nil(store)
-		}
-
-		store, err = NewDBStore(dc, "mysql", db, table,
-			OptMaxInflight(3),
-			OptMaxBuf(2),
-			OptCreateTable(),
-			OptFlushWait(500*time.Millisecond), // Short flush wait.
-			OptNoRedeliveryLoop(),              // NOTE: Manually run the redeliveryLoop later.
-		)
-		if err != nil {
-			log.Panic(err)
-		}
-		defer store.Close()
-		log.Printf("DBStore created.\n")
-	}
-
 	// Create a subscription to multiply some DISTINCT prime numbers.
 	testSubject := "primeproduct"
 	testQueue := "default"
@@ -162,7 +152,6 @@ func TestFlush(t *testing.T) {
 		ret := product
 		product = 1
 		mu.Unlock()
-		log.Printf("** product reset.\n")
 		return ret
 	}
 	{
@@ -201,11 +190,26 @@ func TestFlush(t *testing.T) {
 		log.Printf("DurConn subscribed.\n")
 	}
 
+	// Helper functions.
+	table := "msgstore"
+	createStore := func(downstream npmsg.RawMsgPublisher) *DBStore {
+		// Creates DBStore with small MaxInflight/MaxBuf/FlushWait.
+		store, err := NewDBStore(downstream, "mysql", db, table,
+			OptMaxInflight(3),
+			OptMaxBuf(2),
+			OptCreateTable(),
+			OptFlushWait(500*time.Millisecond), // Short flush wait.
+			OptNoRedeliveryLoop(),              // Don't run the delivery loop.
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		return store
+	}
 	clearMsgTable := func() {
 		_, err := db.Exec("DELETE FROM " + table)
 		assert.NoError(err)
 	}
-
 	assertMsgTableRows := func(expect int) {
 		cnt := 0
 		assert.NoError(db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&cnt))
@@ -213,8 +217,18 @@ func TestFlush(t *testing.T) {
 	}
 
 	// --- Test normal case ---
-	log.Printf("Test normal cases...\n")
-	testNormalFlush := func(primes []uint64) {
+	log.Printf(">>> Test normal cases...\n")
+	testNormalFlush := func(primes []uint64, async bool) {
+		log.Printf("Begin normal case: %v, %v\n", primes, async)
+		// Create store.
+		var store *DBStore
+		if async {
+			store = createStore(dc)
+		} else {
+			store = createStore(NewSyncPublisher(dc))
+		}
+		defer store.Close()
+
 		// Make sure msg table is empty.
 		clearMsgTable()
 		defer clearMsgTable()
@@ -255,21 +269,29 @@ func TestFlush(t *testing.T) {
 
 		// Check.
 		assert.Equal(expect, resetProduct())
+
+		log.Printf("End normal case: %v, %v\n", primes, async)
 	}
 
-	testNormalFlush([]uint64{})
-	testNormalFlush([]uint64{2, 3})             // flushMsgList
-	testNormalFlush([]uint64{5, 7, 11, 13, 17}) // flushMsgStream
+	testNormalFlush([]uint64{}, true)
+	testNormalFlush([]uint64{}, false)
+	testNormalFlush([]uint64{2, 3}, true)              // flushMsgList
+	testNormalFlush([]uint64{2, 3}, false)             // flushMsgList
+	testNormalFlush([]uint64{5, 7, 11, 13, 17}, true)  // flushMsgStream
+	testNormalFlush([]uint64{5, 7, 11, 13, 17}, false) // flushMsgStream
 
 	// --- Test error case ---
-	log.Printf("Test error cases...\n")
-	testErrorFlush := func(primes []uint64) {
-		// Replace downstream.
-		originDownstream := store.downstream
-		defer func() {
-			store.downstream = originDownstream
-		}()
-		store.downstream = NewUnstableAsyncPublisher(originDownstream)
+	log.Printf(">>> Test error cases...\n")
+	testErrorFlush := func(primes []uint64, async bool) {
+		log.Printf("Begin error case: %v, %v\n", primes, async)
+		// Create store.
+		var store *DBStore
+		if async {
+			store = createStore(NewUnstableAsyncPublisher(dc))
+		} else {
+			store = createStore(NewSyncPublisher(NewUnstableAsyncPublisher(dc)))
+		}
+		defer store.Close()
 
 		// Make sure msg table is empty.
 		clearMsgTable()
@@ -309,17 +331,32 @@ func TestFlush(t *testing.T) {
 
 		// Check database rows.
 		assertMsgTableRows(len(primes) - expectSucc)
+
+		log.Printf("End normal case: %v, %v\n", primes, async)
 	}
 
-	testErrorFlush([]uint64{})
-	testErrorFlush([]uint64{2, 3})             // flushMsgList
-	testErrorFlush([]uint64{5, 7, 11, 13, 17}) // flushMsgStream
+	testErrorFlush([]uint64{}, true)
+	testErrorFlush([]uint64{}, false)
+	testErrorFlush([]uint64{2, 3}, true)              // flushMsgList
+	testErrorFlush([]uint64{2, 3}, false)             // flushMsgList
+	testErrorFlush([]uint64{5, 7, 11, 13, 17}, true)  // flushMsgStream
+	testErrorFlush([]uint64{5, 7, 11, 13, 17}, false) // flushMsgStream
 
 	// --- Test redelivery flush ---
-	log.Printf("Test redelivery ...\n")
-	store.redeliveryLoop() // Run the loop manually here.
+	log.Printf(">>> Test redelivery ...\n")
 
-	testRedelivery := func(primes []uint64) {
+	testRedelivery := func(primes []uint64, async bool) {
+		log.Printf("Begin redelivery: %v, %v\n", primes, async)
+		// Create store.
+		var store *DBStore
+		if async {
+			store = createStore(dc)
+		} else {
+			store = createStore(NewSyncPublisher(dc))
+		}
+		store.redeliveryLoop()
+		defer store.Close()
+
 		// Make sure msg table is empty.
 		clearMsgTable()
 		defer clearMsgTable()
@@ -355,9 +392,14 @@ func TestFlush(t *testing.T) {
 
 		// Check.
 		assert.Equal(expect, resetProduct())
+
+		log.Printf("End redelivery: %v, %v\n", primes, async)
 	}
 
-	testRedelivery([]uint64{})
-	testRedelivery([]uint64{2, 3})
-	testRedelivery([]uint64{5, 7, 11, 13, 17})
+	testRedelivery([]uint64{}, true)
+	testRedelivery([]uint64{}, false)
+	testRedelivery([]uint64{2, 3}, true)
+	testRedelivery([]uint64{2, 3}, false)
+	testRedelivery([]uint64{5, 7, 11, 13, 17}, true)
+	testRedelivery([]uint64{5, 7, 11, 13, 17}, false)
 }

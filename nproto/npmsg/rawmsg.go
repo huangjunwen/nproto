@@ -35,6 +35,7 @@ type RawMsgAsyncPublisher interface {
 	// The final result is returned by cb.
 	// NOTE: This method must be non-blocking.
 	// And cb must be called exactly once (even after context done) if PublishAsync returns nil.
+	// cb must not called if PublishAsync returns not nil.
 	PublishAsync(ctx context.Context, subject string, data []byte, cb func(error)) error
 }
 
