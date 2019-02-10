@@ -9,9 +9,9 @@ import (
 	pgs "github.com/lyft/protoc-gen-star"
 )
 
-type GoFmt struct{}
+type goFmt struct{}
 
-func (p GoFmt) Match(a pgs.Artifact) bool {
+func (p goFmt) Match(a pgs.Artifact) bool {
 	var n string
 
 	switch a := a.(type) {
@@ -36,7 +36,7 @@ func (p GoFmt) Match(a pgs.Artifact) bool {
 
 const fakePkgClause = "package xxxxxxxx\n\n"
 
-func (p GoFmt) Process(in []byte) ([]byte, error) {
+func (p goFmt) Process(in []byte) ([]byte, error) {
 	// Contains 'package xxx' or not?
 	fset := token.NewFileSet()
 	_, err := parser.ParseFile(fset, "", in, parser.PackageClauseOnly)

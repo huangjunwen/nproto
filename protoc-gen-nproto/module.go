@@ -11,12 +11,12 @@ import (
 )
 
 var (
-	GenRPCStubLabel = "@@nprpc@@"
-	GenMsgStubLabel = "@@npmsg@@"
+	genRPCStubLabel = "@@nprpc@@"
+	genMsgStubLabel = "@@npmsg@@"
 )
 
-// NProtoModule is a module of protoc-gen-star.
-type NProtoModule struct {
+// nprotoModule is a module of protoc-gen-star.
+type nprotoModule struct {
 	pgs.ModuleBase
 	ctx         pgsgo.Context
 	skeletonTpl *template.Template
@@ -26,7 +26,7 @@ type NProtoModule struct {
 }
 
 // InitContext implements pgs.Module interface.
-func (m *NProtoModule) InitContext(c pgs.BuildContext) {
+func (m *nprotoModule) InitContext(c pgs.BuildContext) {
 	m.ModuleBase.InitContext(c)
 	m.ctx = pgsgo.InitContext(c.Parameters())
 
@@ -64,19 +64,19 @@ func (m *NProtoModule) InitContext(c pgs.BuildContext) {
 }
 
 // Name implements pgs.Module interface.
-func (m *NProtoModule) Name() string {
+func (m *nprotoModule) Name() string {
 	return "nproto"
 }
 
 // Execute implements pgs.Module interface.
-func (m *NProtoModule) Execute(targets map[string]pgs.File, packages map[string]pgs.Package) []pgs.Artifact {
+func (m *nprotoModule) Execute(targets map[string]pgs.File, packages map[string]pgs.Package) []pgs.Artifact {
 	// For each target file.
 	for _, target := range targets {
 		// Replace ".pb.go" to "nproto.go"
 		targetName := strings.TrimSuffix(string(m.ctx.OutputPath(target)), ".pb.go") + ".nproto.go"
 
 		// Create file context for target.
-		fctx := NewFileContext(m, target)
+		fctx := newFileContext(m, target)
 
 		// Create target file with skeleton.
 		m.AddGeneratorTemplateFile(targetName, m.skeletonTpl, map[string]interface{}{
@@ -86,7 +86,7 @@ func (m *NProtoModule) Execute(targets map[string]pgs.File, packages map[string]
 
 		// Insert nprpc code.
 		for _, service := range target.Services() {
-			if !strings.Contains(service.SourceCodeInfo().LeadingComments(), GenRPCStubLabel) {
+			if !strings.Contains(service.SourceCodeInfo().LeadingComments(), genRPCStubLabel) {
 				continue
 			}
 			for _, method := range service.Methods() {
@@ -102,7 +102,7 @@ func (m *NProtoModule) Execute(targets map[string]pgs.File, packages map[string]
 
 		// Insert npmsg code.
 		for _, message := range target.Messages() {
-			if !strings.Contains(message.SourceCodeInfo().LeadingComments(), GenMsgStubLabel) {
+			if !strings.Contains(message.SourceCodeInfo().LeadingComments(), genMsgStubLabel) {
 				continue
 			}
 			m.AddGeneratorTemplateInjection(targetName, "npmsg", m.npmsgTpl, map[string]interface{}{

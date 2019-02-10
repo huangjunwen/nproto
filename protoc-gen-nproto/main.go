@@ -6,8 +6,8 @@ import (
 
 func main() {
 	pgs.Init().RegisterModule(
-		&NProtoModule{},
+		&nprotoModule{},
 	).RegisterPostProcessor(
-		GoFmt{},
+		goFmt{},
 	).Render()
 }

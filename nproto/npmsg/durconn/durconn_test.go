@@ -451,15 +451,14 @@ func TestPubSub(t *testing.T) {
 				if bytes.Equal(data, goodData) {
 					goodc <- struct{}{}
 					return nil
-				} else {
-					// NOTE: since returnning error will cause message redelivery.
-					// Don't block here.
-					select {
-					case badc <- struct{}{}:
-					default:
-					}
-					return errors.New("bad data")
 				}
+				// NOTE: since returnning error will cause message redelivery.
+				// Don't block here.
+				select {
+				case badc <- struct{}{}:
+				default:
+				}
+				return errors.New("bad data")
 			},
 			SubOptSubscribeCb(subCb),
 			SubOptAckWait(time.Second), // Short ack wait results in fast redelivery.
