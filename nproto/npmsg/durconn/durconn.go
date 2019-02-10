@@ -189,7 +189,7 @@ func (dc *DurConn) PublishAsync(ctx context.Context, subject string, data []byte
 	return err
 }
 
-// Publish implements npmsg.RawMsgPublisher interface.
+// Publish implements npmsg.RawMsgAsyncPublisher interface.
 func (dc *DurConn) Publish(ctx context.Context, subject string, data []byte) error {
 	return npmsg.RawMsgAsyncPublisherFunc(dc.PublishAsync).Publish(ctx, subject, data)
 }
