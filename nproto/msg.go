@@ -12,15 +12,6 @@ type MsgPublisher interface {
 	Publish(ctx context.Context, subject string, msg proto.Message) error
 }
 
-// MsgAsyncPublisher is similar to MsgPublisher but in async manner.
-type MsgAsyncPublisher interface {
-	// PublishAsync publishes a message to the given subject asynchronously.
-	// The final result is returned by cb.
-	// NOTE: This method must be non-blocking.
-	// And cb must be called exactly once (even after context done) if PublishAsync returns nil.
-	PublishAsync(ctx context.Context, subject string, msg proto.Message, cb func(error)) error
-}
-
 // MsgSubscriber is used to consume messages.
 type MsgSubscriber interface {
 	// Subscribe subscribes to a given subject. One subject can have many queues.

@@ -86,7 +86,7 @@ func OptPubAckWait(t time.Duration) Option {
 	}
 }
 
-// SubOptRetryWait sets the wait time between subscription.
+// SubOptRetryWait sets the wait time between (re)subscription.
 func SubOptRetryWait(t time.Duration) SubOption {
 	return func(sub *subscription) error {
 		sub.retryWait = t
@@ -95,7 +95,7 @@ func SubOptRetryWait(t time.Duration) SubOption {
 }
 
 // SubOptSubscribeCb sets a callback invoked each time a subscription is established.
-// NOTE: The callback is also called when resubscribing after reconnection.
+// NOTE: The callback is also called when resubscription after reconnection.
 func SubOptSubscribeCb(fn func(sc stan.Conn, subject, queue string)) SubOption {
 	return func(sub *subscription) error {
 		sub.subscribeCb = fn

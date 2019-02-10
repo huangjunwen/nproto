@@ -39,7 +39,6 @@ var (
 )
 
 var (
-	_ npmsg.RawMsgPublisher      = (*DurConn)(nil)
 	_ npmsg.RawMsgAsyncPublisher = (*DurConn)(nil)
 	_ npmsg.RawMsgSubscriber     = (*DurConn)(nil)
 )
@@ -96,7 +95,6 @@ type SubOption func(*subscription) error
 // NewDurConn creates a new DurConn. `nc` must have MaxReconnect < 0 set (e.g. Always reconnect).
 // `clusterID` is nats-streaming server's cluster id.
 func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) (*DurConn, error) {
-
 	if nc.Opts.MaxReconnect >= 0 {
 		return nil, ErrNCMaxReconnect
 	}
@@ -193,7 +191,7 @@ func (dc *DurConn) PublishAsync(ctx context.Context, subject string, data []byte
 
 // Publish implements npmsg.RawMsgPublisher interface.
 func (dc *DurConn) Publish(ctx context.Context, subject string, data []byte) error {
-	return npmsg.SyncPublish(dc, ctx, subject, data)
+	return npmsg.RawMsgAsyncPublisherFunc(dc.PublishAsync).Publish(ctx, subject, data)
 }
 
 // connect is used to make a new stan connection.
