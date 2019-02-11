@@ -35,7 +35,7 @@ var (
 	ErrClosed = errors.New("nproto.npmsg.durconn.DurConn: Closed.")
 	// ErrNotConnected is returned when the underly connection has not been established.
 	ErrNotConnected = errors.New("nproto.npmsg.durconn.DurConn: Not connected.")
-	// ErrBadSubscriptionOpt.
+	// ErrBadSubscriptionOpt is returned if option passing to DurConn.Subscribe is not SubOption.
 	ErrBadSubscriptionOpt = errors.New("nproto.npmsg.durconn.DurConn: Expect durconn.SubOption.")
 	// ErrDupSubscription is returned when duplicated (subject, queue) pair.
 	ErrDupSubscription = func(subject, queue string) error {

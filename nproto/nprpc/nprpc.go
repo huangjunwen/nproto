@@ -18,25 +18,35 @@ import (
 )
 
 var (
+	// DefaultSubjectPrefix is the default value of ServerOptSubjectPrefix/ClientOptSubjectPrefix.
 	DefaultSubjectPrefix = "nprpc"
-	DefaultGroup         = "def"
-	DefaultEncoding      = "pb"
+	// DefaultGroup is the default value of ServerOptGroup.
+	DefaultGroup = "def"
+	// DefaultEncoding is the default encoding for client.
+	DefaultEncoding = "pb"
 )
 
 var (
+	// ErrSvcUnavailable is returned if the service is too busy.
 	ErrSvcUnavailable = errors.New("SVC_UNAVAILABLE")
+	// ErrMethodNotFound is returned if the method is not found.
 	ErrMethodNotFound = errors.New("METHO_NOT_FOUND")
 )
 
 var (
+	// ErrNCMaxReconnect is returned if nc has MaxReconnects < 0.
 	ErrNCMaxReconnect = errors.New("nproto.nprpc: nats.Conn should have MaxReconnects < 0")
-	ErrServerClosed   = errors.New("nproto.nprpc.NatsRPCServer: Server closed")
-	ErrDupSvcName     = func(svcName string) error {
+	// ErrServerClosed is returned if the server has been closed.
+	ErrServerClosed = errors.New("nproto.nprpc.NatsRPCServer: Server closed")
+	// ErrDupSvcName is returned if service name is duplicated.
+	ErrDupSvcName = func(svcName string) error {
 		return fmt.Errorf("nproto.nprpc.NatsRPCServer: Duplicated service %+q", svcName)
 	}
+	// ErrDupMethodName is returned if method name is duplicated.
 	ErrDupMethodName = func(methodName string) error {
 		return fmt.Errorf("nproto.nprpc.NatsRPCServer: Duplicated method %+q", methodName)
 	}
+	// ErrClientClosed is returned if the client has been closed.
 	ErrClientClosed = errors.New("nproto.nprpc.NatsRPCClient: Client closed")
 )
 
