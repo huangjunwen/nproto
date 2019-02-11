@@ -6,11 +6,14 @@ import (
 )
 
 var (
-	ErrClosed  = errors.New("nproto.task.LimitedRunner: Closed.")
+	// ErrClosed is returned when task is submitted after LimitedRunner has been closed.
+	ErrClosed = errors.New("nproto.task.LimitedRunner: Closed.")
+	// ErrTooBusy is returned when task is submitted but LimitedRunner is too busy to handle.
 	ErrTooBusy = errors.New("nproto.task.LimitedRunner: Too busy.")
 )
 
 var (
+	// DefaultMaxConcurrency is the default value of maxConcurrency.
 	DefaultMaxConcurrency = 5 * 1024
 )
 
