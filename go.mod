@@ -31,7 +31,7 @@ require (
 	github.com/uber/jaeger-lib v1.5.0 // indirect
 	go.etcd.io/bbolt v1.3.2 // indirect
 	go.uber.org/atomic v1.3.2 // indirect
-	golang.org/x/crypto v0.0.0-20190208162236-193df9c0f06f // indirect
+	golang.org/x/crypto v0.0.0-20190208162236-193df9c0f06f
 	golang.org/x/net v0.0.0-20190206173232-65e2d4e15006 // indirect
 	golang.org/x/sys v0.0.0-20190209173611-3b5209105503 // indirect
 	google.golang.org/appengine v1.4.0 // indirect
