@@ -15,6 +15,7 @@ import (
 	"github.com/huangjunwen/nproto/nproto"
 	"github.com/huangjunwen/nproto/nproto/nprpc/enc"
 	"github.com/huangjunwen/nproto/nproto/taskrunner"
+	"github.com/huangjunwen/nproto/nproto/zlog"
 )
 
 var (
@@ -94,13 +95,15 @@ func NewNatsRPCServer(nc *nats.Conn, opts ...ServerOption) (*NatsRPCServer, erro
 	}
 
 	server := &NatsRPCServer{
+		logger:        zerolog.Nop(),
 		subjectPrefix: DefaultSubjectPrefix,
 		group:         DefaultGroup,
 		runner:        taskrunner.DefaultTaskRunner,
-		logger:        zerolog.Nop(),
 		nc:            nc,
 		svcs:          make(map[string]*nats.Subscription),
 	}
+	ServerOptLogger(&zlog.DefaultZLogger)(server)
+
 	for _, opt := range opts {
 		if err := opt(server); err != nil {
 			return nil, err

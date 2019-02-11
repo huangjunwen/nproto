@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/huangjunwen/nproto/nproto/npmsg"
+	"github.com/huangjunwen/nproto/nproto/zlog"
 )
 
 var (
@@ -145,6 +146,7 @@ func NewDBStore(downstream npmsg.RawMsgPublisher, dialect string, db *sql.DB, ta
 		db:           db,
 		table:        table,
 	}
+	OptLogger(&zlog.DefaultZLogger)(ret)
 
 	switch dialect {
 	case "mysql":

@@ -15,6 +15,7 @@ import (
 
 	"github.com/huangjunwen/nproto/nproto/npmsg"
 	"github.com/huangjunwen/nproto/nproto/taskrunner"
+	"github.com/huangjunwen/nproto/nproto/zlog"
 )
 
 var (
@@ -123,6 +124,8 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) (*DurConn, erro
 		nc:        nc,
 		subNames:  make(map[[2]string]int),
 	}
+	OptLogger(&zlog.DefaultZLogger)(dc)
+
 	for _, opt := range opts {
 		if err := opt(dc); err != nil {
 			return nil, err

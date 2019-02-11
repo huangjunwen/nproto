@@ -397,7 +397,6 @@ func TestPubSub(t *testing.T) {
 		disconnectCb := func(_ stan.Conn) { disconnectc <- struct{}{} }
 
 		dc, err = NewDurConn(nc, res1.Options.ClusterId,
-			OptLogger(nil),
 			OptSubjectPrefix("xxx"),
 			OptConnectCb(connectCb),       // Use the callback to notify connection establish.
 			OptDisconnectCb(disconnectCb), // Use the callback to notify disconnection.
