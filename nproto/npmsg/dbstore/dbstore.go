@@ -36,6 +36,8 @@ var (
 	ErrUnknownDialect = func(dialect string) error {
 		return fmt.Errorf("nproto.npmsg.dbstore.DBStore: Unknown dialect: %+q", dialect)
 	}
+	// ErrDifferentDB is returned if WithTx's db is different from DBStore's db.
+	ErrDifferentDB = errors.New("nproto.npmsg.dbstore.DBStore: Expect the same *sql.DB between DBStore and WithTx")
 )
 
 // DBStore is used to publishing messages from RDBMS to downstream publisher.
@@ -104,6 +106,17 @@ type DBPublisher struct {
 	bufMsgs *msgList // Buffered messages, no more than maxBuf.
 }
 
+// UseDBPublisher is a sqlh.TxPlugin used in sqlh.WithTx.
+type UseDBPublisher struct {
+	// This is a sqlh.TxPlugin.
+	sqlh.BaseTxPlugin
+
+	// Publisher is initialized after transaction starts.
+	Publisher *DBPublisher
+
+	store *DBStore
+}
+
 type dbStoreDialect interface {
 	CreateTable(ctx context.Context, q sqlh.Queryer, table string) error
 	InsertMsg(ctx context.Context, q sqlh.Queryer, table, batch, subject string, data []byte) (id int64, err error)
@@ -119,6 +132,7 @@ type Option func(*DBStore) error
 
 var (
 	_ npmsg.RawMsgPublisher = (*DBPublisher)(nil)
+	_ sqlh.TxPlugin         = (*UseDBPublisher)(nil)
 )
 
 // NewDBStore creates a new DBStore.
@@ -186,6 +200,13 @@ func (store *DBStore) NewPublisher(q sqlh.Queryer) *DBPublisher {
 		q:       q,
 		batch:   xid.New().String(),
 		bufMsgs: &msgList{},
+	}
+}
+
+// UseDBPublisher creates a transaction plugin.
+func (store *DBStore) UseDBPublisher() *UseDBPublisher {
+	return &UseDBPublisher{
+		store: store,
 	}
 }
 
@@ -553,4 +574,19 @@ func (p *DBPublisher) Flush(ctx context.Context) {
 	// For larger amount of messages, we need to query the db again.
 	store.flushMsgStream(ctx, store.dialect.SelectMsgsByBatch(ctx, store.db, store.table, p.batch))
 
+}
+
+// TxInitialized implements sqlh.TxPlugin interface.
+func (p *UseDBPublisher) TxInitialized(db *sql.DB, tx sqlh.Queryer) error {
+	if db != p.store.db {
+		return ErrDifferentDB
+	}
+	p.Publisher = p.store.NewPublisher(tx)
+	return nil
+}
+
+// TxCommitted implements sqlh.TxPlugin interface.
+func (p *UseDBPublisher) TxCommitted() {
+	// XXX: Not use Background?
+	p.Publisher.Flush(context.Background())
 }
