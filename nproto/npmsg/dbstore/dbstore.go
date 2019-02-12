@@ -11,6 +11,7 @@ import (
 	"github.com/rs/xid"
 	"github.com/rs/zerolog"
 
+	sqlh "github.com/huangjunwen/nproto/helpers/sql"
 	"github.com/huangjunwen/nproto/nproto/npmsg"
 	"github.com/huangjunwen/nproto/nproto/zlog"
 )
@@ -94,7 +95,7 @@ type DBStore struct {
 type DBPublisher struct {
 	// Immutable fields.
 	store *DBStore
-	q     Queryer
+	q     sqlh.Queryer
 	batch string // Batch id.
 
 	// Mutable fields.
@@ -103,20 +104,12 @@ type DBPublisher struct {
 	bufMsgs *msgList // Buffered messages, no more than maxBuf.
 }
 
-// Queryer abstracts sql.DB/sql.Conn/sql.Tx .
-type Queryer interface {
-	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
-	PrepareContext(context.Context, string) (*sql.Stmt, error)
-	QueryContext(context.Context, string, ...interface{}) (*sql.Rows, error)
-	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
-}
-
 type dbStoreDialect interface {
-	CreateTable(ctx context.Context, q Queryer, table string) error
-	InsertMsg(ctx context.Context, q Queryer, table, batch, subject string, data []byte) (id int64, err error)
-	DeleteMsgs(ctx context.Context, q Queryer, table string, ids []int64) error
-	SelectMsgsByBatch(ctx context.Context, q Queryer, table, batch string) msgStream
-	SelectMsgsAll(ctx context.Context, q Queryer, table string, tsDelta time.Duration) msgStream
+	CreateTable(ctx context.Context, q sqlh.Queryer, table string) error
+	InsertMsg(ctx context.Context, q sqlh.Queryer, table, batch, subject string, data []byte) (id int64, err error)
+	DeleteMsgs(ctx context.Context, q sqlh.Queryer, table string, ids []int64) error
+	SelectMsgsByBatch(ctx context.Context, q sqlh.Queryer, table, batch string) msgStream
+	SelectMsgsAll(ctx context.Context, q sqlh.Queryer, table string, tsDelta time.Duration) msgStream
 	GetLock(ctx context.Context, conn *sql.Conn, table string) (acquired bool, err error)
 	ReleaseLock(ctx context.Context, conn *sql.Conn, table string) error
 }
@@ -125,9 +118,6 @@ type dbStoreDialect interface {
 type Option func(*DBStore) error
 
 var (
-	_ Queryer               = (*sql.DB)(nil)
-	_ Queryer               = (*sql.Conn)(nil)
-	_ Queryer               = (*sql.Tx)(nil)
 	_ npmsg.RawMsgPublisher = (*DBPublisher)(nil)
 )
 
@@ -189,7 +179,7 @@ func (store *DBStore) Close() {
 }
 
 // NewPublisher creates a DBPublisher. `q` must be connecting to the same database as DBStore.db.
-func (store *DBStore) NewPublisher(q Queryer) *DBPublisher {
+func (store *DBStore) NewPublisher(q sqlh.Queryer) *DBPublisher {
 
 	return &DBPublisher{
 		store:   store,

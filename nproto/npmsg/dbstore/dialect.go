@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+
+	sqlh "github.com/huangjunwen/nproto/helpers/sql"
 )
 
 type mysqlDialect struct{}
@@ -14,7 +16,7 @@ var (
 	_ dbStoreDialect = mysqlDialect{}
 )
 
-func (d mysqlDialect) CreateTable(ctx context.Context, q Queryer, table string) error {
+func (d mysqlDialect) CreateTable(ctx context.Context, q sqlh.Queryer, table string) error {
 	sql := fmt.Sprintf(`
 	CREATE TABLE IF NOT EXISTS %s (
 		id BIGINT UNSIGNED AUTO_INCREMENT,
@@ -30,7 +32,7 @@ func (d mysqlDialect) CreateTable(ctx context.Context, q Queryer, table string) 
 	return err
 }
 
-func (d mysqlDialect) InsertMsg(ctx context.Context, q Queryer, table string, batch string, subject string, data []byte) (id int64, err error) {
+func (d mysqlDialect) InsertMsg(ctx context.Context, q sqlh.Queryer, table string, batch string, subject string, data []byte) (id int64, err error) {
 	sql := fmt.Sprintf("INSERT INTO %s (batch, subject, data) VALUES (?, ?, ?)", table)
 	r, err := q.ExecContext(ctx, sql, batch, subject, data)
 	if err != nil {
@@ -39,7 +41,7 @@ func (d mysqlDialect) InsertMsg(ctx context.Context, q Queryer, table string, ba
 	return r.LastInsertId()
 }
 
-func (d mysqlDialect) DeleteMsgs(ctx context.Context, q Queryer, table string, ids []int64) error {
+func (d mysqlDialect) DeleteMsgs(ctx context.Context, q sqlh.Queryer, table string, ids []int64) error {
 	if len(ids) == 0 {
 		return nil
 	}
@@ -58,7 +60,7 @@ func (d mysqlDialect) DeleteMsgs(ctx context.Context, q Queryer, table string, i
 	return err
 }
 
-func (d mysqlDialect) SelectMsgsByBatch(ctx context.Context, q Queryer, table, batch string) msgStream {
+func (d mysqlDialect) SelectMsgsByBatch(ctx context.Context, q sqlh.Queryer, table, batch string) msgStream {
 	sql := fmt.Sprintf("SELECT id, subject, data FROM %s WHERE batch=?", table)
 	rows, err := q.QueryContext(ctx, sql, batch)
 	if err != nil {
@@ -80,7 +82,7 @@ func (d mysqlDialect) SelectMsgsByBatch(ctx context.Context, q Queryer, table, b
 	}
 }
 
-func (d mysqlDialect) SelectMsgsAll(ctx context.Context, q Queryer, table string, tsDelta time.Duration) msgStream {
+func (d mysqlDialect) SelectMsgsAll(ctx context.Context, q sqlh.Queryer, table string, tsDelta time.Duration) msgStream {
 	sql := fmt.Sprintf("SELECT id, subject, data FROM %s WHERE ts <= NOW() - INTERVAL ? SECOND", table)
 	rows, err := q.QueryContext(ctx, sql, uint64(tsDelta.Seconds()))
 	if err != nil {
