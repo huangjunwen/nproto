@@ -57,9 +57,10 @@ func WithTx(db *sql.DB, fn func(Queryer) error, plugins ...TxPlugin) error {
 		return err
 	}
 
+	var n int
 	defer func() {
 		tx.Rollback()
-		for _, plugin := range plugins {
+		for _, plugin := range plugins[:n] {
 			plugin.TxFinalised()
 		}
 	}()
@@ -68,6 +69,7 @@ func WithTx(db *sql.DB, fn func(Queryer) error, plugins ...TxPlugin) error {
 		if err := plugin.TxInitialized(db, tx); err != nil {
 			return err
 		}
+		n += 1
 	}
 
 	err = fn(tx)
