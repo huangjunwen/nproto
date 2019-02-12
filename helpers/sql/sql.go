@@ -13,7 +13,7 @@ type Queryer interface {
 	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
 }
 
-// TxPlugin is used to add extra functions during transaction life time.
+// TxPlugin is used to add extra functionalities during transaction life time.
 type TxPlugin interface {
 	// TxInitialized will be called after a transaction started. If an error returned, the transaction
 	// will be rollbacked at once.

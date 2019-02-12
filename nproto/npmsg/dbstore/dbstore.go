@@ -37,7 +37,11 @@ var (
 		return fmt.Errorf("nproto.npmsg.dbstore.DBStore: Unknown dialect: %+q", dialect)
 	}
 	// ErrDifferentDB is returned if WithTx's db is different from DBStore's db.
-	ErrDifferentDB = errors.New("nproto.npmsg.dbstore.DBStore: Expect the same *sql.DB between DBStore and WithTx")
+	ErrDifferentDB = errors.New("nproto.npmsg.dbstore.DBPublisherTxPlugin: Expect the same *sql.DB between DBStore and WithTx")
+	// ErrPublisherNotNil is returned if DBPublisherTxPlugin's publisher is already set.
+	ErrPublisherNotNil = errors.New("nproto.npmsg.dbstore.DBPublisherTxPlugin: Publisher not nil")
+	// ErrPublisherNil is returned if DBPublisherTxPlugin's publisher has not set.
+	ErrPublisherNil = errors.New("nproto.npmsg.dbstore.DBPublisherTxPlugin: Publisher is nil. Make sure the DBPublisherTxPlugin has been passed to WithTx.")
 )
 
 // DBStore is used to publishing messages from RDBMS to downstream publisher.
@@ -106,15 +110,11 @@ type DBPublisher struct {
 	bufMsgs *msgList // Buffered messages, no more than maxBuf.
 }
 
-// UseDBPublisher is a sqlh.TxPlugin used in sqlh.WithTx.
-type UseDBPublisher struct {
-	// This is a sqlh.TxPlugin.
+// DBPublisherTxPlugin is both DBPublisher and sqlh.TxPlugin.
+type DBPublisherTxPlugin struct {
 	sqlh.BaseTxPlugin
-
-	// Publisher is initialized after transaction starts.
-	Publisher *DBPublisher
-
-	store *DBStore
+	publisher *DBPublisher
+	store     *DBStore
 }
 
 type dbStoreDialect interface {
@@ -132,7 +132,8 @@ type Option func(*DBStore) error
 
 var (
 	_ npmsg.RawMsgPublisher = (*DBPublisher)(nil)
-	_ sqlh.TxPlugin         = (*UseDBPublisher)(nil)
+	_ npmsg.RawMsgPublisher = (*DBPublisherTxPlugin)(nil)
+	_ sqlh.TxPlugin         = (*DBPublisherTxPlugin)(nil)
 )
 
 // NewDBStore creates a new DBStore.
@@ -194,7 +195,6 @@ func (store *DBStore) Close() {
 
 // NewPublisher creates a DBPublisher. `q` must be connecting to the same database as DBStore.db.
 func (store *DBStore) NewPublisher(q sqlh.Queryer) *DBPublisher {
-
 	return &DBPublisher{
 		store:   store,
 		q:       q,
@@ -203,9 +203,17 @@ func (store *DBStore) NewPublisher(q sqlh.Queryer) *DBPublisher {
 	}
 }
 
-// UseDBPublisher creates a transaction plugin.
-func (store *DBStore) UseDBPublisher() *UseDBPublisher {
-	return &UseDBPublisher{
+// NewPublisher4Tx creates a DBPublisherTxPlugin which can be used in sqlh.WithTx.
+// Example:
+//
+//   publisher := dbstore.NewPublisher4Tx()
+//   sqlh.WithTx(db, func(q sqlh.Queryer) error) {
+//     // ...
+//     publisher.Publish(ctx, subject, data)
+//     // ...
+//   }, publisher)
+func (store *DBStore) NewPublisher4Tx() *DBPublisherTxPlugin {
+	return &DBPublisherTxPlugin{
 		store: store,
 	}
 }
@@ -577,16 +585,27 @@ func (p *DBPublisher) Flush(ctx context.Context) {
 }
 
 // TxInitialized implements sqlh.TxPlugin interface.
-func (p *UseDBPublisher) TxInitialized(db *sql.DB, tx sqlh.Queryer) error {
+func (p *DBPublisherTxPlugin) TxInitialized(db *sql.DB, tx sqlh.Queryer) error {
 	if db != p.store.db {
-		return ErrDifferentDB
+		panic(ErrDifferentDB)
 	}
-	p.Publisher = p.store.NewPublisher(tx)
+	if p.publisher != nil {
+		panic(ErrPublisherNotNil)
+	}
+	p.publisher = p.store.NewPublisher(tx)
 	return nil
 }
 
-// TxCommitted implements sqlh.TxPlugin interface.
-func (p *UseDBPublisher) TxCommitted() {
+// TxCommitted implements sqlh.TxPlugin interface. It will flush saved messages to downstream.
+func (p *DBPublisherTxPlugin) TxCommitted() {
 	// XXX: Not use Background?
-	p.Publisher.Flush(context.Background())
+	p.publisher.Flush(context.Background())
+}
+
+// Publish implements npmsg.RawMsgPublisher interface.
+func (p *DBPublisherTxPlugin) Publish(ctx context.Context, subject string, data []byte) error {
+	if p.publisher == nil {
+		return ErrPublisherNil
+	}
+	return p.publisher.Publish(ctx, subject, data)
 }
