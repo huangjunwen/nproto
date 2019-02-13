@@ -421,7 +421,7 @@ func TestPubSub(t *testing.T) {
 		err := dc.Subscribe(
 			"sub.*",
 			"q1",
-			func(_ context.Context, _ string, _ []byte) error { return nil },
+			func(_ context.Context, _ []byte) error { return nil },
 			SubOptRetryWait(time.Second),
 		)
 		assert.NoError(err)
@@ -444,9 +444,8 @@ func TestPubSub(t *testing.T) {
 		err := dc.Subscribe(
 			testSubject,
 			testQueue,
-			func(ctx context.Context, subject string, data []byte) error {
-				log.Printf("*** Handler called %+q %+q.\n", subject, data)
-				assert.Equal(testSubject, subject)
+			func(ctx context.Context, data []byte) error {
+				log.Printf("*** Handler called %+q %+q.\n", testSubject, data)
 				if bytes.Equal(data, goodData) {
 					goodc <- struct{}{}
 					return nil
@@ -600,7 +599,7 @@ func TestMultipleSub(t *testing.T) {
 		err := dc1.Subscribe(
 			testSubject,
 			testQueue,
-			func(ctx context.Context, subject string, data []byte) error {
+			func(ctx context.Context, data []byte) error {
 				once.Do(func() {
 					close(sub1Called)
 				})
@@ -641,7 +640,7 @@ func TestMultipleSub(t *testing.T) {
 		err := dc2.Subscribe(
 			testSubject,
 			testQueue,
-			func(ctx context.Context, subject string, data []byte) error {
+			func(ctx context.Context, data []byte) error {
 				once.Do(func() {
 					close(sub2Called)
 				})

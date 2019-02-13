@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -287,15 +286,19 @@ func (dc *DurConn) connect(wait bool) {
 // (e.g. disconnected or closed).
 func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, stalec chan struct{}) {
 
-	prefix := fmt.Sprintf("%s.", dc.subjectPrefix)
 	fullSubject := fmt.Sprintf("%s.%s", dc.subjectPrefix, sub.subject)
 
 	// Wrap handler.
 	handler := func(m *stan.Msg) {
 		// Use task runner to run the handler.
 		if err := dc.hRunner.Submit(func() {
-			subject := strings.TrimPrefix(m.Subject, prefix)
-			if err := sub.handler(context.Background(), subject, m.Data); err == nil {
+			// Check subject.
+			if m.Subject != fullSubject {
+				panic(fmt.Sprintf("Expect stan subject %+q but got %+q", fullSubject, m.Subject))
+			}
+
+			// Handle.
+			if err := sub.handler(context.Background(), m.Data); err == nil {
 				// Ack only when no error.
 				m.Ack()
 			} else {

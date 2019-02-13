@@ -159,7 +159,7 @@ func TestFlush(t *testing.T) {
 		dc.Subscribe(
 			testSubject,
 			testQueue,
-			func(ctx context.Context, subject string, data []byte) error {
+			func(ctx context.Context, data []byte) error {
 				// Convert to uint64.
 				prime, err := strconv.ParseUint(string(data), 10, 64)
 				if err != nil {

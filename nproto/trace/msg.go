@@ -192,7 +192,7 @@ func NewTracedRawMsgSubscriber(subscriber npmsg.RawMsgSubscriber, tracer ot.Trac
 
 // Subscribe implements npmsg.RawMsgSubscriber interface.
 func (subscriber *TracedRawMsgSubscriber) Subscribe(subject string, queue string, handler npmsg.RawMsgHandler, opts ...interface{}) error {
-	h := func(ctx context.Context, subject string, data []byte) error {
+	h := func(ctx context.Context, data []byte) error {
 		// Starts sub span.
 		ctx, subSpan, err := startSubSpan(ctx, subscriber.tracer, subject, queue)
 		if err != nil {
@@ -203,7 +203,7 @@ func (subscriber *TracedRawMsgSubscriber) Subscribe(subject string, queue string
 		}()
 
 		// Handle.
-		err = handler(ctx, subject, data)
+		err = handler(ctx, data)
 		return err
 	}
 	return subscriber.subscriber.Subscribe(subject, queue, h, opts...)

@@ -24,7 +24,7 @@ type RawMsgSubscriber interface {
 }
 
 // RawMsgHandler handles the message. The message should be redelivered if it returns an error.
-type RawMsgHandler func(context.Context, string, []byte) error
+type RawMsgHandler func(context.Context, []byte) error
 
 // RawMsgAsyncPublisher extends RawMsgPublisher with PublishAsync.
 type RawMsgAsyncPublisher interface {
@@ -97,7 +97,7 @@ func NewMsgSubscriber(subscriber RawMsgSubscriber, encoder enc.MsgSubscriberEnco
 // Subscribe implements MsgSubscriber interface.
 func (subscriber *defaultMsgSubscriber) Subscribe(subject, queue string, newMsg func() proto.Message, handler nproto.MsgHandler, opts ...interface{}) error {
 
-	h := func(ctx context.Context, subj string, data []byte) error {
+	h := func(ctx context.Context, data []byte) error {
 		// Decode payload.
 		payload := &enc.MsgPayload{
 			// Init with an empty message so that the encoder can get type information of msg.
@@ -108,7 +108,7 @@ func (subscriber *defaultMsgSubscriber) Subscribe(subject, queue string, newMsg 
 		}
 
 		// Setup context and run the handler.
-		return handler(nproto.NewMsgCtx(ctx, subj, payload.MetaData), payload.Msg)
+		return handler(nproto.NewMsgCtx(ctx, subject, payload.MetaData), payload.Msg)
 	}
 
 	return subscriber.subscriber.Subscribe(subject, queue, h, opts...)
