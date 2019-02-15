@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"math"
+	"sync"
 	"testing"
 	"time"
 
@@ -54,8 +55,6 @@ func TestNatsRPC(t *testing.T) {
 			},
 		}
 		sqrtHandler = func(ctx context.Context, in proto.Message) (proto.Message, error) {
-			assert.Equal(svcName, nproto.CurrRPCSvcName(ctx))
-			assert.Equal(sqrtMethod, nproto.CurrRPCMethod(ctx))
 			input := in.(*wrappers.DoubleValue).Value
 			if input < 0 {
 				return nil, errors.New("sqrt only accepts non-negative numbers")
@@ -77,9 +76,8 @@ func TestNatsRPC(t *testing.T) {
 		}
 		bgTimeKey    = "bgtime"
 		bgCanDoneKey = "bgcandone"
+		bgWg         = &sync.WaitGroup{} // Used to wait background job.
 		bgHandler    = func(ctx context.Context, in proto.Message) (proto.Message, error) {
-			assert.Equal(svcName, nproto.CurrRPCSvcName(ctx))
-			assert.Equal(bgMethod, nproto.CurrRPCMethod(ctx))
 			var (
 				t       time.Duration
 				canDone string
@@ -87,7 +85,7 @@ func TestNatsRPC(t *testing.T) {
 			)
 
 			// Get time to wait.
-			md := nproto.CurrRPCMetaData(ctx)
+			md := nproto.MDFromIncomingContext(ctx)
 			{
 				v := md.Get(bgTimeKey)
 				if v == "" {
@@ -106,6 +104,7 @@ func TestNatsRPC(t *testing.T) {
 			}
 
 			// Start a background job to wait for some time or context timeout.
+			bgWg.Add(1)
 			go func() {
 				select {
 				case <-time.After(t):
@@ -115,6 +114,7 @@ func TestNatsRPC(t *testing.T) {
 					// If dead line is shorter.
 					assert.Equal("false", canDone)
 				}
+				bgWg.Done()
 			}()
 
 			return &wrappers.StringValue{Value: t.String()}, nil
@@ -185,7 +185,7 @@ func TestNatsRPC(t *testing.T) {
 		log.Printf("Svc registered.\n")
 	}
 
-	// Creates two rpc clients.
+	// Creates two rpc clients using different encodings.
 	var client1, client2 *NatsRPCClient
 	{
 		client1, err = NewNatsRPCClient(
@@ -236,7 +236,7 @@ func TestNatsRPC(t *testing.T) {
 				assert.Nil(output)
 			}
 		}
-		// Test context.
+		// Test metadata.
 		{
 			handler := client.MakeHandler(svcName, bgMethod)
 			{
@@ -244,24 +244,27 @@ func TestNatsRPC(t *testing.T) {
 				output, err := handler(context.Background(), &empty.Empty{})
 				assert.NoError(err)
 				assert.Equal("0s", output.(*wrappers.StringValue).Value)
+				bgWg.Wait()
 			}
 			{
 				// Test metadata: wait time shorter than context deadline (since context is context.Background()).
-				ctx := nproto.NewOutgoingContext(context.Background(), nproto.NewMetaDataPairs(bgTimeKey, "10ms"))
+				ctx := nproto.NewOutgoingContextWithMD(context.Background(), nproto.NewMetaDataPairs(bgTimeKey, "10ms"))
 				output, err := handler(ctx, &empty.Empty{})
 				assert.NoError(err)
 				assert.Equal("10ms", output.(*wrappers.StringValue).Value)
+				bgWg.Wait()
 			}
 			{
 				// Test context timeout: wait time longer than context deadline.
 				ctx, _ := context.WithTimeout(context.Background(), 100*time.Millisecond)
-				ctx = nproto.NewOutgoingContext(ctx, nproto.NewMetaDataPairs(
+				ctx = nproto.NewOutgoingContextWithMD(ctx, nproto.NewMetaDataPairs(
 					bgTimeKey, "10s",
 					bgCanDoneKey, "false",
 				))
 				output, err := handler(ctx, &empty.Empty{})
 				assert.NoError(err)
 				assert.Equal("10s", output.(*wrappers.StringValue).Value)
+				bgWg.Wait()
 			}
 		}
 	}
@@ -300,6 +303,7 @@ func TestSvcUnavailable(t *testing.T) {
 
 	// Creates rpc server.
 	var server *NatsRPCServer
+	// Create a runner that can only handle one job a time.
 	var runner = taskrunner.NewLimitedRunner(1, 0)
 	{
 		server, err = NewNatsRPCServer(
