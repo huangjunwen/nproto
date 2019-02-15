@@ -21,7 +21,7 @@ type RPCClient interface {
 	MakeHandler(svcName string, method *RPCMethod) RPCHandler
 }
 
-// RPCMethod contains meta and type information of a given method.
+// RPCMethod contains meta information of a given method.
 type RPCMethod struct {
 	// Name is the name of this method.
 	Name string
@@ -31,5 +31,7 @@ type RPCMethod struct {
 	NewOutput func() proto.Message
 }
 
-// RPCHandler do the real job.
+// RPCHandler do the real job. RPCHandler can be client side or server side.
+// MetaData attached to `ctx` must be passed unmodified from client side to
+// server side.
 type RPCHandler func(context.Context, proto.Message) (proto.Message, error)
