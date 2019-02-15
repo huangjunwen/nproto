@@ -9,7 +9,7 @@ type MsgPublisher interface {
 	// Publish publishes a message to the given subject. It returns nil if success.
 	// MetaData attached to `ctx` must be passed unmodified to downstream:
 	// downstream publishers or subscribed handlers.
-	Publish(ctx context.Context, subject string, data []byte) error
+	Publish(ctx context.Context, subject string, msgData []byte) error
 }
 
 // MsgAsyncPublisher extends MsgPublisher with PublishAsync.
@@ -22,7 +22,7 @@ type MsgAsyncPublisher interface {
 	// `cb` must be called exactly once in this case.
 	// MetaData attached to `ctx` must be passed unmodified to downstream:
 	// downstream publishers or subscribed handlers.
-	PublishAsync(ctx context.Context, subject string, data []byte, cb func(error)) error
+	PublishAsync(ctx context.Context, subject string, msgData []byte, cb func(error)) error
 }
 
 // MsgAsyncPublisherFunc is an adapter to allow the use of ordinary functions as MsgAsyncPublisher.
@@ -44,12 +44,12 @@ var (
 )
 
 // Publish implements MsgAsyncPublisher interface.
-func (fn MsgAsyncPublisherFunc) Publish(ctx context.Context, subject string, data []byte) error {
+func (fn MsgAsyncPublisherFunc) Publish(ctx context.Context, subject string, msgData []byte) error {
 	var (
 		err  error
 		errc = make(chan struct{})
 	)
-	if err1 := fn(ctx, subject, data, func(err2 error) {
+	if err1 := fn(ctx, subject, msgData, func(err2 error) {
 		err = err2
 		close(errc)
 	}); err1 != nil {
