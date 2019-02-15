@@ -4,10 +4,10 @@ package huangjunwen.nproto.npmsg.enc;
 
 option go_package = "github.com/huangjunwen/nproto/nproto/npmsg/enc";
 
-// PBPayload is the payload encoded by protobuf.
+// PBPayload uses protobuf for encoding.
 message PBPayload {
-  // Msg is protobuf encoded message.
-  bytes               Msg       = 1;
+  // MsgData is serialized message data.
+  bytes               msg_data = 1;
   // MetaData dict. NOTE: map value can't be repeated type
   // See: https://stackoverflow.com/questions/38886789/protobuf3-how-to-describe-map-of-repeated-string
   repeated MetaDataKV meta_data = 2;

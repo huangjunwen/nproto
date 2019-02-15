@@ -3,8 +3,6 @@ package enc
 import (
 	"testing"
 
-	"github.com/golang/protobuf/ptypes"
-	"github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/huangjunwen/nproto/nproto"
@@ -13,7 +11,7 @@ import (
 func TestPBEncodeDecode(t *testing.T) {
 
 	assert := assert.New(t)
-	msg := ptypes.TimestampNow()
+	msgData := []byte(`{"hello":"world"}`)
 	md := nproto.NewMetaDataPairs("a", "z")
 
 	data := []byte{}
@@ -22,33 +20,22 @@ func TestPBEncodeDecode(t *testing.T) {
 	// Encode.
 	{
 		p := &MsgPayload{
-			Msg:      msg,
+			MsgData:  msgData,
 			MetaData: md,
 		}
 
-		data, err = PBPublisherEncoder{}.EncodePayload(p)
+		data, err = PBMsgPayloadEncoder{}.EncodePayload(p)
 		assert.NoError(err)
 	}
 
 	// Decode.
 	{
-		m := timestamp.Timestamp{}
-		p := &MsgPayload{
-			Msg: &m,
-		}
-		err = PBSubscriberEncoder{}.DecodePayload(data, p)
+		q := &MsgPayload{}
+		err = PBMsgPayloadDecoder{}.DecodePayload(data, q)
 		assert.NoError(err)
 
-		assert.Equal(msg.Seconds, m.Seconds)
-		assert.Equal(msg.Nanos, m.Nanos)
-		assert.Equal(md, p.MetaData)
+		assert.Equal(msgData, q.MsgData)
+		assert.Equal(md, q.MetaData)
 	}
 
-	// Panic if Msg not set
-	{
-		p := &MsgPayload{}
-		assert.Panics(func() {
-			PBSubscriberEncoder{}.DecodePayload(data, p)
-		})
-	}
 }

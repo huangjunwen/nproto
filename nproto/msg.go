@@ -65,6 +65,6 @@ func (fn MsgAsyncPublisherFunc) Publish(ctx context.Context, subject string, msg
 }
 
 // PublishAsync implements MsgAsyncPublisher interface.
-func (fn MsgAsyncPublisherFunc) PublishAsync(ctx context.Context, subject string, data []byte, cb func(error)) error {
-	return fn(ctx, subject, data, cb)
+func (fn MsgAsyncPublisherFunc) PublishAsync(ctx context.Context, subject string, msgData []byte, cb func(error)) error {
+	return fn(ctx, subject, msgData, cb)
 }
