@@ -431,8 +431,8 @@ func TestPubSub(t *testing.T) {
 	var (
 		testSubject = "sub.sub"
 		testQueue   = "qq"
-		goodData    = []byte("good")
-		badData     = []byte("bad")
+		goodMsgData = []byte("good")
+		badMsgData  = []byte("bad") // To test message redelivery.
 	)
 
 	subc := make(chan struct{})
@@ -446,7 +446,7 @@ func TestPubSub(t *testing.T) {
 			testQueue,
 			func(ctx context.Context, data []byte) error {
 				log.Printf("*** Handler called %+q %+q.\n", testSubject, data)
-				if bytes.Equal(data, goodData) {
+				if bytes.Equal(data, goodMsgData) {
 					goodc <- struct{}{}
 					return nil
 				}
@@ -467,26 +467,26 @@ func TestPubSub(t *testing.T) {
 		log.Printf("Subscribed: %v.\n", err)
 	}
 
-	// Publish good data.
+	// Publish good msg data.
 	{
 		err := dc.Publish(context.Background(),
 			testSubject,
-			goodData,
+			goodMsgData,
 		)
 		assert.NoError(err)
 		<-goodc
-		log.Printf("Publish good data: %v.\n", err)
+		log.Printf("Publish good msg data: %v.\n", err)
 	}
 
-	// Publish bad data.
+	// Publish bad msg data.
 	{
 		err := dc.Publish(context.Background(),
 			testSubject,
-			badData,
+			badMsgData,
 		)
 		assert.NoError(err)
 		<-badc
-		log.Printf("Publish bad data: %v.\n", err)
+		log.Printf("Publish bad msg data: %v.\n", err)
 	}
 
 	// First server gone.

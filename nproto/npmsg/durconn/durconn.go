@@ -12,16 +12,17 @@ import (
 	"github.com/rs/xid"
 	"github.com/rs/zerolog"
 
-	"github.com/huangjunwen/nproto/nproto/npmsg"
+	"github.com/huangjunwen/nproto/nproto"
+	"github.com/huangjunwen/nproto/nproto/npmsg/enc"
 	"github.com/huangjunwen/nproto/nproto/taskrunner"
 	"github.com/huangjunwen/nproto/nproto/zlog"
 )
 
 var (
 	// DefaultReconnectWait is the default value of OptReconnectWait.
-	DefaultReconnectWait = 2 * time.Second
+	DefaultReconnectWait = 5 * time.Second
 	// DefaultSubRetryWait is the default value of SubOptRetryWait.
-	DefaultSubRetryWait = 2 * time.Second
+	DefaultSubRetryWait = 5 * time.Second
 	// DefaultPubAckWait is the default value of OptPubAckWait.
 	DefaultPubAckWait = 2 * time.Second
 	// DefaultSubjectPrefix is the default value of OptSubjectPrefix.
@@ -48,17 +49,20 @@ var (
 )
 
 var (
-	_ npmsg.RawMsgAsyncPublisher = (*DurConn)(nil)
-	_ npmsg.RawMsgSubscriber     = (*DurConn)(nil)
+	_ nproto.MsgAsyncPublisher = (*DurConn)(nil)
+	_ nproto.MsgSubscriber     = (*DurConn)(nil)
 )
 
-// DurConn implements a "durable" connection to nats-streaming server: auto reconnection/auto resubscription.
-// Implements RawMsgAsyncPublisher/RawMsgSubscriber interfaces.
+// DurConn implements a "durable" connection to nats-streaming server for
+// auto reconnection and auto resubscription. It implements nproto.MsgAsyncPublisher
+// and nproto.MsgSubscriber interfaces.
 type DurConn struct {
 	// Options.
 	logger        zerolog.Logger
 	reconnectWait time.Duration
 	subjectPrefix string
+	encoder       enc.MsgPayloadEncoder
+	decoder       enc.MsgPayloadDecoder
 	connectCb     func(stan.Conn)
 	disconnectCb  func(stan.Conn)
 	hRunner       taskrunner.TaskRunner // used to run handlers.
@@ -92,7 +96,7 @@ type subscription struct {
 	dc      *DurConn
 	subject string
 	queue   string
-	handler npmsg.RawMsgHandler
+	handler nproto.MsgHandler
 }
 
 // Option is option in creating DurConn.
@@ -112,6 +116,8 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) (*DurConn, erro
 		logger:        zerolog.Nop(),
 		reconnectWait: DefaultReconnectWait,
 		subjectPrefix: DefaultSubjectPrefix,
+		encoder:       enc.PBMsgPayloadEncoder{}, // TODO: option
+		decoder:       enc.PBMsgPayloadDecoder{}, // TODO: option
 		connectCb:     func(_ stan.Conn) {},
 		disconnectCb:  func(_ stan.Conn) {},
 		hRunner:       taskrunner.DefaultTaskRunner,
@@ -146,8 +152,47 @@ func (dc *DurConn) Close() error {
 	return err
 }
 
-// Subscribe implements npmsg.RawMsgSubscriber interface. `opts` must be SubOption.
-func (dc *DurConn) Subscribe(subject, queue string, handler npmsg.RawMsgHandler, opts ...interface{}) error {
+// PublishAsync implements nproto.MsgAsyncPublisher interface.
+func (dc *DurConn) PublishAsync(ctx context.Context, subject string, msgData []byte, cb func(error)) error {
+	// Encode payload.
+	data, err := dc.encoder.EncodePayload(&enc.MsgPayload{
+		MsgData:  msgData,
+		MetaData: nproto.MDFromOutgoingContext(ctx),
+	})
+	if err != nil {
+		return err
+	}
+
+	// Check status and get connection.
+	dc.mu.RLock()
+	closed := dc.closed
+	sc := dc.sc
+	dc.mu.RUnlock()
+	if closed {
+		return ErrClosed
+	}
+	if sc == nil {
+		return ErrNotConnected
+	}
+
+	// Publish.
+	// TODO: sc.PublishAsync maybe block in some rare condition:
+	// see https://github.com/nats-io/go-nats-streaming/issues/210
+	_, err = sc.PublishAsync(
+		fmt.Sprintf("%s.%s", dc.subjectPrefix, subject),
+		data,
+		func(_ string, err error) { cb(err) },
+	)
+	return err
+}
+
+// Publish implements nproto.MsgAsyncPublisher interface.
+func (dc *DurConn) Publish(ctx context.Context, subject string, msgData []byte) error {
+	return nproto.MsgAsyncPublisherFunc(dc.PublishAsync).Publish(ctx, subject, msgData)
+}
+
+// Subscribe implements nproto.MsgSubscriber interface. `opts` must be SubOption.
+func (dc *DurConn) Subscribe(subject, queue string, handler nproto.MsgHandler, opts ...interface{}) error {
 
 	sub := &subscription{
 		retryWait:   DefaultSubRetryWait,
@@ -179,35 +224,8 @@ func (dc *DurConn) Subscribe(subject, queue string, handler npmsg.RawMsgHandler,
 	return nil
 }
 
-// PublishAsync implements npmsg.RawMsgAsyncPublisher interface.
-func (dc *DurConn) PublishAsync(ctx context.Context, subject string, data []byte, cb func(error)) error {
-	dc.mu.RLock()
-	closed := dc.closed
-	sc := dc.sc
-	dc.mu.RUnlock()
-
-	if closed {
-		return ErrClosed
-	}
-	if sc == nil {
-		return ErrNotConnected
-	}
-	_, err := sc.PublishAsync(
-		fmt.Sprintf("%s.%s", dc.subjectPrefix, subject),
-		data,
-		func(_ string, err error) { cb(err) },
-	)
-	return err
-}
-
-// Publish implements npmsg.RawMsgAsyncPublisher interface.
-func (dc *DurConn) Publish(ctx context.Context, subject string, data []byte) error {
-	return npmsg.RawMsgAsyncPublisherFunc(dc.PublishAsync).Publish(ctx, subject, data)
-}
-
 // connect is used to make a new stan connection.
 func (dc *DurConn) connect(wait bool) {
-
 	go func() {
 		logger := dc.logger.With().Str("fn", "connect").Logger()
 
@@ -238,9 +256,9 @@ func (dc *DurConn) connect(wait bool) {
 		opts := []stan.Option{}
 		opts = append(opts, dc.stanOptions...)
 		opts = append(opts, stan.NatsConn(dc.nc))
+		// Reconnect when connection lost. NOTE: This callback will not be called in
+		// normal close.
 		opts = append(opts, stan.SetConnectionLostHandler(func(sc stan.Conn, _ error) {
-			// Reconnect when connection lost.
-			// NOTE: This callback will no be invoked in normal close.
 			dc.disconnectCb(sc)
 			dc.connect(true)
 		}))
@@ -297,16 +315,35 @@ func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, stalec chan struct
 				panic(fmt.Sprintf("Expect stan subject %+q but got %+q", fullSubject, m.Subject))
 			}
 
+			// Decode payload.
+			payload := &enc.MsgPayload{}
+			if err := dc.decoder.DecodePayload(m.Data, payload); err != nil {
+				dc.logger.Error().
+					Str("fn", "msgHandler").
+					Err(err).
+					Msg("Decode error")
+				return
+			}
+
+			// Setup context.
+			ctx := context.Background()
+			if len(payload.MetaData) != 0 {
+				ctx = nproto.NewIncomingContextWithMD(ctx, payload.MetaData)
+			}
+
 			// Handle.
-			if err := sub.handler(context.Background(), m.Data); err == nil {
-				// Ack only when no error.
-				m.Ack()
-			} else {
+			if err := sub.handler(ctx, payload.MsgData); err != nil {
 				dc.logger.Error().
 					Str("fn", "msgHandler").
 					Err(err).
 					Msg("MsgHandler error")
+				return
 			}
+
+			// Ack only if no error.
+			m.Ack()
+			return
+
 		}); err != nil {
 			dc.logger.Error().
 				Str("fn", "msgHandler").
