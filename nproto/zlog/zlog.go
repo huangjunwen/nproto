@@ -15,15 +15,21 @@ var (
 		Level(zerolog.InfoLevel).
 		With().
 		Timestamp().
+		Caller().
 		Logger()
 )
 
 func init() {
 	if terminal.IsTerminal(int(os.Stdout.Fd())) {
-		DefaultZLogger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout}).
+		out := zerolog.ConsoleWriter{
+			Out:        os.Stdout,
+			TimeFormat: "2006/01/02 15:04:05",
+		}
+		DefaultZLogger = zerolog.New(out).
 			Level(zerolog.InfoLevel).
 			With().
 			Timestamp().
+			Caller().
 			Logger()
 	}
 }

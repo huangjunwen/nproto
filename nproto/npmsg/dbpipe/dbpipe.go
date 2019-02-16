@@ -247,13 +247,12 @@ func (pipe *DBMsgPublisherPipe) redeliveryLoop() {
 
 // getConn gets a single connection to db. It returns an error when closed.
 func (pipe *DBMsgPublisherPipe) getConn() (conn *sql.Conn, err error) {
-	logger := &pipe.logger
 	for {
 		conn, err = pipe.db.Conn(pipe.closeCtx)
 		if err == nil {
 			return
 		}
-		logger.Error().Str("fn", "getConn").Err(err).Msg("Get db error")
+		pipe.logger.Error().Err(err).Msg("Get db conn error")
 
 		select {
 		case <-pipe.closeCtx.Done():
@@ -267,14 +266,13 @@ func (pipe *DBMsgPublisherPipe) getConn() (conn *sql.Conn, err error) {
 // getLock gets a global lock. It returns nil when lock acquired.
 // And returns an error when error or closed.
 func (pipe *DBMsgPublisherPipe) getLock(conn *sql.Conn) (err error) {
-	logger := &pipe.logger
 	for {
 		acquired, err := pipe.dialect.GetLock(pipe.closeCtx, conn, pipe.table)
 		if acquired {
 			return nil
 		}
 		if err != nil {
-			logger.Error().Str("fn", "getLock").Err(err).Msg("Get lock error")
+			pipe.logger.Error().Err(err).Msg("Get db lock error")
 			return err
 		}
 
@@ -311,7 +309,6 @@ func (pipe *DBMsgPublisherPipe) flushMsgList(ctx context.Context, list *msgList)
 	if list.n == 0 {
 		return
 	}
-	logger := pipe.logger.With().Str("fn", "flushMsgList").Logger()
 
 	pubwg := &sync.WaitGroup{}
 	mu := &sync.Mutex{}
@@ -323,10 +320,10 @@ L:
 		// Context maybe done during publishing.
 		select {
 		case <-ctx.Done():
-			logger.Warn().Msg("Context done during publishing")
+			pipe.logger.Warn().Msg("Context done during publishing")
 			break L
 		case <-pipe.closeCtx.Done():
-			logger.Warn().Msg("Close during publishing")
+			pipe.logger.Warn().Msg("Close during publishing")
 			break L
 		default:
 		}
@@ -341,7 +338,7 @@ L:
 		pubwg.Add(1)
 		cb := func(err error) {
 			if err != nil {
-				logger.Error().Err(err).Msg("Publish error")
+				pipe.logger.Error().Err(err).Msg("Publish error")
 			} else {
 				// Append to success list.
 				mu.Lock()
@@ -368,8 +365,6 @@ L:
 }
 
 func (pipe *DBMsgPublisherPipe) flushMsgStream(ctx context.Context, stream msgStream) {
-	logger := pipe.logger.With().Str("fn", "flushMsgStream").Logger()
-
 	// This channel is used to control flush speed.
 	taskc := make(chan struct{}, pipe.maxInflight)
 
@@ -414,10 +409,10 @@ L:
 		// Context maybe done during publishing.
 		select {
 		case <-ctx.Done():
-			logger.Warn().Msg("Context done during publishing")
+			pipe.logger.Warn().Msg("Context done during publishing")
 			break L
 		case <-pipe.closeCtx.Done():
-			logger.Warn().Msg("Close during publishing")
+			pipe.logger.Warn().Msg("Close during publishing")
 			break L
 		case taskc <- struct{}{}: // Speed control.
 		}
@@ -426,7 +421,7 @@ L:
 		node, err := stream(true)
 		if node == nil {
 			if err != nil {
-				logger.Error().Err(err).Msg("Msg stream error")
+				pipe.logger.Error().Err(err).Msg("Msg stream error")
 			}
 			<-taskc
 			break
@@ -437,7 +432,7 @@ L:
 		cb := func(err error) {
 			if err != nil {
 				<-taskc
-				logger.Error().Err(err).Msg("Publish error")
+				pipe.logger.Error().Err(err).Msg("Publish error")
 			} else {
 				// Append to success list.
 				mu.Lock()
@@ -492,7 +487,7 @@ func (pipe *DBMsgPublisherPipe) deleteMsgList(list *msgList, idsBuff []int64, ta
 
 		// Delete.
 		if err := pipe.dialect.DeleteMsgs(context.Background(), pipe.db, pipe.table, idsBuff); err != nil {
-			pipe.logger.Error().Str("fn", "deleteMsgs").Err(err).Msg("Delete msg error")
+			pipe.logger.Error().Err(err).Msg("Delete msg error")
 		}
 
 		// If there is a task channel, finish them.

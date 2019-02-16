@@ -227,8 +227,6 @@ func (dc *DurConn) Subscribe(subject, queue string, handler nproto.MsgHandler, o
 // connect is used to make a new stan connection.
 func (dc *DurConn) connect(wait bool) {
 	go func() {
-		logger := dc.logger.With().Str("fn", "connect").Logger()
-
 		if wait {
 			time.Sleep(dc.reconnectWait)
 		}
@@ -245,7 +243,7 @@ func (dc *DurConn) connect(wait bool) {
 			}
 			if err != nil {
 				if err == ErrClosed {
-					logger.Info().Msg("DurConn closed when reseting connection")
+					dc.logger.Info().Msg("DurConn closed when reseting connection")
 					return
 				}
 				panic(err)
@@ -268,11 +266,11 @@ func (dc *DurConn) connect(wait bool) {
 		sc, err := stan.Connect(dc.clusterID, xid.New().String(), opts...)
 		if err != nil {
 			// Reconnect immediately.
-			logger.Error().Err(err).Msg("Connect failed")
+			dc.logger.Error().Err(err).Msg("Connect failed")
 			dc.connect(true)
 			return
 		}
-		logger.Info().Msg("Connected")
+		dc.logger.Info().Msg("Connected")
 		dc.connectCb(sc)
 
 		// Update to the new connection.
@@ -283,7 +281,7 @@ func (dc *DurConn) connect(wait bool) {
 				sc.Close() // Release the new one.
 				close(stalec)
 				if err == ErrClosed {
-					logger.Info().Msg("DurConn closed when updating connection")
+					dc.logger.Info().Msg("DurConn closed when updating connection")
 					return
 				}
 				panic(err)
@@ -318,10 +316,7 @@ func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, stalec chan struct
 			// Decode payload.
 			payload := &enc.MsgPayload{}
 			if err := dc.decoder.DecodePayload(m.Data, payload); err != nil {
-				dc.logger.Error().
-					Str("fn", "msgHandler").
-					Err(err).
-					Msg("Decode error")
+				dc.logger.Error().Err(err).Msg("Decode error")
 				return
 			}
 
@@ -333,10 +328,7 @@ func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, stalec chan struct
 
 			// Handle.
 			if err := sub.handler(ctx, payload.MsgData); err != nil {
-				dc.logger.Error().
-					Str("fn", "msgHandler").
-					Err(err).
-					Msg("MsgHandler error")
+				dc.logger.Error().Err(err).Msg("MsgHandler error")
 				return
 			}
 
@@ -345,10 +337,7 @@ func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, stalec chan struct
 			return
 
 		}); err != nil {
-			dc.logger.Error().
-				Str("fn", "msgHandler").
-				Err(err).
-				Msg("Submit handler failed")
+			dc.logger.Error().Err(err).Msg("Submit handler failed")
 		}
 	}
 
@@ -360,9 +349,8 @@ func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, stalec chan struct
 
 	// Sub logger.
 	logger := dc.logger.With().
-		Str("fn", "subscribe").
-		Str("subject", sub.subject).
-		Str("queue", sub.queue).
+		Str("message_bus.destination", sub.subject).
+		Str("message_bus.queue", sub.queue).
 		Logger()
 
 	// Subscription task.
