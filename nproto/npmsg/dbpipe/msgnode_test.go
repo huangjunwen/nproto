@@ -1,4 +1,4 @@
-package dbstore
+package dbpipe
 
 import (
 	"testing"

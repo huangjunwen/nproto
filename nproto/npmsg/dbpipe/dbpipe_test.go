@@ -1,4 +1,4 @@
-package dbstore
+package dbpipe
 
 import (
 	"context"
@@ -17,38 +17,38 @@ import (
 	stan "github.com/nats-io/go-nats-streaming"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/huangjunwen/nproto/nproto/npmsg"
+	"github.com/huangjunwen/nproto/nproto"
 	"github.com/huangjunwen/nproto/nproto/npmsg/durconn"
 )
 
 // UnstableAsyncPublisher makes half publish failed.
 type UnstableAsyncPublisher struct {
-	npmsg.RawMsgAsyncPublisher
-	cnt int64
+	publisher nproto.MsgAsyncPublisher
+	cnt       int64
 }
 
 // SyncPublisher shadows PublishAsync method.
 type SyncPublisher struct {
-	publisher npmsg.RawMsgAsyncPublisher
+	publisher nproto.MsgAsyncPublisher
 }
 
 var (
-	_           npmsg.RawMsgAsyncPublisher = (*UnstableAsyncPublisher)(nil)
-	_           npmsg.RawMsgPublisher      = (*SyncPublisher)(nil)
-	errUnstable error                      = errors.New("Unstable error")
+	_           nproto.MsgAsyncPublisher = (*UnstableAsyncPublisher)(nil)
+	_           nproto.MsgPublisher      = (*SyncPublisher)(nil)
+	errUnstable error                    = errors.New("Unstable error")
 )
 
-func NewUnstableAsyncPublisher(p npmsg.RawMsgAsyncPublisher) *UnstableAsyncPublisher {
+func NewUnstableAsyncPublisher(p nproto.MsgAsyncPublisher) *UnstableAsyncPublisher {
 	return &UnstableAsyncPublisher{
-		RawMsgAsyncPublisher: p,
+		publisher: p,
 	}
 }
 
-func (p *UnstableAsyncPublisher) Publish(ctx context.Context, subject string, data []byte) error {
-	return npmsg.RawMsgAsyncPublisherFunc(p.PublishAsync).Publish(ctx, subject, data)
+func (p *UnstableAsyncPublisher) Publish(ctx context.Context, subject string, msgData []byte) error {
+	return nproto.MsgAsyncPublisherFunc(p.PublishAsync).Publish(ctx, subject, msgData)
 }
 
-func (p *UnstableAsyncPublisher) PublishAsync(ctx context.Context, subject string, data []byte, cb func(error)) error {
+func (p *UnstableAsyncPublisher) PublishAsync(ctx context.Context, subject string, msgData []byte, cb func(error)) error {
 	cnt := atomic.AddInt64(&p.cnt, 1)
 	// If cnt is even, then failed.
 	if cnt%2 == 0 {
@@ -63,17 +63,17 @@ func (p *UnstableAsyncPublisher) PublishAsync(ctx context.Context, subject strin
 			return nil
 		}
 	}
-	return p.RawMsgAsyncPublisher.PublishAsync(ctx, subject, data, cb)
+	return p.publisher.PublishAsync(ctx, subject, msgData, cb)
 }
 
-func NewSyncPublisher(p npmsg.RawMsgAsyncPublisher) *SyncPublisher {
+func NewSyncPublisher(p nproto.MsgAsyncPublisher) *SyncPublisher {
 	return &SyncPublisher{
 		publisher: p,
 	}
 }
 
-func (p *SyncPublisher) Publish(ctx context.Context, subject string, data []byte) error {
-	return p.publisher.Publish(ctx, subject, data)
+func (p *SyncPublisher) Publish(ctx context.Context, subject string, msgData []byte) error {
+	return p.publisher.Publish(ctx, subject, msgData)
 }
 
 func TestFlush(t *testing.T) {
@@ -155,13 +155,13 @@ func TestFlush(t *testing.T) {
 		return ret
 	}
 	{
-		c := make(chan struct{})
+		subc := make(chan struct{})
 		dc.Subscribe(
 			testSubject,
 			testQueue,
-			func(ctx context.Context, data []byte) error {
+			func(ctx context.Context, msgData []byte) error {
 				// Convert to uint64.
-				prime, err := strconv.ParseUint(string(data), 10, 64)
+				prime, err := strconv.ParseUint(string(msgData), 10, 64)
 				if err != nil {
 					log.Panic(err)
 				}
@@ -183,18 +183,18 @@ func TestFlush(t *testing.T) {
 				return nil
 			},
 			durconn.SubOptSubscribeCb(func(_ stan.Conn, _, _ string) {
-				close(c)
+				close(subc)
 			}),
 		)
-		<-c
+		<-subc
 		log.Printf("DurConn subscribed.\n")
 	}
 
 	// Helper functions.
 	table := "msgstore"
-	createStore := func(downstream npmsg.RawMsgPublisher) *DBStore {
-		// Creates DBStore with small MaxInflight/MaxBuf/FlushWait.
-		store, err := NewDBStore(downstream, "mysql", db, table,
+	createPipe := func(downstream nproto.MsgPublisher) *DBMsgPublisherPipe {
+		// Creates DBMsgPublisherPipe with small MaxInflight/MaxBuf/FlushWait.
+		pipe, err := NewDBMsgPublisherPipe(downstream, "mysql", db, table,
 			OptMaxInflight(3),
 			OptMaxBuf(2),
 			OptFlushWait(500*time.Millisecond), // Short flush wait.
@@ -203,7 +203,7 @@ func TestFlush(t *testing.T) {
 		if err != nil {
 			log.Panic(err)
 		}
-		return store
+		return pipe
 	}
 	clearMsgTable := func() {
 		_, err := db.Exec("DELETE FROM " + table)
@@ -219,14 +219,14 @@ func TestFlush(t *testing.T) {
 	log.Printf(">>> Test normal cases...\n")
 	testNormalFlush := func(primes []uint64, async bool) {
 		log.Printf("Begin normal case: %v, %v\n", primes, async)
-		// Create store.
-		var store *DBStore
+		// Create pipe.
+		var pipe *DBMsgPublisherPipe
 		if async {
-			store = createStore(dc)
+			pipe = createPipe(dc)
 		} else {
-			store = createStore(NewSyncPublisher(dc))
+			pipe = createPipe(NewSyncPublisher(dc))
 		}
-		defer store.Close()
+		defer pipe.Close()
 
 		// Make sure msg table is empty.
 		clearMsgTable()
@@ -242,7 +242,7 @@ func TestFlush(t *testing.T) {
 		defer tx.Rollback()
 
 		// Creates a publisher.
-		p := store.NewPublisher(tx)
+		p := pipe.NewMsgPublisher(tx)
 
 		// Publish distinct prime numbers.
 		expect := uint64(1)
@@ -283,14 +283,14 @@ func TestFlush(t *testing.T) {
 	log.Printf(">>> Test error cases...\n")
 	testErrorFlush := func(primes []uint64, async bool) {
 		log.Printf("Begin error case: %v, %v\n", primes, async)
-		// Create store.
-		var store *DBStore
+		// Create pipe.
+		var pipe *DBMsgPublisherPipe
 		if async {
-			store = createStore(NewUnstableAsyncPublisher(dc))
+			pipe = createPipe(NewUnstableAsyncPublisher(dc))
 		} else {
-			store = createStore(NewSyncPublisher(NewUnstableAsyncPublisher(dc)))
+			pipe = createPipe(NewSyncPublisher(NewUnstableAsyncPublisher(dc)))
 		}
-		defer store.Close()
+		defer pipe.Close()
 
 		// Make sure msg table is empty.
 		clearMsgTable()
@@ -306,7 +306,7 @@ func TestFlush(t *testing.T) {
 		defer tx.Rollback()
 
 		// Creates a publisher.
-		p := store.NewPublisher(tx)
+		p := pipe.NewMsgPublisher(tx)
 
 		// Publish distinct prime numbers.
 		for _, prime := range primes {
@@ -346,15 +346,15 @@ func TestFlush(t *testing.T) {
 
 	testRedelivery := func(primes []uint64, async bool) {
 		log.Printf("Begin redelivery: %v, %v\n", primes, async)
-		// Create store.
-		var store *DBStore
+		// Create pipe.
+		var pipe *DBMsgPublisherPipe
 		if async {
-			store = createStore(dc)
+			pipe = createPipe(dc)
 		} else {
-			store = createStore(NewSyncPublisher(dc))
+			pipe = createPipe(NewSyncPublisher(dc))
 		}
-		store.redeliveryLoop()
-		defer store.Close()
+		pipe.redeliveryLoop()
+		defer pipe.Close()
 
 		// Make sure msg table is empty.
 		clearMsgTable()
@@ -370,7 +370,7 @@ func TestFlush(t *testing.T) {
 		defer tx.Rollback()
 
 		// Creates a publisher.
-		p := store.NewPublisher(tx)
+		p := pipe.NewMsgPublisher(tx)
 
 		// Publish distinct prime numbers.
 		expect := uint64(1)

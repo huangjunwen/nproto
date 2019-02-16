@@ -1,4 +1,4 @@
-package dbstore
+package dbpipe
 
 // msgNode is a single message.
 type msgNode struct {
