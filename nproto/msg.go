@@ -7,8 +7,8 @@ import (
 // MsgPublisher is used to publish messages reliably, e.g. at least once delivery.
 type MsgPublisher interface {
 	// Publish publishes a message to the given subject. It returns nil if success.
-	// MetaData attached to `ctx` must be passed unmodified to downstream:
-	// downstream publishers or subscribed handlers.
+	// MetaData attached to `ctx` must be passed unmodified to downstream consumer.
+	// e.g. downstream publishers in pipeline or final subscribed handlers.
 	Publish(ctx context.Context, subject string, msgData []byte) error
 }
 
@@ -20,8 +20,8 @@ type MsgAsyncPublisher interface {
 	// PublishAsync publishes a message to the given subject asynchronously.
 	// The final result is returned by `cb` if PublishAsync returns nil.
 	// `cb` must be called exactly once in this case.
-	// MetaData attached to `ctx` must be passed unmodified to downstream:
-	// downstream publishers or subscribed handlers.
+	// MetaData attached to `ctx` must be passed unmodified to downstream consumer.
+	// e.g. downstream publishers in pipeline or final subscribed handlers.
 	PublishAsync(ctx context.Context, subject string, msgData []byte, cb func(error)) error
 }
 
