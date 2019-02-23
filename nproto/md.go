@@ -5,8 +5,7 @@ import (
 	"fmt"
 )
 
-// MetaData is used to carry extra context data from client/producer (outgoing) side
-// to server/consumer (incoming) side.
+// MetaData is used to carry extra context data from outgoing side to incoming side.
 type MetaData map[string][]string
 
 type incomingMDKey struct{}
@@ -14,13 +13,11 @@ type incomingMDKey struct{}
 type outgoingMDKey struct{}
 
 // NewIncomingContextWithMD creates a new context with incoming MetaData attached.
-// This function is usually used by server/consumer side to setup context for handlers.
 func NewIncomingContextWithMD(ctx context.Context, md MetaData) context.Context {
 	return context.WithValue(ctx, incomingMDKey{}, md)
 }
 
 // NewOutgoingContextWithMD creates a new context with outgoing MetaData attached.
-// This function is usually used by client/producer side to attach MetaData.
 func NewOutgoingContextWithMD(ctx context.Context, md MetaData) context.Context {
 	return context.WithValue(ctx, outgoingMDKey{}, md)
 }
