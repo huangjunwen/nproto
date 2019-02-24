@@ -147,7 +147,7 @@ import (
 var (
 	_ = context.Background
 	_ = proto.Int
-	_ = nproto.NewRPCCtx
+	_ = nproto.NewMetaDataPairs
 )
 
 `
@@ -216,11 +216,12 @@ func Subscribe{{ Name $msg }}(subscriber nproto.MsgSubscriber, subject, queue st
 	return subscriber.Subscribe(
 		subject, 
 		queue, 
-		func() proto.Message {
-			return &{{ Name $msg }}{}
-		},
-		func(ctx context.Context, m proto.Message) error {
-			return handler(ctx, m.(*{{ Name $msg }}))
+		func(ctx context.Context, msgData []byte) error {
+			msg := &{{ Name $msg }}{}
+			if err := proto.Unmarshal(msgData, msg); err != nil {
+				return err
+			}
+			return handler(ctx, msg)
 		},
 		opts...,
 	)
