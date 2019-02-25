@@ -32,6 +32,4 @@ type RPCMethod struct {
 }
 
 // RPCHandler do the real job. RPCHandler can be client side or server side.
-// MetaData attached to `ctx` must be passed unmodified from client side to
-// its corresponding server side.
 type RPCHandler func(context.Context, proto.Message) (proto.Message, error)
