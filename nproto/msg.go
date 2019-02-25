@@ -2,6 +2,8 @@ package nproto
 
 import (
 	"context"
+
+	"github.com/golang/protobuf/proto"
 )
 
 // MsgPublisher is used to publish messages reliably, e.g. at least once delivery.
@@ -29,6 +31,11 @@ type MsgAsyncPublisher interface {
 
 // MsgAsyncPublisherFunc is an adapter to allow the use of ordinary functions as MsgAsyncPublisher.
 type MsgAsyncPublisherFunc func(context.Context, string, []byte, func(error)) error
+
+// PBPublisher is used to publish protobuf message.
+type PBPublisher struct {
+	Publisher MsgPublisher
+}
 
 // MsgSubscriber is used to consume messages.
 type MsgSubscriber interface {
@@ -69,4 +76,13 @@ func (fn MsgAsyncPublisherFunc) Publish(ctx context.Context, subject string, msg
 // PublishAsync implements MsgAsyncPublisher interface.
 func (fn MsgAsyncPublisherFunc) PublishAsync(ctx context.Context, subject string, msgData []byte, cb func(error)) error {
 	return fn(ctx, subject, msgData, cb)
+}
+
+// Publish publishes a protobuf message.
+func (p *PBPublisher) Publish(ctx context.Context, subject string, msg proto.Message) error {
+	msgData, err := proto.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	return p.Publisher.Publish(ctx, subject, msgData)
 }
