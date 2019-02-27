@@ -14,8 +14,8 @@ type RPCRequest struct {
 	// NOTE: Must filled with an empty proto message before decoding.
 	// Otherwise the encoder can't determine which type to decode.
 	Param proto.Message
-	// MetaData is a dict containing extra context information.
-	MetaData nproto.MetaData
+	// MD is a dict containing extra context information. Maybe nil.
+	MD nproto.MD
 	// Timeout is timeout of this RPC if > 0.
 	Timeout time.Duration
 }

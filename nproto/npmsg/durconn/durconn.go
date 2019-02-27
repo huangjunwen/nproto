@@ -156,8 +156,8 @@ func (dc *DurConn) Close() error {
 func (dc *DurConn) PublishAsync(ctx context.Context, subject string, msgData []byte, cb func(error)) error {
 	// Encode payload.
 	data, err := dc.encoder.EncodePayload(&enc.MsgPayload{
-		MsgData:  msgData,
-		MetaData: nproto.MDFromOutgoingContext(ctx),
+		MsgData: msgData,
+		MD:      nproto.MDFromOutgoingContext(ctx),
 	})
 	if err != nil {
 		return err
@@ -322,8 +322,8 @@ func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, stalec chan struct
 
 			// Setup context.
 			ctx := context.Background()
-			if len(payload.MetaData) != 0 {
-				ctx = nproto.NewIncomingContextWithMD(ctx, payload.MetaData)
+			if payload.MD != nil {
+				ctx = nproto.NewIncomingContextWithMD(ctx, payload.MD)
 			}
 
 			// Handle.

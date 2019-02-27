@@ -5,39 +5,60 @@ import (
 	"fmt"
 )
 
-// MetaData is used to carry extra context data from outgoing side to incoming side.
-type MetaData map[string][]string
+// MD is used to carry extra key/value context data (meta data) from outgoing side to
+// incoming side. Each key (utf8 string) has a list of values (any bytes) associated.
+// MD should be immutable once created. Create a new one if you want to modify.
+// (just like context.WithValue).
+type MD interface {
+	// Keys iterates all keys in MD.
+	Keys(cb func(string) error) error
 
-type incomingMDKey struct{}
+	// HasKey returns true if MD contains the specified key.
+	HasKey(key string) bool
+
+	// Values returns the list of values associated with the specified key or
+	// nil if not exists. NOTE: Don't modify the returned slice and its content.
+	Values(key string) [][]byte
+}
+
+// MetaData is the default implementation of MD. nil is a valid value.
+type MetaData map[string][][]byte
 
 type outgoingMDKey struct{}
 
-// NewIncomingContextWithMD creates a new context with incoming MetaData attached.
-func NewIncomingContextWithMD(ctx context.Context, md MetaData) context.Context {
-	return context.WithValue(ctx, incomingMDKey{}, md)
-}
+type incomingMDKey struct{}
 
-// NewOutgoingContextWithMD creates a new context with outgoing MetaData attached.
-func NewOutgoingContextWithMD(ctx context.Context, md MetaData) context.Context {
+var (
+	// EmptyMD is an empty MD.
+	EmptyMD MD = (MetaData)(nil)
+)
+
+// NewOutgoingContextWithMD creates a new context with outgoing MD attached.
+func NewOutgoingContextWithMD(ctx context.Context, md MD) context.Context {
 	return context.WithValue(ctx, outgoingMDKey{}, md)
 }
 
-// MDFromOutgoingContext extracts outgoing MetaData from context.
-func MDFromOutgoingContext(ctx context.Context) MetaData {
+// NewIncomingContextWithMD creates a new context with incoming MD attached.
+func NewIncomingContextWithMD(ctx context.Context, md MD) context.Context {
+	return context.WithValue(ctx, incomingMDKey{}, md)
+}
+
+// MDFromOutgoingContext extracts outgoing MD from context or nil if not found.
+func MDFromOutgoingContext(ctx context.Context) MD {
 	v := ctx.Value(outgoingMDKey{})
 	if v == nil {
 		return nil
 	}
-	return v.(MetaData)
+	return v.(MD)
 }
 
-// MDFromIncomingCont extracts incoming MetaData from context.
-func MDFromIncomingContext(ctx context.Context) MetaData {
+// MDFromIncomingCont extracts incoming MD from context or nil if not found.
+func MDFromIncomingContext(ctx context.Context) MD {
 	v := ctx.Value(incomingMDKey{})
 	if v == nil {
 		return nil
 	}
-	return v.(MetaData)
+	return v.(MD)
 }
 
 // NewMetaDataPairs creates a MetaData from key/value pairs. len(kv) must be even.
@@ -47,47 +68,44 @@ func NewMetaDataPairs(kv ...string) MetaData {
 	}
 	md := MetaData{}
 	for i := 0; i < len(kv); i += 2 {
-		md[kv[i]] = []string{kv[i+1]}
+		md[kv[i]] = [][]byte{[]byte(kv[i+1])}
 	}
 	return md
 }
 
-// Get gets the first value of the given key or "" if not found.
-func (md MetaData) Get(key string) string {
-	vals := md[key]
-	if len(vals) > 0 {
-		return vals[0]
+// NewMetaDataFromMD creates a MetaData from MD.
+func NewMetaDataFromMD(md MD) MetaData {
+	if md == nil {
+		return (MetaData)(nil)
 	}
-	return ""
-}
-
-// Set sets the values of the given key. Old values of the key are overwritten.
-func (md MetaData) Set(key string, vals ...string) {
-	md[key] = vals
-}
-
-// Append appends values to the given key. Old values of the key are preserved.
-func (md MetaData) Append(key string, vals ...string) {
-	md[key] = append(md[key], vals...)
-}
-
-// Len returns the length of the map.
-func (md MetaData) Len() int {
-	return len(md)
-}
-
-// Copy returns a copy of MetaData.
-func (md MetaData) Copy() MetaData {
-	return Join(md)
-}
-
-// Join joins a number of MetaDatas into one.
-func Join(mds ...MetaData) MetaData {
 	ret := MetaData{}
-	for _, md := range mds {
-		for key, vals := range md {
-			ret[key] = append(ret[key], vals...)
+	md.Keys(func(key string) error {
+		ret[key] = md.Values(key)
+		return nil
+	})
+	return ret
+}
+
+// Keys implements MD interface.
+func (md MetaData) Keys(cb func(string) error) error {
+	if len(md) == 0 {
+		return nil
+	}
+	for key, _ := range md {
+		if err := cb(key); err != nil {
+			return err
 		}
 	}
-	return ret
+	return nil
+}
+
+// HasKey implements MD interface.
+func (md MetaData) HasKey(key string) bool {
+	_, ok := md[key]
+	return ok
+}
+
+// Values implements MD interface.
+func (md MetaData) Values(key string) [][]byte {
+	return md[key]
 }

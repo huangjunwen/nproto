@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package nproto.pb.nprpc;
+
+option go_package = "github.com/huangjunwen/nproto/nproto/pb";
+
+import "md.proto";
+
+// RPCRequest is request of a RPC call encoded by protobuf.
+message RPCRequest {
+  // Param is protobuf encoded param.
+  bytes                            param     = 1;
+  // MetaData dict. 
+  repeated nproto.pb.md.MetaDataKV meta_data = 2;
+  // Timeout is timeout in nanoseconds. Use int64 instead of wkt's duration to avoid an extra pointer.
+  int64                            timeout   = 3;
+}
+
+// Reply is reply of a RPC call encoded by protobuf.
+message RPCReply {
+  // Result is protobuf encoded result.
+  bytes  result = 1;
+  // Error is the error result of this rpc.
+  string error  = 2;
+}

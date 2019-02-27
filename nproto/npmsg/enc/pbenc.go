@@ -1,11 +1,10 @@
-//go:generate protoc --go_out=paths=source_relative:. pbenc.proto
-
 package enc
 
 import (
 	"github.com/golang/protobuf/proto"
 
 	"github.com/huangjunwen/nproto/nproto"
+	"github.com/huangjunwen/nproto/nproto/pb"
 )
 
 // PBMsgPayloadEncoder is MsgPayloadEncoder using protobuf.
@@ -21,32 +20,43 @@ var (
 
 // EncodePayload implements MsgPayloadEncoder interface.
 func (encoder PBMsgPayloadEncoder) EncodePayload(payload *MsgPayload) ([]byte, error) {
-	p := &PBPayload{
+	p := &pb.MsgPayload{
 		MsgData: payload.MsgData,
 	}
-	if len(payload.MetaData) != 0 {
-		for key, vals := range payload.MetaData {
-			p.MetaData = append(p.MetaData, &MetaDataKV{
+
+	// Meta data.
+	if payload.MD != nil {
+		payload.MD.Keys(func(key string) error {
+			p.MetaData = append(p.MetaData, &pb.MetaDataKV{
 				Key:    key,
-				Values: vals,
+				Values: payload.MD.Values(key),
 			})
-		}
+			return nil
+		})
 	}
+
+	// Encode payload.
 	return proto.Marshal(p)
 }
 
 // DecodePayload implements MsgSubscriberEncoder interface.
 func (decoder PBMsgPayloadDecoder) DecodePayload(data []byte, payload *MsgPayload) error {
-	p := &PBPayload{}
+	// Decode payload.
+	p := &pb.MsgPayload{}
 	if err := proto.Unmarshal(data, p); err != nil {
 		return err
 	}
+
+	// Msg data.
 	payload.MsgData = p.MsgData
+
+	// Meta data.
 	if len(p.MetaData) != 0 {
-		payload.MetaData = nproto.MetaData{}
+		md := nproto.MetaData{}
 		for _, kv := range p.MetaData {
-			payload.MetaData[kv.Key] = kv.Values
+			md[kv.Key] = kv.Values
 		}
+		payload.MD = md
 	}
 	return nil
 }

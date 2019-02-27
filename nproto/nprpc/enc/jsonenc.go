@@ -59,9 +59,12 @@ func (e JSONServerEncoder) DecodeRequest(data []byte, req *RPCRequest) error {
 	}
 
 	// Meta data.
-	req.MetaData = r.MetaData
+	if len(r.MetaData) != 0 {
+		req.MD = r.MetaData
+	}
 
 	// Timeout.
+	req.Timeout = 0
 	if r.Timeout > 0 {
 		req.Timeout = time.Duration(r.Timeout)
 	}
@@ -101,7 +104,7 @@ func (e JSONClientEncoder) EncodeRequest(req *RPCRequest) ([]byte, error) {
 	r.Param = []byte(buf.Bytes())
 
 	// Meta data.
-	r.MetaData = req.MetaData
+	r.MetaData = nproto.NewMetaDataFromMD(req.MD)
 
 	// Timeout.
 	if req.Timeout > 0 {

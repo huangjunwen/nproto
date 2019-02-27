@@ -86,20 +86,26 @@ func TestNatsRPC(t *testing.T) {
 
 			// Get time to wait.
 			md := nproto.MDFromIncomingContext(ctx)
+			if md == nil {
+				md = nproto.EmptyMD
+			}
 			{
-				v := md.Get(bgTimeKey)
-				if v == "" {
-					v = "0s"
+				v := "0s"
+				vs := md.Values(bgTimeKey)
+				if len(vs) != 0 {
+					v = string(vs[0])
 				}
+
 				t, err = time.ParseDuration(v)
 				assert.NoError(err)
 			}
 
 			// Get expect result.
 			{
-				canDone = md.Get(bgCanDoneKey)
-				if canDone == "" {
-					canDone = "true"
+				canDone = "true"
+				vs := md.Values(bgCanDoneKey)
+				if len(vs) != 0 {
+					canDone = string(vs[0])
 				}
 			}
 

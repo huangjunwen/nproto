@@ -270,7 +270,10 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nproto.RPCM
 			}
 
 			// Setup context.
-			ctx := nproto.NewIncomingContextWithMD(context.Background(), req.MetaData)
+			ctx := context.Background()
+			if req.MD != nil {
+				ctx = nproto.NewIncomingContextWithMD(ctx, req.MD)
+			}
 			if req.Timeout > 0 {
 				var cancel context.CancelFunc
 				ctx, cancel = context.WithTimeout(ctx, req.Timeout)
@@ -398,8 +401,8 @@ func (client *NatsRPCClient) MakeHandler(svcName string, method *nproto.RPCMetho
 			req.Timeout = dur
 		}
 		md := nproto.MDFromOutgoingContext(ctx)
-		if len(md) > 0 {
-			req.MetaData = md
+		if md != nil {
+			req.MD = md
 		}
 
 		// Encode request.

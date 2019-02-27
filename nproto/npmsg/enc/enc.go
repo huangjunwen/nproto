@@ -18,6 +18,8 @@ type MsgPayloadDecoder interface {
 
 // MsgPayload is the payload.
 type MsgPayload struct {
-	MsgData  []byte
-	MetaData nproto.MetaData
+	// MsgData is serialized msg.
+	MsgData []byte
+	// MD is a dict containing extra context information. Maybe nil.
+	MD nproto.MD
 }

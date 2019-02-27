@@ -20,8 +20,8 @@ func TestPBEncodeDecode(t *testing.T) {
 	// Encode.
 	{
 		p := &MsgPayload{
-			MsgData:  msgData,
-			MetaData: md,
+			MsgData: msgData,
+			MD:      md,
 		}
 
 		data, err = PBMsgPayloadEncoder{}.EncodePayload(p)
@@ -34,8 +34,10 @@ func TestPBEncodeDecode(t *testing.T) {
 		err = PBMsgPayloadDecoder{}.DecodePayload(data, q)
 		assert.NoError(err)
 
+		md2 := nproto.NewMetaDataFromMD(q.MD)
+
 		assert.Equal(msgData, q.MsgData)
-		assert.Equal(md, q.MetaData)
+		assert.Equal(md, md2)
 	}
 
 }

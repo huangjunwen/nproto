@@ -26,9 +26,9 @@ func TestJSONRequest(t *testing.T) {
 	// Encode.
 	{
 		req := &RPCRequest{
-			Param:    param,
-			MetaData: md,
-			Timeout:  timeout,
+			Param:   param,
+			MD:      md,
+			Timeout: timeout,
 		}
 
 		data, err = JSONClientEncoder{}.EncodeRequest(req)
@@ -42,11 +42,12 @@ func TestJSONRequest(t *testing.T) {
 			Param: &p,
 		}
 		err = JSONServerEncoder{}.DecodeRequest(data, req)
+		md2 := nproto.NewMetaDataFromMD(req.MD)
 		assert.NoError(err)
 
 		assert.Equal(param.Seconds, p.Seconds)
 		assert.Equal(param.Nanos, p.Nanos)
-		assert.Equal(md, req.MetaData)
+		assert.Equal(md, md2)
 		assert.Equal(timeout, req.Timeout)
 	}
 
@@ -136,9 +137,9 @@ func BenchmarkJSONEncode(b *testing.B) {
 	md := nproto.NewMetaDataPairs("a", "z")
 	timeout := 10 * time.Nanosecond
 	req := &RPCRequest{
-		Param:    param,
-		MetaData: md,
-		Timeout:  timeout,
+		Param:   param,
+		MD:      md,
+		Timeout: timeout,
 	}
 
 	b.ReportAllocs()
@@ -154,9 +155,9 @@ func BenchmarkJSONDecode(b *testing.B) {
 	md := nproto.NewMetaDataPairs("a", "z")
 	timeout := 10 * time.Nanosecond
 	data, _ := JSONClientEncoder{}.EncodeRequest(&RPCRequest{
-		Param:    param,
-		MetaData: md,
-		Timeout:  timeout,
+		Param:   param,
+		MD:      md,
+		Timeout: timeout,
 	})
 
 	req := &RPCRequest{

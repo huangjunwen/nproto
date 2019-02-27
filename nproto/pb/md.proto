@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package nproto.pb.md;
+
+option go_package = "github.com/huangjunwen/nproto/nproto/pb";
+
+// MetaDataKV is a kv pair of meta data.
+// Use `repeated MetaDataKV` to represent a meta data dict since map value
+// can't be repeated type.
+// See: https://stackoverflow.com/questions/38886789/protobuf3-how-to-describe-map-of-repeated-string
+message MetaDataKV {
+  string          key    = 1;
+  repeated bytes  values = 2;
+}

@@ -292,7 +292,10 @@ func (pipe *DBMsgPublisherPipe) flushMsgNode(ctx context.Context, node *msgNode,
 		// Should not happen.
 		panic(err)
 	}
-	ctx = nproto.NewOutgoingContextWithMD(ctx, payload.MetaData)
+
+	if payload.MD != nil {
+		ctx = nproto.NewOutgoingContextWithMD(ctx, payload.MD)
+	}
 
 	// Use PublishAsync if downstream is MsgAsyncPublisher for higher throughput.
 	switch downstream := pipe.downstream.(type) {
@@ -504,8 +507,8 @@ func (pipe *DBMsgPublisherPipe) deleteMsgList(list *msgList, idsBuff []int64, ta
 func (p *DBMsgPublisher) Publish(ctx context.Context, subject string, msgData []byte) error {
 	// Encode payload.
 	data, err := p.pipe.encoder.EncodePayload(&enc.MsgPayload{
-		MsgData:  msgData,
-		MetaData: nproto.MDFromOutgoingContext(ctx),
+		MsgData: msgData,
+		MD:      nproto.MDFromOutgoingContext(ctx),
 	})
 	if err != nil {
 		return err
