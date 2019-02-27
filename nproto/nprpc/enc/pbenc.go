@@ -23,7 +23,7 @@ var (
 
 // DecodeRequest implements RPCServerEncoder interface.
 func (e PBServerEncoder) DecodeRequest(data []byte, req *RPCRequest) error {
-	// Decode request.
+	// Decode data.
 	r := &pb.RPCRequest{}
 	if err := proto.Unmarshal(data, r); err != nil {
 		return err
@@ -44,7 +44,6 @@ func (e PBServerEncoder) DecodeRequest(data []byte, req *RPCRequest) error {
 	}
 
 	// Timeout.
-	req.Timeout = 0
 	if r.Timeout > 0 {
 		req.Timeout = time.Duration(r.Timeout)
 	}
@@ -76,6 +75,7 @@ func (e PBServerEncoder) EncodeReply(reply *RPCReply) ([]byte, error) {
 func (e PBClientEncoder) EncodeRequest(req *RPCRequest) ([]byte, error) {
 	var err error
 	r := &pb.RPCRequest{}
+
 	// Encode param.
 	r.Param, err = proto.Marshal(req.Param)
 	if err != nil {
@@ -105,7 +105,7 @@ func (e PBClientEncoder) EncodeRequest(req *RPCRequest) ([]byte, error) {
 
 // DecodeReply implements RPCClientEncoder interface.
 func (e PBClientEncoder) DecodeReply(data []byte, reply *RPCReply) error {
-	// Decode reply.
+	// Decode data.
 	r := &pb.RPCReply{}
 	if err := proto.Unmarshal(data, r); err != nil {
 		return err

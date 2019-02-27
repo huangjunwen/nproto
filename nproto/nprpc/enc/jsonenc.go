@@ -46,7 +46,7 @@ var (
 
 // DecodeRequest implements RPCServerEncoder interface.
 func (e JSONServerEncoder) DecodeRequest(data []byte, req *RPCRequest) error {
-	// Decode request.
+	// Decode data.
 	r := &JSONRequest{}
 	if err := json.Unmarshal(data, r); err != nil {
 		return err
@@ -64,7 +64,6 @@ func (e JSONServerEncoder) DecodeRequest(data []byte, req *RPCRequest) error {
 	}
 
 	// Timeout.
-	req.Timeout = 0
 	if r.Timeout > 0 {
 		req.Timeout = time.Duration(r.Timeout)
 	}
@@ -96,6 +95,7 @@ func (e JSONServerEncoder) EncodeReply(reply *RPCReply) ([]byte, error) {
 // EncodeRequest implements RPCClientEncoder interface.
 func (e JSONClientEncoder) EncodeRequest(req *RPCRequest) ([]byte, error) {
 	r := &JSONRequest{}
+
 	// Encode param.
 	buf := &bytes.Buffer{}
 	if err := jsonMarshaler.Marshal(buf, req.Param); err != nil {
@@ -104,7 +104,9 @@ func (e JSONClientEncoder) EncodeRequest(req *RPCRequest) ([]byte, error) {
 	r.Param = []byte(buf.Bytes())
 
 	// Meta data.
-	r.MetaData = nproto.NewMetaDataFromMD(req.MD)
+	if req.MD != nil {
+		r.MetaData = nproto.NewMetaDataFromMD(req.MD)
+	}
 
 	// Timeout.
 	if req.Timeout > 0 {
@@ -117,7 +119,7 @@ func (e JSONClientEncoder) EncodeRequest(req *RPCRequest) ([]byte, error) {
 
 // DecodeReply implements RPCClientEncoder interface.
 func (e JSONClientEncoder) DecodeReply(data []byte, reply *RPCReply) error {
-	// Decode reply.
+	// Decode data.
 	r := &JSONReply{}
 	if err := json.Unmarshal(data, r); err != nil {
 		return err

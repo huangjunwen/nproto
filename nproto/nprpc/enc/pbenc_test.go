@@ -42,8 +42,8 @@ func TestPBRequest(t *testing.T) {
 			Param: &p,
 		}
 		err = PBServerEncoder{}.DecodeRequest(data, req)
-		md2 := nproto.NewMetaDataFromMD(req.MD)
 		assert.NoError(err)
+		md2 := nproto.NewMetaDataFromMD(req.MD)
 
 		assert.Equal(param.Seconds, p.Seconds)
 		assert.Equal(param.Nanos, p.Nanos)

@@ -41,7 +41,7 @@ func (encoder PBMsgPayloadEncoder) EncodePayload(payload *MsgPayload) ([]byte, e
 
 // DecodePayload implements MsgSubscriberEncoder interface.
 func (decoder PBMsgPayloadDecoder) DecodePayload(data []byte, payload *MsgPayload) error {
-	// Decode payload.
+	// Decode data.
 	p := &pb.MsgPayload{}
 	if err := proto.Unmarshal(data, p); err != nil {
 		return err

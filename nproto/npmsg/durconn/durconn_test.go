@@ -16,6 +16,8 @@ import (
 	"github.com/nats-io/go-nats"
 	"github.com/nats-io/go-nats-streaming"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/huangjunwen/nproto/nproto"
 )
 
 // ----------- Mock test -----------
@@ -433,6 +435,7 @@ func TestPubSub(t *testing.T) {
 		testQueue   = "qq"
 		goodMsgData = []byte("good")
 		badMsgData  = []byte("bad") // To test message redelivery.
+		md          = nproto.NewMetaDataPairs("xyz", "abc")
 	)
 
 	subc := make(chan struct{})
@@ -445,6 +448,11 @@ func TestPubSub(t *testing.T) {
 			testSubject,
 			testQueue,
 			func(ctx context.Context, data []byte) error {
+				// Check md.
+				md2 := nproto.NewMetaDataFromMD(nproto.MDFromIncomingContext(ctx))
+				assert.Equal(md, md2)
+
+				// Check data.
 				log.Printf("*** Handler called %+q %+q.\n", testSubject, data)
 				if bytes.Equal(data, goodMsgData) {
 					goodc <- struct{}{}
@@ -467,26 +475,33 @@ func TestPubSub(t *testing.T) {
 		log.Printf("Subscribed: %v.\n", err)
 	}
 
-	// Publish good msg data.
 	{
-		err := dc.Publish(context.Background(),
-			testSubject,
-			goodMsgData,
-		)
-		assert.NoError(err)
-		<-goodc
-		log.Printf("Publish good msg data: %v.\n", err)
-	}
+		ctx := nproto.NewOutgoingContextWithMD(context.Background(), md)
 
-	// Publish bad msg data.
-	{
-		err := dc.Publish(context.Background(),
-			testSubject,
-			badMsgData,
-		)
-		assert.NoError(err)
-		<-badc
-		log.Printf("Publish bad msg data: %v.\n", err)
+		// Publish good msg data.
+		{
+			err := dc.Publish(
+				ctx,
+				testSubject,
+				goodMsgData,
+			)
+			assert.NoError(err)
+			<-goodc
+			log.Printf("Publish good msg data: %v.\n", err)
+		}
+
+		// Publish bad msg data.
+		{
+			err := dc.Publish(
+				ctx,
+				testSubject,
+				badMsgData,
+			)
+			assert.NoError(err)
+			<-badc
+			log.Printf("Publish bad msg data: %v.\n", err)
+		}
+
 	}
 
 	// First server gone.

@@ -7,7 +7,7 @@ import (
 
 // MD is used to carry extra key/value context data (meta data) from outgoing side to
 // incoming side. Each key (utf8 string) has a list of values (any bytes) associated.
-// MD should be immutable once created. Create a new one if you want to modify.
+// MD should be immutable once attached to context. Create a new one if you want to modify.
 // (just like context.WithValue).
 type MD interface {
 	// Keys iterates all keys in MD.

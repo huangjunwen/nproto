@@ -84,11 +84,11 @@ func TestNatsRPC(t *testing.T) {
 				err     error
 			)
 
-			// Get time to wait.
 			md := nproto.MDFromIncomingContext(ctx)
 			if md == nil {
 				md = nproto.EmptyMD
 			}
+			// Get time to wait.
 			{
 				v := "0s"
 				vs := md.Values(bgTimeKey)
