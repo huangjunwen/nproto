@@ -56,8 +56,8 @@ func (client *TracedRPCClient) MakeHandler(svcName string, method *nproto.RPCMet
 		}()
 
 		// Injects span context.
-		md := nproto.MDFromOutgoingContext(ctx).Copy()
-		err = injectSpanCtx(tracer, span.Context(), md, TracingMDKey)
+		md := nproto.MDFromOutgoingContext(ctx)
+		md, err = injectSpanCtx(tracer, span.Context(), md)
 		if err != nil {
 			return
 		}
@@ -90,11 +90,7 @@ func (server *TracedRPCServer) RegistSvc(svcName string, methods map[*nproto.RPC
 
 		methods2[method] = func(ctx context.Context, input proto.Message) (output proto.Message, err error) {
 			// Extracts parent span context from client. Maybe nil.
-			parentSpanCtx, err := extractSpanCtx(
-				tracer,
-				nproto.MDFromIncomingContext(ctx),
-				TracingMDKey,
-			)
+			parentSpanCtx, err := extractSpanCtx(tracer, nproto.MDFromIncomingContext(ctx))
 			if err != nil {
 				return
 			}

@@ -68,7 +68,6 @@ func (publisher *TracedMsgPublisher) Publish(ctx context.Context, subject string
 		parentSpanCtx, err := extractSpanCtx(
 			tracer,
 			nproto.MDFromOutgoingContext(ctx),
-			TracingMDKey,
 		)
 		if err != nil {
 			return err
@@ -93,9 +92,9 @@ func (publisher *TracedMsgPublisher) Publish(ctx context.Context, subject string
 		span.Finish()
 	}()
 
-	// Injects span context. NOTE: `md[TracingMDKey]` is overwritten.
-	md := nproto.MDFromOutgoingContext(ctx).Copy()
-	err = injectSpanCtx(tracer, span.Context(), md, TracingMDKey)
+	// Injects span context.
+	md := nproto.MDFromOutgoingContext(ctx)
+	md, err = injectSpanCtx(tracer, span.Context(), md)
 	if err != nil {
 		return
 	}
@@ -121,7 +120,6 @@ func (publisher *TraceMsgAsyncPublisher) PublishAsync(ctx context.Context, subje
 		parentSpanCtx, err := extractSpanCtx(
 			tracer,
 			nproto.MDFromOutgoingContext(ctx),
-			TracingMDKey,
 		)
 		if err != nil {
 			return err
@@ -146,9 +144,9 @@ func (publisher *TraceMsgAsyncPublisher) PublishAsync(ctx context.Context, subje
 		span.Finish()
 	}
 
-	// Injects span context. NOTE: `md[TracingMDKey]` is overwritten.
-	md := nproto.MDFromOutgoingContext(ctx).Copy()
-	err = injectSpanCtx(tracer, span.Context(), md, TracingMDKey)
+	// Injects span context.
+	md := nproto.MDFromOutgoingContext(ctx)
+	md, err = injectSpanCtx(tracer, span.Context(), md)
 	if err != nil {
 		fin(err)
 		return
@@ -182,7 +180,6 @@ func (subscriber *TracedMsgSubscriber) Subscribe(subject string, queue string, h
 		parentSpanCtx, err := extractSpanCtx(
 			tracer,
 			nproto.MDFromIncomingContext(ctx),
-			TracingMDKey,
 		)
 		if err != nil {
 			return

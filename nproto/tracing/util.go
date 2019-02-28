@@ -1,8 +1,8 @@
 package tracing
 
 import (
+	"bytes"
 	"context"
-	"strings"
 
 	ot "github.com/opentracing/opentracing-go"
 	otext "github.com/opentracing/opentracing-go/ext"
@@ -19,25 +19,30 @@ func spanCtxFromCtx(ctx context.Context) ot.SpanContext {
 	return nil
 }
 
-// injectSpanCtx injects span context into `md[key]`. Old value is overwritten.
-func injectSpanCtx(tracer ot.Tracer, spanCtx ot.SpanContext, md nproto.MetaData, key string) error {
-	w := &strings.Builder{}
-	if err := tracer.Inject(spanCtx, ot.Binary, w); err != nil {
-		return err
+// injectSpanCtx adds span context to `md` and creates a new nproto.MD. `md` can be nil.
+func injectSpanCtx(tracer ot.Tracer, spanCtx ot.SpanContext, md nproto.MD) (nproto.MD, error) {
+	if md == nil {
+		md = nproto.EmptyMD
 	}
-	md.Set(key, w.String())
-	return nil
+	w := &bytes.Buffer{}
+	if err := tracer.Inject(spanCtx, ot.Binary, w); err != nil {
+		return nil, err
+	}
+	return newWithTracingMD(md, w.Bytes()), nil
 }
 
-// extractSpanCtx extracts span context from `md[key]`. nil is returned if not found.
-func extractSpanCtx(tracer ot.Tracer, md nproto.MetaData, key string) (ot.SpanContext, error) {
-	if len(md) == 0 {
+// extractSpanCtx extracts span context from `md` or nil if not found. `md` can be nil.
+func extractSpanCtx(tracer ot.Tracer, md nproto.MD) (ot.SpanContext, error) {
+	if md == nil {
 		return nil, nil
 	}
-	r := strings.NewReader(md.Get(key))
+	data := md.Values(TracingMDKey)
+	if len(data) == 0 {
+		return nil, nil
+	}
+	r := bytes.NewReader(data[0])
 	spanCtx, err := tracer.Extract(ot.Binary, r)
 	if err == ot.ErrSpanContextNotFound {
-		// ErrSpanContextNotFound is not error.
 		err = nil
 	}
 	return spanCtx, err
