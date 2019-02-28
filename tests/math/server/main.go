@@ -20,7 +20,7 @@ const (
 type Math struct{}
 
 func (m Math) Sum(ctx context.Context, input *mathapi.SumRequest) (output *mathapi.SumReply, err error) {
-	log.Printf("Got RPC call Sum(%v), seq: %s\n", input.Args, nproto.CurrRPCMetaData(ctx).Get(seqKey))
+	log.Printf("Got RPC call Sum(%v), seq: %+q\n", input.Args, nproto.MDFromIncomingContext(ctx).Values(seqKey)[0])
 	reply := &mathapi.SumReply{}
 	for _, arg := range input.Args {
 		reply.Sum += arg

@@ -149,10 +149,12 @@ func main() {
 	for _, d := range durations {
 		h.RecordValue(int64(d))
 	}
+	avg := time.Duration(h.Mean())
 
 	log.Printf("Elapse=%v\n", elapse.String())
 	log.Printf("Actual call rate=%6.3f RPC/sec\n", throughput)
 	log.Printf("Median latency=%v\n", m)
+	log.Printf("Avg latency=%v\n", avg)
 	log.Printf("Actual concurency=%6.3f\n", concurrencyActual)
 	log.Printf("Latency HDR Percentiles:\n")
 	log.Printf("10:       %v\n", time.Duration(h.ValueAtQuantile(10)))

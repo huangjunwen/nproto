@@ -37,12 +37,12 @@ func main() {
 	seq := 1
 	for {
 		ctx, _ := context.WithTimeout(context.Background(), time.Second)
-		ctx = nproto.NewOutgoingContext(ctx, nproto.NewMetaDataPairs(seqKey, fmt.Sprintf("%d", seq)))
+		ctx = nproto.NewOutgoingContextWithMD(ctx, nproto.NewMetaDataPairs(seqKey, fmt.Sprintf("%d", seq)))
 		args := make([]float64, rand.Intn(3))
 		for i := 0; i < len(args); i++ {
 			args[i] = float64(rand.Intn(100))
 		}
-		log.Printf("Calling Sum(%v) seq: %+q\n", args, nproto.FromOutgoingContext(ctx).Get(seqKey))
+		log.Printf("Calling Sum(%v) seq: %+q\n", args, nproto.MDFromOutgoingContext(ctx).Values(seqKey)[0])
 
 		sum, err := svc.Sum(ctx, &mathapi.SumRequest{Args: args})
 		if err != nil {

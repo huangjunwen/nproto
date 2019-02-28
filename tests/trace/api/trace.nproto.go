@@ -13,7 +13,7 @@ import (
 var (
 	_ = context.Background
 	_ = proto.Int
-	_ = nproto.NewRPCCtx
+	_ = nproto.NewMetaDataPairs
 )
 
 // @@protoc_insertion_point(imports)
@@ -66,11 +66,12 @@ func SubscribeRecursiveDepthNegative(subscriber nproto.MsgSubscriber, subject, q
 	return subscriber.Subscribe(
 		subject,
 		queue,
-		func() proto.Message {
-			return &RecursiveDepthNegative{}
-		},
-		func(ctx context.Context, m proto.Message) error {
-			return handler(ctx, m.(*RecursiveDepthNegative))
+		func(ctx context.Context, msgData []byte) error {
+			msg := &RecursiveDepthNegative{}
+			if err := proto.Unmarshal(msgData, msg); err != nil {
+				return err
+			}
+			return handler(ctx, msg)
 		},
 		opts...,
 	)

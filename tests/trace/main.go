@@ -8,10 +8,9 @@ import (
 	"time"
 
 	"github.com/huangjunwen/nproto/nproto"
-	"github.com/huangjunwen/nproto/nproto/npmsg"
 	"github.com/huangjunwen/nproto/nproto/npmsg/durconn"
 	"github.com/huangjunwen/nproto/nproto/nprpc"
-	"github.com/huangjunwen/nproto/nproto/trace"
+	"github.com/huangjunwen/nproto/nproto/tracing"
 	nats "github.com/nats-io/go-nats"
 	opentracing "github.com/opentracing/opentracing-go"
 	jaeger "github.com/uber/jaeger-client-go"
@@ -21,7 +20,7 @@ import (
 )
 
 var (
-	publisher nproto.MsgPublisher
+	publisher *nproto.PBPublisher
 	svc       traceapi.Trace // client service
 	wait      chan struct{}
 )
@@ -114,7 +113,7 @@ func main() {
 			log.Printf("NatsRPCServer closed.\n")
 		}()
 
-		tserver := trace.NewTracedRPCServer(server, tracer)
+		tserver := tracing.NewTracedRPCServer(server, tracer)
 		if err := traceapi.ServeTrace(tserver, traceapi.SvcName, Trace{}); err != nil {
 			log.Panic(err)
 		}
@@ -131,7 +130,7 @@ func main() {
 			log.Printf("NatsRPCClient closed.\n")
 		}()
 
-		tclient := trace.NewTracedRPCClient(client, tracer)
+		tclient := tracing.NewTracedRPCClient(client, tracer)
 		svc = traceapi.InvokeTrace(tclient, traceapi.SvcName)
 	}
 
@@ -150,12 +149,14 @@ func main() {
 	}
 
 	{
-		publisher = trace.NewTracedMsgPublisher(npmsg.NewMsgPublisher(dc, nil), tracer)
+		publisher = &nproto.PBPublisher{
+			Publisher: tracing.NewTracedMsgPublisher(dc, tracer),
+		}
 		log.Printf("Publisher created.\n")
 	}
 
 	{
-		subscriber := trace.NewTracedMsgSubscriber(npmsg.NewMsgSubscriber(dc, nil), tracer)
+		subscriber := tracing.NewTracedMsgSubscriber(dc, tracer)
 		log.Printf("Subscriber created.\n")
 		err = traceapi.SubscribeRecursiveDepthNegative(
 			subscriber,

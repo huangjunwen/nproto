@@ -15,7 +15,7 @@ import (
 var (
 	_ = context.Background
 	_ = proto.Int
-	_ = nproto.NewRPCCtx
+	_ = nproto.NewMetaDataPairs
 )
 
 // @@protoc_insertion_point(imports)
