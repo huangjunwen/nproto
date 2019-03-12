@@ -202,7 +202,6 @@ func TestNatsRPC(t *testing.T) {
 		if err != nil {
 			log.Panic(err)
 		}
-		defer client1.Close()
 		log.Printf("NatsRPCClient 1 created.\n")
 
 		client2, err = NewNatsRPCClient(
@@ -213,7 +212,6 @@ func TestNatsRPC(t *testing.T) {
 		if err != nil {
 			log.Panic(err)
 		}
-		defer client2.Close()
 		log.Printf("NatsRPCClient 2 created.\n")
 	}
 
@@ -330,7 +328,6 @@ func TestSvcUnavailable(t *testing.T) {
 		if err != nil {
 			log.Panic(err)
 		}
-		defer client.Close()
 		log.Printf("NatsRPCClient created.\n")
 	}
 
@@ -519,7 +516,6 @@ func BenchmarkNatsRPC(b *testing.B) {
 		if err != nil {
 			log.Panic(err)
 		}
-		defer client.Close()
 	}
 
 	ping := client.MakeHandler(svcName, pingMethod)

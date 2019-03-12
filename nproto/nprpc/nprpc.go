@@ -28,7 +28,7 @@ var (
 )
 
 var (
-	// ErrSvcUnavailable is returned if the service is too busy.
+	// ErrSvcUnavailable is returned if the service is too busy to handle a request.
 	ErrSvcUnavailable = errors.New("SVC_UNAVAILABLE")
 	// ErrMethodNotFound is returned if the method is not found.
 	ErrMethodNotFound = errors.New("METHO_NOT_FOUND")
@@ -47,33 +47,33 @@ var (
 	ErrDupMethodName = func(methodName string) error {
 		return fmt.Errorf("nproto.nprpc.NatsRPCServer: Duplicated method %+q", methodName)
 	}
-	// ErrClientClosed is returned if the client has been closed.
-	ErrClientClosed = errors.New("nproto.nprpc.NatsRPCClient: Client closed")
 )
 
-// NatsRPCServer implements RPCServer.
+// NatsRPCServer implements nproto.RPCServer interface.
 type NatsRPCServer struct {
 	// Options.
 	logger        zerolog.Logger
-	subjectPrefix string
-	group         string // server group
-	runner        taskrunner.TaskRunner
+	subjectPrefix string                // subject prefix in nats namespace
+	group         string                // server group
+	runner        taskrunner.TaskRunner // runner for handlers
+
+	// Immutable fields.
+	nc *nats.Conn
 
 	// Mutable fields.
-	mu   sync.RWMutex
-	nc   *nats.Conn                    // nil if closed
-	svcs map[string]*nats.Subscription // svcName -> Subscription
+	mu     sync.Mutex
+	closed bool
+	svcs   map[string]*nats.Subscription // svcName -> Subscription
 }
 
-// NatsRPCClient implements RPCClient.
+// NatsRPCClient implements nproto.RPCClient interface.
 type NatsRPCClient struct {
 	// Options.
-	subjectPrefix string // subject prefix
+	subjectPrefix string // subject prefix in nats namespace
 	encoding      string // rpc encoding
 
-	// Mutable fields.
-	mu sync.RWMutex
-	nc *nats.Conn // nil if closed
+	// Immutable fields.
+	nc *nats.Conn
 }
 
 // ServerOption is option in creating NatsRPCServer.
@@ -113,7 +113,7 @@ func NewNatsRPCServer(nc *nats.Conn, opts ...ServerOption) (*NatsRPCServer, erro
 	return server, nil
 }
 
-// RegistSvc implements RPCServer interface.
+// RegistSvc implements nproto.RPCServer interface.
 func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*nproto.RPCMethod]nproto.RPCHandler) (err error) {
 	// Create msg handler.
 	handler, err := server.msgHandler(svcName, methods)
@@ -126,7 +126,7 @@ func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*nproto.RPCMe
 		server.mu.Lock()
 		defer server.mu.Unlock()
 
-		if server.nc == nil {
+		if server.closed {
 			return ErrServerClosed
 		}
 		if _, ok := server.svcs[svcName]; ok {
@@ -164,7 +164,7 @@ func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*nproto.RPCMe
 
 	// Set subscription.
 	server.mu.Lock()
-	if server.nc == nil {
+	if server.closed {
 		err = ErrServerClosed
 	} else {
 		server.svcs[svcName] = sub
@@ -173,7 +173,7 @@ func (server *NatsRPCServer) RegistSvc(svcName string, methods map[*nproto.RPCMe
 	return
 }
 
-// DeregistSvc implements RPCServer interface.
+// DeregistSvc implements nproto.RPCServer interface.
 func (server *NatsRPCServer) DeregistSvc(svcName string) error {
 	// Pop svcName.
 	server.mu.Lock()
@@ -188,18 +188,20 @@ func (server *NatsRPCServer) DeregistSvc(svcName string) error {
 	return nil
 }
 
-// Close stops the server and deregist all registered services.
+// Close deregist all registered services and set status to closed. To graceful shutdown
+// the server, one should first call this method then wait the task runner to finish
+// all ongoing tasks.
 func (server *NatsRPCServer) Close() error {
 	// Set nc to nil to indicate close.
 	server.mu.Lock()
-	nc := server.nc
+	closed := server.closed
 	svcs := server.svcs
-	server.nc = nil
+	server.closed = true
 	server.svcs = nil
 	server.mu.Unlock()
 
 	// Already closed.
-	if nc == nil {
+	if closed {
 		return ErrServerClosed
 	}
 
@@ -307,21 +309,13 @@ func (server *NatsRPCServer) replyError(subj string, err error, encoder enc.RPCS
 	}, encoder)
 }
 
+// NOTE: reply can be called after Close is called.
 func (server *NatsRPCServer) reply(subj string, r *enc.RPCReply, encoder enc.RPCServerEncoder) {
 
 	var (
 		data []byte
 		err  error
 	)
-
-	// Check closed.
-	server.mu.RLock()
-	nc := server.nc
-	server.mu.RUnlock()
-	if nc == nil {
-		err = ErrServerClosed
-		goto Err
-	}
 
 	// Encode reply.
 	data, err = encoder.EncodeReply(r)
@@ -335,7 +329,7 @@ func (server *NatsRPCServer) reply(subj string, r *enc.RPCReply, encoder enc.RPC
 	}
 
 	// Publish reply.
-	err = nc.Publish(subj, data)
+	err = server.nc.Publish(subj, data)
 	if err != nil {
 		goto Err
 	}
@@ -367,7 +361,7 @@ func NewNatsRPCClient(nc *nats.Conn, opts ...ClientOption) (*NatsRPCClient, erro
 	return client, nil
 }
 
-// MakeHandler implements RPCClient interface.
+// MakeHandler implements nproto.RPCClient interface.
 func (client *NatsRPCClient) MakeHandler(svcName string, method *nproto.RPCMethod) nproto.RPCHandler {
 
 	var encoder enc.RPCClientEncoder
@@ -381,17 +375,13 @@ func (client *NatsRPCClient) MakeHandler(svcName string, method *nproto.RPCMetho
 
 	return func(ctx context.Context, input proto.Message) (proto.Message, error) {
 
-		// Get conn and check closed.
-		client.mu.RLock()
-		nc := client.nc
-		client.mu.RUnlock()
-		if nc == nil {
-			return nil, ErrClientClosed
-		}
-
 		// Construct request.
 		req := &enc.RPCRequest{
 			Param: input,
+		}
+		md := nproto.MDFromOutgoingContext(ctx)
+		if md != nil {
+			req.MD = md
 		}
 		if dl, ok := ctx.Deadline(); ok {
 			dur := dl.Sub(time.Now())
@@ -399,10 +389,6 @@ func (client *NatsRPCClient) MakeHandler(svcName string, method *nproto.RPCMetho
 				return nil, context.DeadlineExceeded
 			}
 			req.Timeout = dur
-		}
-		md := nproto.MDFromOutgoingContext(ctx)
-		if md != nil {
-			req.MD = md
 		}
 
 		// Encode request.
@@ -412,7 +398,7 @@ func (client *NatsRPCClient) MakeHandler(svcName string, method *nproto.RPCMetho
 		}
 
 		// Send request.
-		msg, err := nc.RequestWithContext(ctx, fullSubject, data)
+		msg, err := client.nc.RequestWithContext(ctx, fullSubject, data)
 		if err != nil {
 			return nil, err
 		}
@@ -428,17 +414,4 @@ func (client *NatsRPCClient) MakeHandler(svcName string, method *nproto.RPCMetho
 		// Return.
 		return rep.Result, rep.Error
 	}
-}
-
-// Close closes the client.
-func (client *NatsRPCClient) Close() error {
-	client.mu.Lock()
-	nc := client.nc
-	client.nc = nil
-	client.mu.Unlock()
-
-	if nc == nil {
-		return ErrClientClosed
-	}
-	return nil
 }
