@@ -188,9 +188,7 @@ func (server *NatsRPCServer) DeregistSvc(svcName string) error {
 	return nil
 }
 
-// Close deregist all registered services and set status to closed. To graceful shutdown
-// the server, one should first call this method then wait the task runner to finish
-// all ongoing tasks.
+// Close deregist all registered services and set status to closed.
 func (server *NatsRPCServer) Close() error {
 	// Set nc to nil to indicate close.
 	server.mu.Lock()
