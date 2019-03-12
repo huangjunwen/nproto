@@ -28,14 +28,14 @@ var (
 )
 
 var (
-	// ErrSvcUnavailable is returned if the service is too busy to handle a request.
+	// ErrSvcUnavailable is returned if the service is not available to handle a request.
 	ErrSvcUnavailable = errors.New("SVC_UNAVAILABLE")
 	// ErrMethodNotFound is returned if the method is not found.
 	ErrMethodNotFound = errors.New("METHO_NOT_FOUND")
 )
 
 var (
-	// ErrNCMaxReconnect is returned if nc has MaxReconnects < 0.
+	// ErrNCMaxReconnect is returned if nc has MaxReconnects >= 0.
 	ErrNCMaxReconnect = errors.New("nproto.nprpc: nats.Conn should have MaxReconnects < 0")
 	// ErrServerClosed is returned if the server has been closed.
 	ErrServerClosed = errors.New("nproto.nprpc.NatsRPCServer: Server closed")

@@ -441,27 +441,44 @@ func TestRegist(t *testing.T) {
 		}
 	)
 
-	// Regist should ok.
-	assert.NoError(server.RegistSvc("test1", nil))
-	assert.Len(server.svcs, 1)
+	{
+		// Regist should ok.
+		assert.NoError(server.RegistSvc("test1", nil))
+		assert.Len(server.svcs, 1)
 
-	// Regist should failed since service name duplication.
-	assert.Error(server.RegistSvc("test1", nil))
-	assert.Len(server.svcs, 1)
+		// Regist should failed since service name duplication.
+		assert.Error(server.RegistSvc("test1", nil))
+		assert.Len(server.svcs, 1)
+	}
 
-	// Regist should failed since method name duplication.
-	assert.Error(server.RegistSvc("test2", map[*nproto.RPCMethod]nproto.RPCHandler{
-		dupMethod:  dupHandler,
-		dupMethod2: dupHandler,
-	}))
-	assert.Len(server.svcs, 1)
+	{
+		// Regist should failed since method name duplication.
+		assert.Error(server.RegistSvc("test2", map[*nproto.RPCMethod]nproto.RPCHandler{
+			dupMethod:  dupHandler,
+			dupMethod2: dupHandler,
+		}))
+		assert.Len(server.svcs, 1)
+	}
 
-	// Now shut down the connection.
-	nc.Close()
+	{
+		// Now shut down the connection.
+		nc.Close()
 
-	// Regist should failed since connection closed.
-	assert.Error(server.RegistSvc("test2", nil))
-	assert.Len(server.svcs, 1)
+		// Regist should failed since connection closed.
+		assert.Error(server.RegistSvc("test3", nil))
+		assert.Len(server.svcs, 1)
+	}
+
+	{
+		// Now close the server.
+		assert.NoError(server.Close())
+		assert.Len(server.svcs, 0)
+
+		// Regist should failed since server closed.
+		assert.Error(server.RegistSvc("test4", nil))
+		assert.Len(server.svcs, 0)
+	}
+
 }
 
 func BenchmarkNatsRPC(b *testing.B) {
