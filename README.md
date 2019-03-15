@@ -5,17 +5,16 @@
 [![Build Status](https://travis-ci.org/huangjunwen/nproto.svg?branch=master)](https://travis-ci.org/huangjunwen/nproto) 
 [![codecov](https://codecov.io/gh/huangjunwen/nproto/branch/master/graph/badge.svg)](https://codecov.io/gh/huangjunwen/nproto)
 
-Some common patterns using [NATS](https://nats.io) ([gnatsd](https://github.com/nats-io/gnatsd)/[nats-streaming-server](https://github.com/nats-io/nats-streaming-server)) with [protocol-buffer](https://developers.google.com/protocol-buffers/).
+Some easy to use components using [NATS](https://nats.io) ([gnatsd](https://github.com/nats-io/gnatsd)/[nats-streaming-server](https://github.com/nats-io/nats-streaming-server)) with [protocol-buffer](https://developers.google.com/protocol-buffers/).
 
-## Features
+## Components
 
-- [x] An RPC library using nats as transport with json/protobuf encoding: [nprpc](https://godoc.org/github.com/huangjunwen/nproto/nproto/nprpc)
-- [ ] Message stream over nats
-- [x] Reliable message delivery over nats-streaming with json/protobuf encoding: [npmsg](https://godoc.org/github.com/huangjunwen/nproto/nproto/npmsg)
-  - [x] Auto reconnection/resubscription client for nats-streaming: [durconn](https://godoc.org/github.com/huangjunwen/nproto/nproto/npmsg/durconn)
-  - [x] Reliable message delivery from RDBMS to downstream publisher: [dbstore](https://godoc.org/github.com/huangjunwen/nproto/nproto/npmsg/dbstore)
-- [x] Protoc plugin to generate stub code for above libraries: protoc-gen-nproto
-- [x] Opentracing support: [trace](https://godoc.org/github.com/huangjunwen/nproto/nproto/trace)
+- [x] RPC server/client using nats as transport with json/protobuf encoding: [nprpc](https://godoc.org/github.com/huangjunwen/nproto/nproto/nprpc)
+- [x] Auto reconnection/resubscription client for nats-streaming: [durconn](https://godoc.org/github.com/huangjunwen/nproto/nproto/npmsg/durconn)
+- [x] Pipeline msgs from RDBMS to downstream publisher: [dbstore](https://godoc.org/github.com/huangjunwen/nproto/nproto/npmsg/dbpipe)
+- [x] Protoc plugin to generate stub code for above components: protoc-gen-nproto
+- [x] Task runner to contorl resource usage: [taskrunner](https://godoc.org/github.com/huangjunwen/nproto/nproto/taskrunner)
+- [x] Opentracing support: [tracing](https://godoc.org/github.com/huangjunwen/nproto/nproto/tracing)
 
 ## Install
 

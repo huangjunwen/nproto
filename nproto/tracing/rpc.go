@@ -10,11 +10,13 @@ import (
 	"github.com/huangjunwen/nproto/nproto"
 )
 
+// TracedRPCClient wraps nproto.RPCClient to support opentracing.
 type TracedRPCClient struct {
 	client nproto.RPCClient
 	tracer ot.Tracer
 }
 
+// TracedRPCServer wraps nproto.RPCServer to support opentracing.
 type TracedRPCServer struct {
 	server nproto.RPCServer
 	tracer ot.Tracer
@@ -25,6 +27,7 @@ var (
 	_ nproto.RPCClient = (*TracedRPCClient)(nil)
 )
 
+// NewTracedRPCClient wraps a nproto.RPCClient to TracedRPCClient.
 func NewTracedRPCClient(client nproto.RPCClient, tracer ot.Tracer) *TracedRPCClient {
 	return &TracedRPCClient{
 		client: client,
@@ -69,6 +72,7 @@ func (client *TracedRPCClient) MakeHandler(svcName string, method *nproto.RPCMet
 	}
 }
 
+// NewTracedRPCServer wraps a nproto.RPCServer to TracedRPCServer.
 func NewTracedRPCServer(server nproto.RPCServer, tracer ot.Tracer) *TracedRPCServer {
 	return &TracedRPCServer{
 		server: server,

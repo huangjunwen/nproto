@@ -9,14 +9,17 @@ import (
 	"github.com/huangjunwen/nproto/nproto"
 )
 
+// TracedMsgPublisher wraps nproto.MsgPublisher to support opentracing.
 type TracedMsgPublisher struct {
 	publisher  nproto.MsgPublisher
 	tracer     ot.Tracer
 	downstream bool
 }
 
+// TraceMsgAsyncPublisher wraps nproto.MsgAsyncPublisher to support opentracing.
 type TraceMsgAsyncPublisher TracedMsgPublisher
 
+// TracedMsgSubscriber wraps nproto.MsgSubscriber to support opentracing.
 type TracedMsgSubscriber struct {
 	subscriber nproto.MsgSubscriber
 	tracer     ot.Tracer
@@ -28,6 +31,7 @@ var (
 	_ nproto.MsgSubscriber     = (*TracedMsgSubscriber)(nil)
 )
 
+// NewTracedMsgPublisher wraps a nproto.MsgPublisher to TracedMsgPublisher.
 func NewTracedMsgPublisher(publisher nproto.MsgPublisher, tracer ot.Tracer) *TracedMsgPublisher {
 	return &TracedMsgPublisher{
 		publisher: publisher,
@@ -35,6 +39,7 @@ func NewTracedMsgPublisher(publisher nproto.MsgPublisher, tracer ot.Tracer) *Tra
 	}
 }
 
+// NewDownstreamTracedMsgPublisher wraps a nproto.MsgPublisher to TracedMsgPublisher. It is used in pipeline downstream.
 func NewDownstreamTracedMsgPublisher(publisher nproto.MsgPublisher, tracer ot.Tracer) *TracedMsgPublisher {
 	return &TracedMsgPublisher{
 		publisher:  publisher,
@@ -43,6 +48,7 @@ func NewDownstreamTracedMsgPublisher(publisher nproto.MsgPublisher, tracer ot.Tr
 	}
 }
 
+// NewTracedMsgAsyncPublisher wraps a nproto.MsgAsyncPublisher to TraceMsgAsyncPublisher.
 func NewTracedMsgAsyncPublisher(publisher nproto.MsgAsyncPublisher, tracer ot.Tracer) *TraceMsgAsyncPublisher {
 	return &TraceMsgAsyncPublisher{
 		publisher: publisher,
@@ -50,6 +56,7 @@ func NewTracedMsgAsyncPublisher(publisher nproto.MsgAsyncPublisher, tracer ot.Tr
 	}
 }
 
+// NewDownstreamTracedMsgAsyncPublisher wraps a nproto.MsgAsyncPublisher to TraceMsgAsyncPublisher. It is used in pipeline downstream.
 func NewDownstreamTracedMsgAsyncPublisher(publisher nproto.MsgAsyncPublisher, tracer ot.Tracer) *TraceMsgAsyncPublisher {
 	return &TraceMsgAsyncPublisher{
 		publisher:  publisher,
@@ -58,6 +65,7 @@ func NewDownstreamTracedMsgAsyncPublisher(publisher nproto.MsgAsyncPublisher, tr
 	}
 }
 
+// Publish implements nproto.MsgPublisher interface.
 func (publisher *TracedMsgPublisher) Publish(ctx context.Context, subject string, msgData []byte) (err error) {
 
 	tracer := publisher.tracer
@@ -105,10 +113,12 @@ func (publisher *TracedMsgPublisher) Publish(ctx context.Context, subject string
 	return
 }
 
+// Publish implements nproto.MsgAsyncPublisher interface.
 func (publisher *TraceMsgAsyncPublisher) Publish(ctx context.Context, subject string, msgData []byte) error {
 	return (*TracedMsgPublisher)(publisher).Publish(ctx, subject, msgData)
 }
 
+// PublishAsync implements nproto.MsgAsyncPublisher interface.
 func (publisher *TraceMsgAsyncPublisher) PublishAsync(ctx context.Context, subject string, msgData []byte, cb func(error)) (err error) {
 
 	tracer := publisher.tracer
@@ -163,6 +173,7 @@ func (publisher *TraceMsgAsyncPublisher) PublishAsync(ctx context.Context, subje
 	return
 }
 
+// NewTracedMsgSubscriber wraps a nproto.MsgSubscriber to TracedMsgSubscriber.
 func NewTracedMsgSubscriber(subscriber nproto.MsgSubscriber, tracer ot.Tracer) *TracedMsgSubscriber {
 	return &TracedMsgSubscriber{
 		subscriber: subscriber,
@@ -170,6 +181,7 @@ func NewTracedMsgSubscriber(subscriber nproto.MsgSubscriber, tracer ot.Tracer) *
 	}
 }
 
+// Subscribe implements nproto.MsgSubscriber interface.
 func (subscriber *TracedMsgSubscriber) Subscribe(subject string, queue string, handler nproto.MsgHandler, opts ...interface{}) error {
 
 	tracer := subscriber.tracer
