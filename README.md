@@ -11,7 +11,7 @@ Some easy to use components using [NATS](https://nats.io) ([gnatsd](https://gith
 
 - [x] RPC server/client using nats as transport with json/protobuf encoding: [nprpc](https://godoc.org/github.com/huangjunwen/nproto/nproto/nprpc)
 - [x] Auto reconnection/resubscription client for nats-streaming: [durconn](https://godoc.org/github.com/huangjunwen/nproto/nproto/npmsg/durconn)
-- [x] Pipeline msgs from RDBMS to downstream publisher: [dbstore](https://godoc.org/github.com/huangjunwen/nproto/nproto/npmsg/dbpipe)
+- [x] Pipeline msgs from RDBMS to downstream publisher: [dbpipe](https://godoc.org/github.com/huangjunwen/nproto/nproto/npmsg/dbpipe)
 - [x] Protoc plugin to generate stub code for above components: protoc-gen-nproto
 - [x] Task runner to contorl resource usage: [taskrunner](https://godoc.org/github.com/huangjunwen/nproto/nproto/taskrunner)
 - [x] Opentracing support: [tracing](https://godoc.org/github.com/huangjunwen/nproto/nproto/tracing)
