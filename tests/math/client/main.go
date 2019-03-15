@@ -31,7 +31,6 @@ func main() {
 		log.Panic(err)
 	}
 	log.Printf("NatsRPCClient created.\n")
-	defer client.Close()
 
 	svc := mathapi.InvokeMath(client, mathapi.SvcName)
 	seq := 1

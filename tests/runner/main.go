@@ -65,7 +65,6 @@ func main() {
 	if err != nil {
 		log.Panic(err)
 	}
-	defer client.Close()
 	log.Printf("NatsRPCClient created.\n")
 
 	// Creates client service.

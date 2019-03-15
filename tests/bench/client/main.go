@@ -73,7 +73,6 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		defer client.Close()
 
 		svcs[i] = benchapi.InvokeBench(client, benchapi.SvcName)
 	}

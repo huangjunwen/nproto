@@ -125,10 +125,6 @@ func main() {
 			log.Panic(err)
 		}
 		log.Printf("NatsRPCClient created.\n")
-		defer func() {
-			client.Close()
-			log.Printf("NatsRPCClient closed.\n")
-		}()
 
 		tclient := tracing.NewTracedRPCClient(client, tracer)
 		svc = traceapi.InvokeTrace(tclient, traceapi.SvcName)

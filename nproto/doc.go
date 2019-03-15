@@ -1,2 +1,2 @@
-// Package nproto contains high level interfaces and functions.
+// Package nproto contains high level types and functions.
 package nproto

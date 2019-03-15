@@ -19,18 +19,18 @@ import (
 )
 
 var (
+	// DefaultSubjectPrefix is the default value of OptSubjectPrefix.
+	DefaultSubjectPrefix = "npmsg"
 	// DefaultReconnectWait is the default value of OptReconnectWait.
 	DefaultReconnectWait = 5 * time.Second
 	// DefaultSubRetryWait is the default value of SubOptRetryWait.
 	DefaultSubRetryWait = 5 * time.Second
 	// DefaultPubAckWait is the default value of OptPubAckWait.
 	DefaultPubAckWait = 2 * time.Second
-	// DefaultSubjectPrefix is the default value of OptSubjectPrefix.
-	DefaultSubjectPrefix = "npmsg"
 )
 
 var (
-	// ErrNCMaxReconnect is returned if nc has MaxReconnects < 0.
+	// ErrNCMaxReconnect is returned if nc has MaxReconnects >= 0.
 	ErrNCMaxReconnect = errors.New("nproto.npmsg.durconn.NewDurConn: nats.Conn should have MaxReconnects < 0")
 	// ErrClosed is returned when the DurConn has been closed.
 	ErrClosed = errors.New("nproto.npmsg.durconn.DurConn: Closed.")
@@ -53,9 +53,7 @@ var (
 	_ nproto.MsgSubscriber     = (*DurConn)(nil)
 )
 
-// DurConn implements a "durable" connection to nats-streaming server for
-// auto reconnection and auto resubscription. It implements nproto.MsgAsyncPublisher
-// and nproto.MsgSubscriber interfaces.
+// DurConn implements nproto.MsgAsyncPublisher and nproto.MsgSubscriber interfaces.
 type DurConn struct {
 	// Options.
 	logger        zerolog.Logger

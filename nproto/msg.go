@@ -36,6 +36,7 @@ type MsgSubscriber interface {
 	// Subscribe subscribes to a given subject. One subject can have many queues.
 	// In normal case (excpet message redelivery) each message will be delivered to
 	// one member of each queue.
+	// Order of messages is not guaranteed since redelivery.
 	Subscribe(subject, queue string, handler MsgHandler, opts ...interface{}) error
 }
 

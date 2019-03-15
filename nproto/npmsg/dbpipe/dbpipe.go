@@ -40,37 +40,6 @@ var (
 )
 
 // DBMsgPublisherPipe is used as a publisher pipeline from RDBMS to downstream publisher.
-// Typical workflow (ignore error handling):
-//
-//    // Creates DBMsgPublisherPipe.
-//    // `downstream` specifies the sink of pipeline.
-//    // `dialect` specifies the dialect of RDBMS.
-//    // `db`/`table` specify which table to store message data.
-//    pipe, _ := NewDBMsgPublisherPipe(downstream, dialect, db, table)
-//
-//    // Starts a transaction.
-//    tx, _ := db.BeginTx()
-//    defer tx.Rollback()
-//
-//    // Creates a MsgPublisher for this transaction.
-//    publisher := pipe.NewMsgPublisher(tx)
-//
-//    // ... Some db operations ...
-//
-//    // Publishes message. The message (as well as MetaData attached to `ctx`)
-//    // will be saved to database. Note that the message can be rollbacked.
-//    publisher.Publish(ctx, "subject", "data")
-//
-//    // ... Some more db operations ...
-//
-//    if everythingIsOK {
-//       tx.Commit()
-//       // If the transaction has been committed successfully. Flush messages
-//       // to downstream. There is also a background redelivery loop in DBMsgPublisherPipe
-//       // to flush periodically to ensure committed messages publishing to downstream at
-//       // least once.
-//       publisher.Flush(ctx)
-//    }
 type DBMsgPublisherPipe struct {
 	// Options.
 	logger           zerolog.Logger
@@ -360,7 +329,7 @@ L:
 	pubwg.Wait()
 
 	// Delete.
-	pipe.deleteMsgList(&succList, nil, nil)
+	pipe.deleteMsgList(&succList, nil)
 
 	// Cleanup.
 	list.Reset()
@@ -383,7 +352,6 @@ func (pipe *DBMsgPublisherPipe) flushMsgStream(ctx context.Context, stream msgSt
 	delwg.Add(1)
 	go func() {
 		ok := true
-		idsBuff := []int64{} // Reusable buffer.
 		for ok {
 			// NOTE: When delc is closed, ok will become false.
 			// But we still need to run one more time.
@@ -397,7 +365,7 @@ func (pipe *DBMsgPublisherPipe) flushMsgStream(ctx context.Context, stream msgSt
 			mu.Unlock()
 
 			// Delete msgs in procList.
-			pipe.deleteMsgList(procList, idsBuff, taskc)
+			pipe.deleteMsgList(procList, taskc)
 
 			// Cleanup.
 			procList.Reset()
@@ -470,32 +438,33 @@ L:
 	procList.Reset()
 }
 
-func (pipe *DBMsgPublisherPipe) deleteMsgList(list *msgList, idsBuff []int64, taskc chan struct{}) {
+func (pipe *DBMsgPublisherPipe) deleteMsgList(list *msgList, taskc chan struct{}) {
 	if list.n == 0 {
 		return
 	}
 	iter := list.Iterate()
 	end := false
+	ids := []int64{}
 	for !end {
 		// Collect no more than maxDelBulkSz message ids.
-		idsBuff = idsBuff[0:0]
-		for len(idsBuff) < pipe.maxDelBulkSz {
+		ids = ids[0:0]
+		for len(ids) < pipe.maxDelBulkSz {
 			node := iter()
 			if node == nil {
 				end = true
 				break
 			}
-			idsBuff = append(idsBuff, node.Id)
+			ids = append(ids, node.Id)
 		}
 
 		// Delete.
-		if err := pipe.dialect.DeleteMsgs(context.Background(), pipe.db, pipe.table, idsBuff); err != nil {
+		if err := pipe.dialect.DeleteMsgs(context.Background(), pipe.db, pipe.table, ids); err != nil {
 			pipe.logger.Error().Err(err).Msg("Delete msg error")
 		}
 
 		// If there is a task channel, finish them.
 		if taskc != nil {
-			for _ = range idsBuff {
+			for _ = range ids {
 				<-taskc
 			}
 		}
