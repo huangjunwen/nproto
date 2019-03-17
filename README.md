@@ -7,6 +7,12 @@
 
 Some easy to use components using [NATS](https://nats.io) ([gnatsd](https://github.com/nats-io/gnatsd)/[nats-streaming-server](https://github.com/nats-io/nats-streaming-server)) with [protocol-buffer](https://developers.google.com/protocol-buffers/).
 
+## Why
+
+> NATS Server is a simple, high performance open source messaging system ....
+
+Simple is very important to me. With a single deployment, one gets a high performance message broker with rpc/service discovery/load balancing/at most(or at least) once message delivery/... all at once.
+
 ## Components
 
 - [x] RPC server/client using nats as transport with json/protobuf encoding: [nprpc](https://godoc.org/github.com/huangjunwen/nproto/nproto/nprpc)
