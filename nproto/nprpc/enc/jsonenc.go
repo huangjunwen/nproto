@@ -20,7 +20,7 @@ type JSONClientEncoder struct{}
 // JSONRequest is request of a RPC call encoded by json.
 type JSONRequest struct {
 	Param    json.RawMessage `json:"param"`
-	MetaData nproto.MetaData `json:"metadata,omitempty"`
+	MetaData nproto.MetaData `json:"metaData,omitempty"`
 	Timeout  int64           `json:"timeout,omitempty"`
 }
 
