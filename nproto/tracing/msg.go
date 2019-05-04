@@ -69,23 +69,34 @@ func NewDownstreamTracedMsgAsyncPublisher(publisher nproto.MsgAsyncPublisher, tr
 func (publisher *TracedMsgPublisher) Publish(ctx context.Context, subject string, msgData []byte) (err error) {
 
 	tracer := publisher.tracer
-	spanRef := ot.ChildOf(nil)
+	var (
+		parentSpanCtx ot.SpanContext
+		spanRef       ot.SpanReference
+	)
 
 	// Gets parent span reference.
 	if publisher.downstream {
-		parentSpanCtx, err := extractSpanCtx(
+		parentSpanCtx, err = extractSpanCtx(
 			tracer,
 			nproto.MDFromOutgoingContext(ctx),
 		)
 		if err != nil {
-			return err
+			return
 		}
-		spanRef = ot.FollowsFrom(parentSpanCtx)
-
+		if parentSpanCtx != nil {
+			spanRef = ot.FollowsFrom(parentSpanCtx)
+		}
 	} else {
-		parentSpanCtx := spanCtxFromCtx(ctx)
-		spanRef = ot.ChildOf(parentSpanCtx)
+		parentSpanCtx = spanCtxFromCtx(ctx)
+		if parentSpanCtx != nil {
+			spanRef = ot.ChildOf(parentSpanCtx)
+		}
+	}
 
+	// Do not start new span if no parent span.
+	if parentSpanCtx == nil {
+		err = publisher.publisher.Publish(ctx, subject, msgData)
+		return
 	}
 
 	// Starts a producer span.
@@ -122,24 +133,35 @@ func (publisher *TraceMsgAsyncPublisher) Publish(ctx context.Context, subject st
 func (publisher *TraceMsgAsyncPublisher) PublishAsync(ctx context.Context, subject string, msgData []byte, cb func(error)) (err error) {
 
 	tracer := publisher.tracer
-	spanRef := ot.ChildOf(nil)
+	var (
+		parentSpanCtx ot.SpanContext
+		spanRef       ot.SpanReference
+	)
 	p := publisher.publisher.(nproto.MsgAsyncPublisher)
 
 	// Gets parent span reference.
 	if publisher.downstream {
-		parentSpanCtx, err := extractSpanCtx(
+		parentSpanCtx, err = extractSpanCtx(
 			tracer,
 			nproto.MDFromOutgoingContext(ctx),
 		)
 		if err != nil {
-			return err
+			return
 		}
-		spanRef = ot.FollowsFrom(parentSpanCtx)
-
+		if parentSpanCtx != nil {
+			spanRef = ot.FollowsFrom(parentSpanCtx)
+		}
 	} else {
-		parentSpanCtx := spanCtxFromCtx(ctx)
-		spanRef = ot.FollowsFrom(parentSpanCtx) // Use FollowFrom since PublishAsync is async op.
+		parentSpanCtx = spanCtxFromCtx(ctx)
+		if parentSpanCtx != nil {
+			spanRef = ot.FollowsFrom(parentSpanCtx) // Use FollowFrom since PublishAsync is async op.
+		}
+	}
 
+	// Do not start new span if no parent span.
+	if parentSpanCtx == nil {
+		err = p.PublishAsync(ctx, subject, msgData, cb)
+		return
 	}
 
 	// Starts a producer span.
@@ -165,8 +187,8 @@ func (publisher *TraceMsgAsyncPublisher) PublishAsync(ctx context.Context, subje
 
 	// PublishAsync.
 	if err = p.PublishAsync(ctx, subject, msgData, func(cbErr error) {
-		fin(cbErr)
 		cb(cbErr)
+		fin(cbErr)
 	}); err != nil {
 		fin(err)
 	}
@@ -194,6 +216,12 @@ func (subscriber *TracedMsgSubscriber) Subscribe(subject string, queue string, h
 			nproto.MDFromIncomingContext(ctx),
 		)
 		if err != nil {
+			return
+		}
+
+		// Do not start new span if no parent span.
+		if parentSpanCtx == nil {
+			err = handler(ctx, msgData)
 			return
 		}
 

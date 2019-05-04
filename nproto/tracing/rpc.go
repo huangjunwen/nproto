@@ -46,6 +46,12 @@ func (client *TracedRPCClient) MakeHandler(svcName string, method *nproto.RPCMet
 		// Gets current span context as parent. Maybe nil.
 		parentSpanCtx := spanCtxFromCtx(ctx)
 
+		// Do not start new span if no parent span.
+		if parentSpanCtx == nil {
+			output, err = handler(ctx, input)
+			return
+		}
+
 		// Starts a client span.
 		span := tracer.StartSpan(
 			opName,
@@ -96,6 +102,12 @@ func (server *TracedRPCServer) RegistSvc(svcName string, methods map[*nproto.RPC
 			// Extracts parent span context from client. Maybe nil.
 			parentSpanCtx, err := extractSpanCtx(tracer, nproto.MDFromIncomingContext(ctx))
 			if err != nil {
+				return
+			}
+
+			// Do not start new span if no parent span.
+			if parentSpanCtx == nil {
+				output, err = handler(ctx, input)
 				return
 			}
 
