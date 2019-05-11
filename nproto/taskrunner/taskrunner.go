@@ -17,17 +17,20 @@ var (
 	DefaultMaxConcurrency = 5 * 1024
 )
 
-var (
-	// DefaultTaskRunner is the default task runner used by nproto packages.
-	DefaultTaskRunner = NewLimitedRunner(DefaultMaxConcurrency, 10*DefaultMaxConcurrency)
-)
-
 // TaskRunner is an interface to run tasks.
 type TaskRunner interface {
 	// Submit submits a task to run. It must return an error if the task can't be run.
 	// The call must not block.
 	Submit(task func()) error
+
+	// Close stops the TaskRunner and waits for all tasks finish.
+	// Any Submit after Close should return an error.
+	Close()
 }
+
+var (
+	_ TaskRunner = (*LimitedRunner)(nil)
+)
 
 // LimitedRunner implements TaskRunner interface. It has two parameters:
 //
@@ -54,9 +57,6 @@ type LimitedRunner struct {
 	q      taskQueue // current task queue: q.n <= maxQueue if maxQueue >= 0
 }
 
-// UnlimitedRunner starts a goroutine for each submitted task.
-type UnlimitedRunner struct{}
-
 // NOTE: Some implementation notes about LimitedRunner, there are three major mutex blocks:
 //
 //   - "add task" block: add task to run or queue.
@@ -79,6 +79,11 @@ type taskQueue struct {
 type taskNode struct {
 	task func()
 	next *taskNode
+}
+
+// NewDefaultLimitedRunner creates a new LimitedRunner with DefaultMaxConcurrency and unlimited queued.
+func NewDefaultLimitedRunner() *LimitedRunner {
+	return NewLimitedRunner(DefaultMaxConcurrency, -1)
 }
 
 // NewLimitedRunner creates a new LimitedRunner. If maxConcurrency <= 0, then DefaultMaxConcurrency will be used.
@@ -171,12 +176,6 @@ func (r *LimitedRunner) Close() {
 		}
 	}
 	r.mu.Unlock()
-}
-
-// Submit implements TaskRunner interface.
-func (r UnlimitedRunner) Submit(task func()) error {
-	go task()
-	return nil
 }
 
 func (q *taskQueue) enqueue(t func()) {

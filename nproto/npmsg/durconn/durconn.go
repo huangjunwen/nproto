@@ -118,7 +118,7 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) (*DurConn, erro
 		decoder:       enc.PBMsgPayloadDecoder{}, // TODO: option
 		connectCb:     func(_ stan.Conn) {},
 		disconnectCb:  func(_ stan.Conn) {},
-		hRunner:       taskrunner.DefaultTaskRunner,
+		hRunner:       taskrunner.NewDefaultLimitedRunner(),
 		sRunner:       taskrunner.NewLimitedRunner(10, -1),
 		stanOptions: []stan.Option{
 			stan.PubAckWait(DefaultPubAckWait),
@@ -140,8 +140,12 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) (*DurConn, erro
 
 }
 
-// Close closes the DurConn.
+// Graceful close the conn.
 func (dc *DurConn) Close() error {
+	// Stops the runner.
+	dc.hRunner.Close()
+
+	// Close connection.
 	oldSc, oldStalec, err := dc.close_()
 	if oldSc != nil {
 		oldSc.Close()

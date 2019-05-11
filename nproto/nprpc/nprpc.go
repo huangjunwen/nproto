@@ -98,7 +98,7 @@ func NewNatsRPCServer(nc *nats.Conn, opts ...ServerOption) (*NatsRPCServer, erro
 		logger:        zerolog.Nop(),
 		subjectPrefix: DefaultSubjectPrefix,
 		group:         DefaultGroup,
-		runner:        taskrunner.DefaultTaskRunner,
+		runner:        taskrunner.NewDefaultLimitedRunner(),
 		nc:            nc,
 		svcs:          make(map[string]*nats.Subscription),
 	}
@@ -188,7 +188,7 @@ func (server *NatsRPCServer) DeregistSvc(svcName string) error {
 	return nil
 }
 
-// Close deregist all registered services and set status to closed.
+// Gracefull close the server.
 func (server *NatsRPCServer) Close() error {
 	// Set nc to nil to indicate close.
 	server.mu.Lock()
@@ -203,12 +203,16 @@ func (server *NatsRPCServer) Close() error {
 		return ErrServerClosed
 	}
 
+	// Stop task runner.
+	server.runner.Close()
+
 	// Unsubscribe.
 	if len(svcs) != 0 {
 		for _, sub := range svcs {
 			sub.Unsubscribe()
 		}
 	}
+
 	return nil
 }
 

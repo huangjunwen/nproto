@@ -34,7 +34,8 @@ func ServerOptGroup(group string) ServerOption {
 	}
 }
 
-// ServerOptTaskRunner sets the task runner to run handlers.
+// ServerOptTaskRunner sets the task runner to run handlers. The runner
+// will be closed when closing the server.
 func ServerOptTaskRunner(runner taskrunner.TaskRunner) ServerOption {
 	return func(server *NatsRPCServer) error {
 		server.runner = runner

@@ -317,7 +317,8 @@ func TestSvcUnavailable(t *testing.T) {
 		if err != nil {
 			log.Panic(err)
 		}
-		defer server.Close()
+		// NOTE: don't call Close() here since the later code will make a never-finish call.
+		// defer server.Close()
 		log.Printf("NatsRPCServer created.\n")
 	}
 

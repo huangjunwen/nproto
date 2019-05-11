@@ -39,14 +39,8 @@ func main() {
 	flag.StringVar(&addr, "u", nats.DefaultURL, "gnatsd addr.")
 	flag.Parse()
 
-	var runner taskrunner.TaskRunner
-	if maxConcurrency <= 0 {
-		runner = taskrunner.UnlimitedRunner{}
-	} else {
-		r := taskrunner.NewLimitedRunner(maxConcurrency, -1)
-		defer r.Close()
-		runner = r
-	}
+	var runner = taskrunner.NewLimitedRunner(maxConcurrency, -1)
+	defer runner.Close()
 
 	log.Printf("Nats URL: %+q\n", addr)
 	if maxConcurrency <= 0 {

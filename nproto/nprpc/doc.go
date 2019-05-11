@@ -3,7 +3,4 @@
 // Servers/clients with same subject prefix within a same nats cluster form a RPC namespace.
 //
 // Metadata (nproto.MD) attached in client (outgoing) side will be passed unmodified to server (incoming) side.
-//
-// To graceful shutdown NatsRPCServer, one should first call Close then wait task runner to finish all
-// ongoing handlers.
 package nprpc

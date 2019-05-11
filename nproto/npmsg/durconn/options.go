@@ -54,7 +54,8 @@ func OptDisconnectCb(fn func(sc stan.Conn)) Option {
 	}
 }
 
-// OptTaskRunner sets the task runner for handlers.
+// OptTaskRunner sets the task runner for handlers. The runner
+// will be closed when closing the DurConn.
 func OptTaskRunner(runner taskrunner.TaskRunner) Option {
 	return func(dc *DurConn) error {
 		dc.hRunner = runner
