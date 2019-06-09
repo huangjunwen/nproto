@@ -13,8 +13,8 @@ import (
 
 	"github.com/huangjunwen/tstsvc"
 	tststan "github.com/huangjunwen/tstsvc/stan"
-	"github.com/nats-io/go-nats"
-	"github.com/nats-io/go-nats-streaming"
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/stan.go"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/huangjunwen/nproto/nproto"

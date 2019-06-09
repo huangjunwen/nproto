@@ -8,7 +8,7 @@ import (
 
 	"github.com/huangjunwen/nproto/nproto"
 	"github.com/huangjunwen/nproto/nproto/nprpc"
-	"github.com/nats-io/go-nats"
+	"github.com/nats-io/nats.go"
 
 	mathapi "github.com/huangjunwen/nproto/tests/math/api"
 )

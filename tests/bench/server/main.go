@@ -10,7 +10,7 @@ import (
 
 	"github.com/huangjunwen/nproto/nproto/nprpc"
 	"github.com/huangjunwen/nproto/nproto/taskrunner"
-	"github.com/nats-io/go-nats"
+	"github.com/nats-io/nats.go"
 
 	benchapi "github.com/huangjunwen/nproto/tests/bench/api"
 )

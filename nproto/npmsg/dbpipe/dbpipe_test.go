@@ -13,8 +13,8 @@ import (
 
 	tstmysql "github.com/huangjunwen/tstsvc/mysql"
 	tststan "github.com/huangjunwen/tstsvc/stan"
-	nats "github.com/nats-io/go-nats"
-	stan "github.com/nats-io/go-nats-streaming"
+	nats "github.com/nats-io/nats.go"
+	stan "github.com/nats-io/stan.go"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/huangjunwen/nproto/nproto"

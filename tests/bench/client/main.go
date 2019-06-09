@@ -14,7 +14,7 @@ import (
 
 	"github.com/codahale/hdrhistogram"
 	"github.com/huangjunwen/nproto/nproto/nprpc"
-	"github.com/nats-io/go-nats"
+	"github.com/nats-io/nats.go"
 	//"go.uber.org/ratelimit"
 	"github.com/juju/ratelimit"
 

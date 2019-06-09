@@ -3,7 +3,7 @@ package durconn
 import (
 	"time"
 
-	"github.com/nats-io/go-nats-streaming"
+	"github.com/nats-io/stan.go"
 	"github.com/rs/zerolog"
 
 	"github.com/huangjunwen/nproto/nproto/taskrunner"

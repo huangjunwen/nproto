@@ -11,7 +11,7 @@ import (
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/huangjunwen/nproto/nproto/nprpc"
 	"github.com/huangjunwen/nproto/nproto/taskrunner"
-	nats "github.com/nats-io/go-nats"
+	nats "github.com/nats-io/nats.go"
 
 	runnerapi "github.com/huangjunwen/nproto/tests/runner/api"
 )

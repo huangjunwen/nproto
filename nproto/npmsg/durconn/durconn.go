@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	nats "github.com/nats-io/go-nats"
-	stan "github.com/nats-io/go-nats-streaming"
+	nats "github.com/nats-io/nats.go"
+	stan "github.com/nats-io/stan.go"
 	"github.com/rs/xid"
 	"github.com/rs/zerolog"
 
@@ -179,7 +179,7 @@ func (dc *DurConn) PublishAsync(ctx context.Context, subject string, msgData []b
 
 	// Publish.
 	// TODO: sc.PublishAsync maybe block in some rare condition:
-	// see https://github.com/nats-io/go-nats-streaming/issues/210
+	// see https://github.com/nats-io/stan.go/issues/210
 	_, err = sc.PublishAsync(
 		fmt.Sprintf("%s.%s", dc.subjectPrefix, subject),
 		data,

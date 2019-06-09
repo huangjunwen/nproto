@@ -11,7 +11,7 @@ import (
 	"github.com/huangjunwen/nproto/nproto/npmsg/durconn"
 	"github.com/huangjunwen/nproto/nproto/nprpc"
 	"github.com/huangjunwen/nproto/nproto/tracing"
-	nats "github.com/nats-io/go-nats"
+	nats "github.com/nats-io/nats.go"
 	opentracing "github.com/opentracing/opentracing-go"
 	jaeger "github.com/uber/jaeger-client-go"
 	jaegercfg "github.com/uber/jaeger-client-go/config"
