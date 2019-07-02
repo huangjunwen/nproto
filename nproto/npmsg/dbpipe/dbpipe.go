@@ -91,8 +91,15 @@ type dbStoreDialect interface {
 // Option is used when createing DBMsgPublisherPipe.
 type Option func(*DBMsgPublisherPipe) error
 
+// TxPlugin is returned from DBMsgPublisherPipe.TxPlugin.
+type TxPlugin struct {
+	pipe      *DBMsgPublisherPipe
+	publisher *DBMsgPublisher
+}
+
 var (
 	_ nproto.MsgPublisher = (*DBMsgPublisher)(nil)
+	_ sqlh.TxPlugin       = (*TxPlugin)(nil)
 )
 
 // NewDBMsgPublisherPipe creates a new DBMsgPublisherPipe.
@@ -160,6 +167,13 @@ func (pipe *DBMsgPublisherPipe) NewMsgPublisher(q sqlh.Queryer) *DBMsgPublisher 
 		q:       q,
 		batch:   xid.New().String(),
 		bufMsgs: &msgList{},
+	}
+}
+
+// TxPlugin returns a sqlh.TxPlugin to use with sqlh.WithTx
+func (pipe *DBMsgPublisherPipe) TxPlugin() *TxPlugin {
+	return &TxPlugin{
+		pipe: pipe,
 	}
 }
 
@@ -528,4 +542,28 @@ func (p *DBMsgPublisher) Flush(ctx context.Context) {
 	// For larger amount of messages, we need to query the db again.
 	pipe.flushMsgStream(ctx, pipe.dialect.SelectMsgsByBatch(context.Background(), pipe.db, pipe.table, p.batch))
 
+}
+
+// TxInitialized implements sqlh.TxPlugin interface.
+func (p *TxPlugin) TxInitialized(db *sql.DB, tx *sql.Tx) error {
+	if p.pipe.db != db {
+		panic(errors.New("TxInitialized: db must be the same as pipe.db"))
+	}
+	p.publisher = p.pipe.NewMsgPublisher(tx)
+	return nil
+}
+
+// TxCommitted implements sqlh.TxPlugin interface.
+func (p *TxPlugin) TxCommitted() {
+	// NOTE: ignore context here
+	p.publisher.Flush(context.Background())
+}
+
+// TxFinalised implements sqlh.TxPlugin interface.
+func (p *TxPlugin) TxFinalised() {
+}
+
+// Publisher returns the publisher for used inside the transaction.
+func (p *TxPlugin) Publisher() nproto.MsgPublisher {
+	return p.publisher
 }

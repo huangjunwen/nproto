@@ -17,41 +17,22 @@ type Queryer interface {
 type TxPlugin interface {
 	// TxInitialized will be called after a transaction started. If an error returned, the transaction
 	// will be rollbacked at once.
-	TxInitialized(db *sql.DB, tx Queryer) error
+	TxInitialized(db *sql.DB, tx *sql.Tx) error
 	// TxCommitted will be called only after the transaction has been successfully committed.
 	TxCommitted()
 	// TxFinalised will be called after the transaction committed/rollbacked.
 	TxFinalised()
 }
 
-// BaseTxPlugin do nothing.
-type BaseTxPlugin struct{}
-
 var (
-	_ Queryer  = (*sql.DB)(nil)
-	_ Queryer  = (*sql.Conn)(nil)
-	_ Queryer  = (*sql.Tx)(nil)
-	_ TxPlugin = BaseTxPlugin{}
+	_ Queryer = (*sql.DB)(nil)
+	_ Queryer = (*sql.Conn)(nil)
+	_ Queryer = (*sql.Tx)(nil)
 )
-
-// TxInitialized implements TxPlugin interface.
-func (p BaseTxPlugin) TxInitialized(db *sql.DB, tx Queryer) error {
-	return nil
-}
-
-// TxCommitted implements TxPlugin interface.
-func (p BaseTxPlugin) TxCommitted() {
-	return
-}
-
-// TxFinalised implements TxPlugin interface.
-func (p BaseTxPlugin) TxFinalised() {
-	return
-}
 
 // WithTx starts a transaction and run fn. If no error is returned, the transaction is committed.
 // Otherwise it is rollbacked.
-func WithTx(db *sql.DB, fn func(Queryer) error, plugins ...TxPlugin) error {
+func WithTx(db *sql.DB, fn func(*sql.Tx) error, plugins ...TxPlugin) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return err
