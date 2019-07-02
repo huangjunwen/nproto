@@ -16,8 +16,8 @@ type TracedMsgPublisher struct {
 	downstream bool
 }
 
-// TraceMsgAsyncPublisher wraps nproto.MsgAsyncPublisher to support opentracing.
-type TraceMsgAsyncPublisher TracedMsgPublisher
+// TracedMsgAsyncPublisher wraps nproto.MsgAsyncPublisher to support opentracing.
+type TracedMsgAsyncPublisher TracedMsgPublisher
 
 // TracedMsgSubscriber wraps nproto.MsgSubscriber to support opentracing.
 type TracedMsgSubscriber struct {
@@ -27,7 +27,7 @@ type TracedMsgSubscriber struct {
 
 var (
 	_ nproto.MsgPublisher      = (*TracedMsgPublisher)(nil)
-	_ nproto.MsgAsyncPublisher = (*TraceMsgAsyncPublisher)(nil)
+	_ nproto.MsgAsyncPublisher = (*TracedMsgAsyncPublisher)(nil)
 	_ nproto.MsgSubscriber     = (*TracedMsgSubscriber)(nil)
 )
 
@@ -48,17 +48,17 @@ func NewDownstreamTracedMsgPublisher(publisher nproto.MsgPublisher, tracer ot.Tr
 	}
 }
 
-// NewTracedMsgAsyncPublisher wraps a nproto.MsgAsyncPublisher to TraceMsgAsyncPublisher.
-func NewTracedMsgAsyncPublisher(publisher nproto.MsgAsyncPublisher, tracer ot.Tracer) *TraceMsgAsyncPublisher {
-	return &TraceMsgAsyncPublisher{
+// NewTracedMsgAsyncPublisher wraps a nproto.MsgAsyncPublisher to TracedMsgAsyncPublisher.
+func NewTracedMsgAsyncPublisher(publisher nproto.MsgAsyncPublisher, tracer ot.Tracer) *TracedMsgAsyncPublisher {
+	return &TracedMsgAsyncPublisher{
 		publisher: publisher,
 		tracer:    tracer,
 	}
 }
 
-// NewDownstreamTracedMsgAsyncPublisher wraps a nproto.MsgAsyncPublisher to TraceMsgAsyncPublisher. It is used in pipeline downstream.
-func NewDownstreamTracedMsgAsyncPublisher(publisher nproto.MsgAsyncPublisher, tracer ot.Tracer) *TraceMsgAsyncPublisher {
-	return &TraceMsgAsyncPublisher{
+// NewDownstreamTracedMsgAsyncPublisher wraps a nproto.MsgAsyncPublisher to TracedMsgAsyncPublisher. It is used in pipeline downstream.
+func NewDownstreamTracedMsgAsyncPublisher(publisher nproto.MsgAsyncPublisher, tracer ot.Tracer) *TracedMsgAsyncPublisher {
+	return &TracedMsgAsyncPublisher{
 		publisher:  publisher,
 		tracer:     tracer,
 		downstream: true,
@@ -125,12 +125,12 @@ func (publisher *TracedMsgPublisher) Publish(ctx context.Context, subject string
 }
 
 // Publish implements nproto.MsgAsyncPublisher interface.
-func (publisher *TraceMsgAsyncPublisher) Publish(ctx context.Context, subject string, msgData []byte) error {
+func (publisher *TracedMsgAsyncPublisher) Publish(ctx context.Context, subject string, msgData []byte) error {
 	return (*TracedMsgPublisher)(publisher).Publish(ctx, subject, msgData)
 }
 
 // PublishAsync implements nproto.MsgAsyncPublisher interface.
-func (publisher *TraceMsgAsyncPublisher) PublishAsync(ctx context.Context, subject string, msgData []byte, cb func(error)) (err error) {
+func (publisher *TracedMsgAsyncPublisher) PublishAsync(ctx context.Context, subject string, msgData []byte, cb func(error)) (err error) {
 
 	tracer := publisher.tracer
 	var (
