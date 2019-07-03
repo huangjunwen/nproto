@@ -14,7 +14,7 @@ var (
 
 var (
 	// DefaultMaxConcurrency is the default value of maxConcurrency.
-	DefaultMaxConcurrency = 5 * 1024
+	DefaultMaxConcurrency = 512
 )
 
 // TaskRunner is an interface to run tasks.
@@ -81,9 +81,9 @@ type taskNode struct {
 	next *taskNode
 }
 
-// NewDefaultLimitedRunner creates a new LimitedRunner with DefaultMaxConcurrency and unlimited queued.
+// NewDefaultLimitedRunner creates a new LimitedRunner with DefaultMaxConcurrency and no queue.
 func NewDefaultLimitedRunner() *LimitedRunner {
-	return NewLimitedRunner(DefaultMaxConcurrency, -1)
+	return NewLimitedRunner(DefaultMaxConcurrency, 0)
 }
 
 // NewLimitedRunner creates a new LimitedRunner. If maxConcurrency <= 0, then DefaultMaxConcurrency will be used.

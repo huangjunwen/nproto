@@ -14,6 +14,7 @@ import (
 	sqlh "github.com/huangjunwen/nproto/helpers/sql"
 	"github.com/huangjunwen/nproto/nproto"
 	"github.com/huangjunwen/nproto/nproto/npmsg/enc"
+	"github.com/huangjunwen/nproto/nproto/taskrunner"
 	"github.com/huangjunwen/nproto/nproto/zlog"
 )
 
@@ -57,6 +58,7 @@ type DBMsgPublisherPipe struct {
 	dialect    dbStoreDialect
 	db         *sql.DB
 	table      string
+	runner     taskrunner.TaskRunner // To run TxPlugin.TxCommitted's flush.
 
 	// Mutable fields.
 	loopWg    sync.WaitGroup
@@ -121,6 +123,7 @@ func NewDBMsgPublisherPipe(downstream nproto.MsgPublisher, dialect string, db *s
 		downstream:   downstream,
 		db:           db,
 		table:        table,
+		runner:       taskrunner.NewDefaultLimitedRunner(),
 	}
 	OptLogger(&zlog.DefaultZLogger)(ret)
 
@@ -158,6 +161,7 @@ func NewDBMsgPublisherPipe(downstream nproto.MsgPublisher, dialect string, db *s
 func (pipe *DBMsgPublisherPipe) Close() {
 	pipe.closeFunc()
 	pipe.loopWg.Wait()
+	pipe.runner.Close()
 }
 
 // NewMsgPublisher creates a DBMsgPublisher. `q` must be connecting to the same database as DBMsgPublisherPipe.
@@ -555,8 +559,9 @@ func (p *TxPlugin) TxInitialized(db *sql.DB, tx *sql.Tx) error {
 
 // TxCommitted implements sqlh.TxPlugin interface.
 func (p *TxPlugin) TxCommitted() {
-	// NOTE: ignore context here
-	p.publisher.Flush(context.Background())
+	p.pipe.runner.Submit(func() {
+		p.publisher.Flush(p.pipe.closeCtx)
+	})
 }
 
 // TxFinalised implements sqlh.TxPlugin interface.
