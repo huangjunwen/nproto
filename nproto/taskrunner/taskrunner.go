@@ -142,6 +142,7 @@ func (r *LimitedRunner) taskLoop(firstTask func()) {
 
 	for !stop {
 		// Run task.
+		// NOTE: Let it crash
 		task()
 
 		// The "done task" block.
