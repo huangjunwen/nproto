@@ -73,7 +73,7 @@ func NewSyncPublisher(p nproto.MsgAsyncPublisher) *SyncPublisher {
 }
 
 func (p *SyncPublisher) Publish(ctx context.Context, subject string, msgData []byte) error {
-	return p.publisher.Publish(ctx, subject, msgData)
+	return nproto.MsgAsyncPublisherFunc(p.publisher.PublishAsync).Publish(ctx, subject, msgData)
 }
 
 func TestFlush(t *testing.T) {

@@ -50,6 +50,7 @@ var (
 
 var (
 	_ nproto.MsgAsyncPublisher = (*DurConn)(nil)
+	_ nproto.MsgPublisher      = (*DurConn)(nil)
 	_ nproto.MsgSubscriber     = (*DurConn)(nil)
 )
 
@@ -188,7 +189,7 @@ func (dc *DurConn) PublishAsync(ctx context.Context, subject string, msgData []b
 	return err
 }
 
-// Publish implements nproto.MsgAsyncPublisher interface.
+// Publish implements nproto.MsgPublisher interface.
 func (dc *DurConn) Publish(ctx context.Context, subject string, msgData []byte) error {
 	return nproto.MsgAsyncPublisherFunc(dc.PublishAsync).Publish(ctx, subject, msgData)
 }
