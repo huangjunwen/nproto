@@ -1,2 +1,2 @@
-// Package tracing contains wrappers for RPCServer/RPCClient/MsgPublisher/MsgSubscriber with opentracing support.
+// Package tracing contains middlewares for RPCServer/RPCClient/MsgPublisher/MsgSubscriber to add opentracing support.
 package tracing

@@ -113,7 +113,7 @@ func main() {
 			log.Printf("NatsRPCServer closed.\n")
 		}()
 
-		tserver := nproto.NewRPCServerWithMWs(server, tracing.TracedRPCServer(tracer))
+		tserver := nproto.NewRPCServerWithMWs(server, tracing.WrapRPCServer(tracer))
 		if err := traceapi.ServeTrace(tserver, traceapi.SvcName, Trace{}); err != nil {
 			log.Panic(err)
 		}
@@ -126,7 +126,7 @@ func main() {
 		}
 		log.Printf("NatsRPCClient created.\n")
 
-		tclient := nproto.NewRPCClientWithMWs(client, tracing.TracedRPCClient(tracer))
+		tclient := nproto.NewRPCClientWithMWs(client, tracing.WrapRPCClient(tracer))
 		svc = traceapi.InvokeTrace(tclient, traceapi.SvcName)
 	}
 
@@ -146,13 +146,13 @@ func main() {
 
 	{
 		publisher = &nproto.PBPublisher{
-			Publisher: nproto.NewMsgPublisherWithMWs(dc, tracing.TracedMsgPublisher(tracer, false)),
+			Publisher: nproto.NewMsgPublisherWithMWs(dc, tracing.WrapMsgPublisher(tracer, false)),
 		}
 		log.Printf("Publisher created.\n")
 	}
 
 	{
-		subscriber := nproto.NewMsgSubscriberWithMWs(dc, tracing.TracedMsgSubscriber(tracer))
+		subscriber := nproto.NewMsgSubscriberWithMWs(dc, tracing.WrapMsgSubscriber(tracer))
 		log.Printf("Subscriber created.\n")
 		err = traceapi.SubscribeRecursiveDepthNegative(
 			subscriber,

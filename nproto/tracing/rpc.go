@@ -10,8 +10,8 @@ import (
 	"github.com/huangjunwen/nproto/nproto"
 )
 
-// TracedRPCClient adds opentracing support for RPCClient.
-func TracedRPCClient(tracer ot.Tracer) nproto.RPCMiddleware {
+// WrapRPCClient adds opentracing support for RPCClient.
+func WrapRPCClient(tracer ot.Tracer) nproto.RPCMiddleware {
 	return func(svcName string, method *nproto.RPCMethod, handler nproto.RPCHandler) nproto.RPCHandler {
 		opName := ClientHandlerOpNameFmt(svcName, method)
 		return func(ctx context.Context, input proto.Message) (output proto.Message, err error) {
@@ -51,8 +51,8 @@ func TracedRPCClient(tracer ot.Tracer) nproto.RPCMiddleware {
 	}
 }
 
-// TracedRPCServer adds opentracing support for RPCServer.
-func TracedRPCServer(tracer ot.Tracer) nproto.RPCMiddleware {
+// WrapRPCServer adds opentracing support for RPCServer.
+func WrapRPCServer(tracer ot.Tracer) nproto.RPCMiddleware {
 	return func(svcName string, method *nproto.RPCMethod, handler nproto.RPCHandler) nproto.RPCHandler {
 		opName := ServerHandlerOpNameFmt(svcName, method)
 		return func(ctx context.Context, input proto.Message) (output proto.Message, err error) {

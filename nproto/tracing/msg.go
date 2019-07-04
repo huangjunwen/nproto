@@ -10,8 +10,8 @@ import (
 	"github.com/huangjunwen/nproto/nproto"
 )
 
-// TracedMsgPublisher adds opentracing support for MsgPublisher.
-func TracedMsgPublisher(tracer ot.Tracer, downstream bool) nproto.MsgPublisherMiddleware {
+// WrapMsgPublisher adds opentracing support for MsgPublisher.
+func WrapMsgPublisher(tracer ot.Tracer, downstream bool) nproto.MsgPublisherMiddleware {
 	return func(next nproto.MsgPublisherFunc) nproto.MsgPublisherFunc {
 		return func(ctx context.Context, subject string, msgData []byte) (err error) {
 			var (
@@ -71,8 +71,8 @@ func TracedMsgPublisher(tracer ot.Tracer, downstream bool) nproto.MsgPublisherMi
 	}
 }
 
-// TracedMsgAsyncPublisher adds opentracing support for MsgAsyncPublisher.
-func TracedMsgAsyncPublisher(tracer ot.Tracer, downstream bool) nproto.MsgAsyncPublisherMiddleware {
+// WrapMsgAsyncPublisher adds opentracing support for MsgAsyncPublisher.
+func WrapMsgAsyncPublisher(tracer ot.Tracer, downstream bool) nproto.MsgAsyncPublisherMiddleware {
 	return func(next nproto.MsgAsyncPublisherFunc) nproto.MsgAsyncPublisherFunc {
 		return func(ctx context.Context, subject string, msgData []byte, cb func(error)) (err error) {
 			var (
@@ -138,7 +138,8 @@ func TracedMsgAsyncPublisher(tracer ot.Tracer, downstream bool) nproto.MsgAsyncP
 	}
 }
 
-func TracedMsgSubscriber(tracer ot.Tracer) nproto.MsgMiddleware {
+// WrapMsgSubscriber adds opentracing support for MsgSubscriber.
+func WrapMsgSubscriber(tracer ot.Tracer) nproto.MsgMiddleware {
 	return func(subject, queue string, handler nproto.MsgHandler) nproto.MsgHandler {
 		opName := SubscriberHandlerOpNameFmt(subject, queue)
 		return func(ctx context.Context, msgData []byte) (err error) {
