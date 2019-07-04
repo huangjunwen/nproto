@@ -176,22 +176,28 @@ func main() {
 			ExpectError  bool
 		}{
 			{0, 1, false},
-			{0, 1, false},
 			{3, 4, false},
 			{-3, 0, true},
 		} {
-			reply, err := svc.Recursive(context.Background(), &traceapi.RecursiveRequest{
-				Depth: runCase.Depth,
-			})
-			if runCase.ExpectError {
-				if err == nil {
-					log.Panic("Expect error for run case %v, but got nil", runCase)
+			func() {
+				ctx := context.Background()
+				span := tracer.StartSpan("nproto tests trace")
+				defer span.Finish()
+				ctx = opentracing.ContextWithSpan(ctx, span)
+
+				reply, err := svc.Recursive(ctx, &traceapi.RecursiveRequest{
+					Depth: runCase.Depth,
+				})
+				if runCase.ExpectError {
+					if err == nil {
+						log.Panic("Expect error for run case %v, but got nil", runCase)
+					}
+				} else {
+					if reply.Result != runCase.ExpectResult {
+						log.Panic("Expect result %v, but got %v", runCase.ExpectError, reply.Result)
+					}
 				}
-			} else {
-				if reply.Result != runCase.ExpectResult {
-					log.Panic("Expect result %v, but got %v", runCase.ExpectError, reply.Result)
-				}
-			}
+			}()
 
 		}
 	}
