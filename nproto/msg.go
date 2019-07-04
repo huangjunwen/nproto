@@ -45,8 +45,8 @@ type MsgSubscriber interface {
 // MsgHandler handles messages. A message should be redelivered if the handler returns an error.
 type MsgHandler func(context.Context, []byte) error
 
-// MsgMiddleware wraps a MsgHandler into another one.
-type MsgMiddleware func(MsgHandler) MsgHandler
+// MsgMiddleware wraps a MsgHandler into another one. The params are (subject, queue, handler).
+type MsgMiddleware func(string, string, MsgHandler) MsgHandler
 
 // MsgSubscriberWithMWs wraps a MsgSubscriber with middlewares.
 type MsgSubscriberWithMWs struct {
@@ -117,7 +117,7 @@ func NewMsgAsyncPublisherWithMWs(publisher MsgAsyncPublisher, mws ...MsgAsyncPub
 // Subscribe implements MsgSubscriber interface.
 func (subscriber *MsgSubscriberWithMWs) Subscribe(subject, queue string, handler MsgHandler, opts ...interface{}) error {
 	for i := len(subscriber.mws) - 1; i >= 0; i-- {
-		handler = subscriber.mws[i](handler)
+		handler = subscriber.mws[i](subject, queue, handler)
 	}
 	return subscriber.subscriber.Subscribe(subject, queue, handler, opts...)
 }

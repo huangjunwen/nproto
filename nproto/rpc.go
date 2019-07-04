@@ -34,8 +34,8 @@ type RPCMethod struct {
 // RPCHandler do the real job. RPCHandler can be client side or server side.
 type RPCHandler func(context.Context, proto.Message) (proto.Message, error)
 
-// RPCMiddleware wraps an RPCHandler into another one.
-type RPCMiddleware func(RPCHandler) RPCHandler
+// RPCMiddleware wraps an RPCHandler into another one. The params are (svcName, method, handler).
+type RPCMiddleware func(string, *RPCMethod, RPCHandler) RPCHandler
 
 // RPCServerWithMWs wraps an RPCServer with RPCMiddlewares.
 type RPCServerWithMWs struct {
@@ -68,7 +68,7 @@ func (server *RPCServerWithMWs) RegistSvc(svcName string, methods map[*RPCMethod
 	methods2 := make(map[*RPCMethod]RPCHandler)
 	for method, handler := range methods {
 		for i := n - 1; i >= 0; i-- {
-			handler = server.mws[i](handler)
+			handler = server.mws[i](svcName, method, handler)
 		}
 		methods2[method] = handler
 	}
@@ -92,7 +92,7 @@ func NewRPCClientWithMWs(client RPCClient, mws ...RPCMiddleware) *RPCClientWithM
 func (client *RPCClientWithMWs) MakeHandler(svcName string, method *RPCMethod) RPCHandler {
 	handler := client.client.MakeHandler(svcName, method)
 	for i := len(client.mws) - 1; i >= 0; i-- {
-		handler = client.mws[i](handler)
+		handler = client.mws[i](svcName, method, handler)
 	}
 	return handler
 }
