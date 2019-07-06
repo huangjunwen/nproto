@@ -331,7 +331,8 @@ func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, stalec chan struct
 
 			// Handle.
 			if err := sub.handler(ctx, payload.MsgData); err != nil {
-				dc.logger.Error().Err(err).Msg("MsgHandler error")
+				// NOTE: do not print handle's error log. Let the handler do it.
+				// dc.logger.Error().Err(err).Msg("MsgHandler error")
 				return
 			}
 
