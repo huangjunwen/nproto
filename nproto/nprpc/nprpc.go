@@ -31,7 +31,9 @@ var (
 	// ErrSvcUnavailable is returned if the service is not available to handle a request.
 	ErrSvcUnavailable = errors.New("SVC_UNAVAILABLE")
 	// ErrMethodNotFound is returned if the method is not found.
-	ErrMethodNotFound = errors.New("METHO_NOT_FOUND")
+	ErrMethodNotFound = errors.New("METHOD_NOT_FOUND")
+	// ErrInvalidRequest is returned if the request object is invalid for the method.
+	ErrInvalidRequest = errors.New("INVALID_REQUEST")
 )
 
 var (
@@ -269,7 +271,7 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nproto.RPCM
 				Param: method.NewInput(),
 			}
 			if err := encoder.DecodeRequest(msg.Data, req); err != nil {
-				server.replyError(msg.Reply, err, encoder)
+				server.replyError(msg.Reply, ErrInvalidRequest, encoder)
 				return
 			}
 
