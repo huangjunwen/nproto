@@ -3,6 +3,12 @@ package sqlh
 import (
 	"context"
 	"database/sql"
+	"errors"
+)
+
+var (
+	// Rollback is used to rollback a transaction without returning an error.
+	Rollback = errors.New("Just rollback")
 )
 
 // Queryer abstracts sql.DB/sql.Conn/sql.Tx .
@@ -32,10 +38,10 @@ var (
 
 // WithTx starts a transaction and run fn. If no error is returned, the transaction is committed.
 // Otherwise it is rollbacked.
-func WithTx(db *sql.DB, fn func(*sql.Tx) error, plugins ...TxPlugin) error {
+func WithTx(db *sql.DB, fn func(*sql.Tx) error, plugins ...TxPlugin) (err error) {
 	tx, err := db.Begin()
 	if err != nil {
-		return err
+		return
 	}
 
 	var n int
@@ -44,27 +50,31 @@ func WithTx(db *sql.DB, fn func(*sql.Tx) error, plugins ...TxPlugin) error {
 		for _, plugin := range plugins[:n] {
 			plugin.TxFinalised()
 		}
+		if err == Rollback {
+			// Rollback is not treated as an error.
+			err = nil
+		}
 	}()
 
 	for _, plugin := range plugins {
-		if err := plugin.TxInitialized(db, tx); err != nil {
-			return err
+		if err = plugin.TxInitialized(db, tx); err != nil {
+			return
 		}
 		n += 1
 	}
 
 	err = fn(tx)
 	if err != nil {
-		return err
+		return
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		return err
+		return
 	}
 
 	for _, plugin := range plugins {
 		plugin.TxCommitted()
 	}
-	return nil
+	return
 }
