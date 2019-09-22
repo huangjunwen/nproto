@@ -676,3 +676,107 @@ func TestMultipleSub(t *testing.T) {
 	log.Printf("Subscription 2 handled the message.\n")
 
 }
+
+func TestContext(t *testing.T) {
+	log.Printf("\n")
+	log.Printf(">>> TestContext.\n")
+	assert := assert.New(t)
+	var err error
+
+	// Starts the server.
+	var res *tststan.Resource
+	{
+		res, err = tststan.Run(nil)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer res.Close()
+		log.Printf("Streaming server started.\n")
+	}
+
+	// Creates nat connection.
+	var nc *nats.Conn
+	{
+		nc, err = res.NatsClient(
+			nats.MaxReconnects(-1),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer nc.Close()
+
+		log.Printf("Nats connection created.\n")
+	}
+
+	// Creates DurConn.
+	var dc *DurConn
+	connectc := make(chan struct{})
+
+	// Creates cancalable context.
+	ctx, cancel := context.WithCancel(context.Background())
+	{
+		connectCb := func(_ stan.Conn) { connectc <- struct{}{} }
+		dc, err = NewDurConn(nc, res.Options.ClusterId,
+			OptConnectCb(connectCb), // Use the callback to notify connection establish.
+			OptContext(ctx),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer dc.Close()
+		log.Printf("DurConn created.\n")
+
+		// Wait connection.
+		<-connectc
+		log.Printf("DurConn connected.\n")
+	}
+
+	// Subscribe.
+	var (
+		testSubject = "longlive"
+		testQueue   = "default"
+	)
+
+	subc := make(chan struct{})
+	wg := &sync.WaitGroup{}
+	wg.Add(2)
+	{
+		subCb := func(_ stan.Conn, _, _ string) { subc <- struct{}{} }
+		err := dc.Subscribe(
+			testSubject,
+			testQueue,
+			func(ctx context.Context, data []byte) error {
+				go func() {
+					t := time.Now()
+					dc.Close()
+					log.Printf("DurConn.Close elapsed: %s\n", time.Since(t))
+					wg.Done()
+				}()
+				t := time.Now()
+				<-ctx.Done()
+				log.Printf("longlive handler elapsed: %s\n", time.Since(t))
+				wg.Done()
+				return nil
+			},
+			SubOptSubscribeCb(subCb),
+		)
+		assert.NoError(err)
+
+		<-subc
+		log.Printf("Subscribed: %v.\n", err)
+
+	}
+
+	// Publish msg data.
+	err = dc.Publish(
+		ctx,
+		testSubject,
+		[]byte("xxx"),
+	)
+	assert.NoError(err)
+
+	time.Sleep(2 * time.Second)
+	cancel()
+
+	wg.Wait()
+}

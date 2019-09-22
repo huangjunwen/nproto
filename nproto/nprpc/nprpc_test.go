@@ -365,6 +365,7 @@ func TestSvcUnavailable(t *testing.T) {
 		log.Printf("Svc registered.\n")
 	}
 
+	// MakeHandler.
 	handler := client.MakeHandler(svcName, busyMethod)
 
 	// Make the first call. It should never finish.
@@ -375,6 +376,118 @@ func TestSvcUnavailable(t *testing.T) {
 	assert.Equal(ErrSvcUnavailable.Error(), err.Error())
 	assert.Nil(output)
 
+}
+
+func TestSvcContext(t *testing.T) {
+	log.Printf("\n")
+	log.Printf(">>> TestSvcContext.\n")
+	assert := assert.New(t)
+	var err error
+
+	// Starts the test nats server.
+	var res *tstnats.Resource
+	{
+		res, err = tstnats.Run(nil)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer res.Close()
+		log.Printf("Test nats server started: %+q\n", res.NatsURL())
+	}
+
+	// Creates connection.
+	var nc *nats.Conn
+	{
+		nc, err = res.NatsClient(
+			nats.MaxReconnects(-1),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer nc.Close()
+		log.Printf("Connection connected.\n")
+	}
+
+	// Creates rpc server.
+	var server *NatsRPCServer
+
+	// Create a cancelable context.
+	ctx, cancel := context.WithCancel(context.Background())
+	{
+		server, err = NewNatsRPCServer(
+			nc,
+			ServerOptContext(ctx),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer server.Close()
+		log.Printf("NatsRPCServer created.\n")
+	}
+
+	// Creates rpc client.
+	var client *NatsRPCClient
+	{
+		client, err = NewNatsRPCClient(nc)
+		if err != nil {
+			log.Panic(err)
+		}
+		log.Printf("NatsRPCClient created.\n")
+	}
+
+	var (
+		svcName = "longlive"
+		errMsg  = "After context done"
+	)
+
+	wg := &sync.WaitGroup{}
+	wg.Add(2)
+	var (
+		longliveMethod = &nproto.RPCMethod{
+			Name: "Longlive",
+			NewInput: func() proto.Message {
+				return &empty.Empty{}
+			},
+			NewOutput: func() proto.Message {
+				return &empty.Empty{}
+			},
+		}
+		longliveHandler = func(ctx context.Context, in proto.Message) (proto.Message, error) {
+			go func() {
+				t := time.Now()
+				server.Close()
+				log.Printf("server.Close elapsed: %s\n", time.Since(t))
+				wg.Done()
+			}()
+			<-ctx.Done()
+			return nil, errors.New(errMsg)
+		}
+	)
+
+	// RegistSvc.
+	{
+		if err = server.RegistSvc(svcName, map[*nproto.RPCMethod]nproto.RPCHandler{
+			longliveMethod: longliveHandler,
+		}); err != nil {
+			log.Panic(err)
+		}
+		defer server.DeregistSvc(svcName)
+		log.Printf("Svc registered.\n")
+	}
+
+	// MakeHandler.
+	handler := client.MakeHandler(svcName, longliveMethod)
+
+	go func() {
+		_, err = handler(context.Background(), &empty.Empty{})
+		wg.Done()
+	}()
+
+	time.Sleep(2 * time.Second)
+	cancel()
+
+	wg.Wait()
+	assert.Equal(errMsg, err.Error())
 }
 
 func TestRegist(t *testing.T) {
