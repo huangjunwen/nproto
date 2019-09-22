@@ -60,7 +60,8 @@ type NatsRPCServer struct {
 	runner        taskrunner.TaskRunner // runner for handlers
 
 	// Immutable fields.
-	nc *nats.Conn
+	nc  *nats.Conn
+	ctx context.Context
 
 	// Mutable fields.
 	mu     sync.Mutex
@@ -102,6 +103,7 @@ func NewNatsRPCServer(nc *nats.Conn, opts ...ServerOption) (*NatsRPCServer, erro
 		group:         DefaultGroup,
 		runner:        taskrunner.NewDefaultLimitedRunner(),
 		nc:            nc,
+		ctx:           context.Background(),
 		svcs:          make(map[string]*nats.Subscription),
 	}
 	ServerOptLogger(&zlog.DefaultZLogger)(server)
@@ -276,7 +278,7 @@ func (server *NatsRPCServer) msgHandler(svcName string, methods map[*nproto.RPCM
 			}
 
 			// Setup context.
-			ctx := context.Background()
+			ctx := server.ctx
 			if req.MD != nil {
 				ctx = nproto.NewIncomingContextWithMD(ctx, req.MD)
 			}

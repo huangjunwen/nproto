@@ -71,6 +71,7 @@ type DurConn struct {
 	// Immutable fields.
 	clusterID string
 	nc        *nats.Conn
+	ctx       context.Context
 
 	// At most one connect can be run at any time.
 	connectMu sync.Mutex
@@ -126,6 +127,7 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...Option) (*DurConn, erro
 		},
 		clusterID: clusterID,
 		nc:        nc,
+		ctx:       context.Background(),
 		subNames:  make(map[[2]string]int),
 	}
 	OptLogger(&zlog.DefaultZLogger)(dc)
@@ -324,7 +326,7 @@ func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn, stalec chan struct
 			}
 
 			// Setup context.
-			ctx := context.Background()
+			ctx := dc.ctx
 			if payload.MD != nil {
 				ctx = nproto.NewIncomingContextWithMD(ctx, payload.MD)
 			}

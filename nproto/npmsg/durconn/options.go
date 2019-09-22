@@ -1,6 +1,7 @@
 package durconn
 
 import (
+	"context"
 	"time"
 
 	"github.com/nats-io/stan.go"
@@ -59,6 +60,14 @@ func OptDisconnectCb(fn func(sc stan.Conn)) Option {
 func OptTaskRunner(runner taskrunner.TaskRunner) Option {
 	return func(dc *DurConn) error {
 		dc.hRunner = runner
+		return nil
+	}
+}
+
+// OptContext sets the base context for handlers.
+func OptContext(ctx context.Context) Option {
+	return func(dc *DurConn) error {
+		dc.ctx = ctx
 		return nil
 	}
 }

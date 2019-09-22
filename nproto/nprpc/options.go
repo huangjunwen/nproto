@@ -1,6 +1,8 @@
 package nprpc
 
 import (
+	"context"
+
 	"github.com/rs/zerolog"
 
 	"github.com/huangjunwen/nproto/nproto/taskrunner"
@@ -39,6 +41,14 @@ func ServerOptGroup(group string) ServerOption {
 func ServerOptTaskRunner(runner taskrunner.TaskRunner) ServerOption {
 	return func(server *NatsRPCServer) error {
 		server.runner = runner
+		return nil
+	}
+}
+
+// ServerOptContext sets the base context used in handlers.
+func ServerOptContext(ctx context.Context) ServerOption {
+	return func(server *NatsRPCServer) error {
+		server.ctx = ctx
 		return nil
 	}
 }

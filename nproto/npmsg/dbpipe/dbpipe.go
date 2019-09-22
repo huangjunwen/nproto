@@ -59,6 +59,7 @@ type DBMsgPublisherPipe struct {
 	db         *sql.DB
 	table      string
 	runner     taskrunner.TaskRunner // To run TxPlugin.TxCommitted's flush.
+	ctx        context.Context
 
 	// Mutable fields.
 	loopWg    sync.WaitGroup
@@ -124,6 +125,7 @@ func NewDBMsgPublisherPipe(downstream nproto.MsgPublisher, dialect string, db *s
 		db:           db,
 		table:        table,
 		runner:       taskrunner.NewDefaultLimitedRunner(),
+		ctx:          context.Background(),
 	}
 	OptLogger(&zlog.DefaultZLogger)(ret)
 
@@ -148,7 +150,7 @@ func NewDBMsgPublisherPipe(downstream nproto.MsgPublisher, dialect string, db *s
 		return nil, err
 	}
 
-	ret.closeCtx, ret.closeFunc = context.WithCancel(context.Background())
+	ret.closeCtx, ret.closeFunc = context.WithCancel(ret.ctx)
 
 	// Start the redelivery loop.
 	if !ret.noRedeliveryLoop {

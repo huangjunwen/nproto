@@ -1,6 +1,7 @@
 package dbpipe
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -68,6 +69,14 @@ func OptFlushWait(t time.Duration) Option {
 func OptNoRedeliveryLoop() Option {
 	return func(pipe *DBMsgPublisherPipe) error {
 		pipe.noRedeliveryLoop = true
+		return nil
+	}
+}
+
+// OptContext sets the base context for the pipe.
+func OptContext(ctx context.Context) Option {
+	return func(pipe *DBMsgPublisherPipe) error {
+		pipe.ctx = ctx
 		return nil
 	}
 }
