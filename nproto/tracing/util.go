@@ -6,7 +6,6 @@ import (
 
 	ot "github.com/opentracing/opentracing-go"
 	otext "github.com/opentracing/opentracing-go/ext"
-	otlog "github.com/opentracing/opentracing-go/log"
 
 	"github.com/huangjunwen/nproto/nproto"
 )
@@ -52,6 +51,5 @@ func extractSpanCtx(tracer ot.Tracer, md nproto.MD) (ot.SpanContext, error) {
 func setSpanError(span ot.Span, err error) {
 	if err != nil {
 		otext.Error.Set(span, true)
-		span.LogFields(otlog.String("event", "error"), otlog.String("message", err.Error()))
 	}
 }
