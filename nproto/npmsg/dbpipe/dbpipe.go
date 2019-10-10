@@ -258,6 +258,7 @@ func (pipe *DBMsgPublisherPipe) getLock(conn *sql.Conn) (err error) {
 	for {
 		acquired, err := pipe.dialect.GetLock(pipe.closeCtx, conn, pipe.table)
 		if acquired {
+			pipe.logger.Info().Msg("Get db lock ok")
 			return nil
 		}
 		if err != nil {
