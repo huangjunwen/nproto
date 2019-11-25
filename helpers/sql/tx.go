@@ -13,32 +13,35 @@ var (
 
 type txContextKey struct{}
 
-type txContext struct {
+// TxContext contains transaction context.
+type TxContext struct {
+	db *sql.DB
 	// stacks of functions
 	onCommitted []func()
 	onFinalised []func()
 }
 
-func curTxContext(ctx context.Context) *txContext {
+// CurTxContext returns current TxContext in transaction.
+func CurTxContext(ctx context.Context) *TxContext {
 	v := ctx.Value(txContextKey{})
-	ret, ok := v.(*txContext)
-	if !ok {
-		panic(errors.New("Tx context not found, make sure you're calling this inside WithTx"))
-	}
+	ret, _ := v.(*TxContext)
 	return ret
+}
+
+// DB returns the original *sql.DB that starts the transaction.
+func (txCtx *TxContext) DB() *sql.DB {
+	return txCtx.db
 }
 
 // OnCommitted adds a function which will be only called after the transaction has been successful committed.
 // The invocation order of OnCommitted functions just like defer functions.
-func OnCommitted(ctx context.Context, fn func()) {
-	txCtx := curTxContext(ctx)
+func (txCtx *TxContext) OnCommitted(fn func()) {
 	txCtx.onCommitted = append(txCtx.onCommitted, fn)
 }
 
 // OnFinalised adds a function which will be called after the transaction ended (either committed or rollback).
-// The invocation order of OnCommitted functions just like defer functions.
-func OnFinalised(ctx context.Context, fn func()) {
-	txCtx := curTxContext(ctx)
+// The invocation order of OnFinalised functions just like defer functions.
+func (txCtx *TxContext) OnFinalised(fn func()) {
 	txCtx.onFinalised = append(txCtx.onFinalised, fn)
 }
 
@@ -48,7 +51,9 @@ func OnFinalised(ctx context.Context, fn func()) {
 //
 // Inside one can use OnCommitted/OnFinalised to add functions to be called after tx end.
 func WithTx(ctx context.Context, db *sql.DB, fn func(context.Context, *sql.Tx) error) (err error) {
-	txCtx := &txContext{}
+	txCtx := &TxContext{
+		db: db,
+	}
 	ctx = context.WithValue(ctx, txContextKey{}, txCtx)
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
