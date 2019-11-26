@@ -17,6 +17,7 @@ import (
 	stan "github.com/nats-io/stan.go"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/huangjunwen/nproto/helpers/sql"
 	"github.com/huangjunwen/nproto/nproto"
 	"github.com/huangjunwen/nproto/nproto/npmsg/durconn"
 )
@@ -386,7 +387,7 @@ func TestFlush(t *testing.T) {
 		// Commit.
 		assert.NoError(tx.Commit())
 
-		// NOTE: Not call p.Finish, let redeliveryLoop to do it.
+		// NOTE: Not call p.Flush, let redeliveryLoop to do it.
 		wg.Wait()
 
 		// Check.
@@ -401,4 +402,59 @@ func TestFlush(t *testing.T) {
 	testRedelivery([]uint64{2, 3}, false)
 	testRedelivery([]uint64{5, 7, 11, 13, 17}, true)
 	testRedelivery([]uint64{5, 7, 11, 13, 17}, false)
+
+	// --- Test WithTx ---
+	log.Printf(">>> Test WithTx ...\n")
+	testWithTx := func(primes []uint64, async bool) {
+		log.Printf("Begin WithTx: %v, %v\n", primes, async)
+		// Create pipe.
+		var pipe *DBMsgPublisherPipe
+		if async {
+			pipe = createPipe(dc)
+		} else {
+			pipe = createPipe(NewSyncPublisher(dc))
+		}
+		defer pipe.Close()
+
+		// Make sure msg table is empty.
+		clearMsgTable()
+		defer clearMsgTable()
+
+		// Make sure product reset.
+		resetProduct()
+		defer resetProduct()
+
+		expect := uint64(1)
+		assert.NoError(sqlh.WithTx(bgctx, db, func(ctx context.Context, tx *sql.Tx) error {
+			// Creates a publisher.
+			p := pipe.NewMsgPublisherWithTx(ctx, tx)
+
+			// Publish distinct prime numbers.
+			for _, prime := range primes {
+				err := p.Publish(ctx, testSubject, []byte(strconv.FormatUint(prime, 10)))
+				assert.NoError(err)
+				expect = expect * prime
+			}
+
+			// NOTE: Add wait group before commit
+			wg.Add(len(primes))
+
+			// return nil to commit
+			return nil
+		}))
+
+		wg.Wait()
+
+		// Check.
+		assert.Equal(expect, resetProduct())
+
+		log.Printf("End WithTx: %v, %v\n", primes, async)
+	}
+
+	testWithTx([]uint64{}, true)
+	testWithTx([]uint64{}, false)
+	testWithTx([]uint64{2, 3}, true)              // flushMsgList
+	testWithTx([]uint64{2, 3}, false)             // flushMsgList
+	testWithTx([]uint64{5, 7, 11, 13, 17}, true)  // flushMsgStream
+	testWithTx([]uint64{5, 7, 11, 13, 17}, false) // flushMsgStream
 }

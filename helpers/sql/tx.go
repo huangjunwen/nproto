@@ -28,6 +28,15 @@ func CurTxContext(ctx context.Context) *TxContext {
 	return ret
 }
 
+// MustTxContext is the `must` version of CurTxContext.
+func MustCurTxContext(ctx context.Context) *TxContext {
+	ret := CurTxContext(ctx)
+	if ret == nil {
+		panic(errors.New("MustCurTxContext must be called within WithTx"))
+	}
+	return ret
+}
+
 // DB returns the original *sql.DB that starts the transaction.
 func (txCtx *TxContext) DB() *sql.DB {
 	return txCtx.db

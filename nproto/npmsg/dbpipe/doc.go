@@ -8,13 +8,10 @@
 //   // `db`/`table` specify which table to store message data.
 //   pipe, _ := dbpipe.NewDBMsgPublisherPipe(downstream, dialect, db, table)
 //
-//   // Creates a TxPlugin.
-//   txp := pipe.TxPlugin()
-//
-//   // Run transaction with txp.
-//   sqlh.WithTx(db, func(tx *sql.Tx) error {
-//       // Get the publisher inside transaction.
-//       publisher := txp.Publisher()
+//   // Run transaction.
+//   sqlh.WithTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
+//       // Create a new publisher inside transaction.
+//       publisher := pipe.NewMsgPublisherWithTx(ctx, tx)
 //
 //       // ... Some db operations ....
 //
@@ -23,6 +20,6 @@
 //       // ... Some more db operations ...
 //
 //       return nil
-//   }, txp)
+//   })
 //
 package dbpipe

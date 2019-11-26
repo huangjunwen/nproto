@@ -58,7 +58,7 @@ type DBMsgPublisherPipe struct {
 	dialect    dbStoreDialect
 	db         *sql.DB
 	table      string
-	runner     taskrunner.TaskRunner // To run TxPlugin.TxCommitted's flush.
+	runner     taskrunner.TaskRunner // To run flush.
 	ctx        context.Context
 
 	// Mutable fields.
@@ -94,15 +94,8 @@ type dbStoreDialect interface {
 // Option is used when createing DBMsgPublisherPipe.
 type Option func(*DBMsgPublisherPipe) error
 
-// TxPlugin is returned from DBMsgPublisherPipe.TxPlugin.
-type TxPlugin struct {
-	pipe      *DBMsgPublisherPipe
-	publisher *DBMsgPublisher
-}
-
 var (
 	_ nproto.MsgPublisher = (*DBMsgPublisher)(nil)
-	_ sqlh.TxPlugin       = (*TxPlugin)(nil)
 )
 
 // NewDBMsgPublisherPipe creates a new DBMsgPublisherPipe.
@@ -176,11 +169,20 @@ func (pipe *DBMsgPublisherPipe) NewMsgPublisher(q sqlh.Queryer) *DBMsgPublisher 
 	}
 }
 
-// TxPlugin returns a sqlh.TxPlugin to use with sqlh.WithTx
-func (pipe *DBMsgPublisherPipe) TxPlugin() *TxPlugin {
-	return &TxPlugin{
-		pipe: pipe,
+// NewMsgPublisherWithTx creates a DBMsgPublisher within sqlh.WithTx.
+// NOTE: tx must be started by the same db of pipe.
+func (pipe *DBMsgPublisherPipe) NewMsgPublisherWithTx(ctx context.Context, tx *sql.Tx) *DBMsgPublisher {
+	txCtx := sqlh.MustCurTxContext(ctx)
+	if pipe.db != txCtx.DB() {
+		panic(errors.New("NewMsgPublisherWithTx: db must be the same as pipe.db"))
 	}
+	publisher := pipe.NewMsgPublisher(tx)
+	txCtx.OnCommitted(func() {
+		pipe.runner.Submit(func() {
+			publisher.Flush(pipe.closeCtx)
+		})
+	})
+	return publisher
 }
 
 func (pipe *DBMsgPublisherPipe) redeliveryLoop() {
@@ -526,8 +528,10 @@ func (p *DBMsgPublisher) Publish(ctx context.Context, subject string, msgData []
 	return nil
 }
 
-// Flush is used to flush messages to downstream. IMPORTANT: call this method
-// ONLY after the transaction has been committed successfully.
+// Flush is the low level function used to flush messages to downstream.
+// IMPORTANT: call this method ONLY after the transaction has been committed successfully.
+//
+// Use NewMsgPublisherWithTx to handle it automatically if possible.
 func (p *DBMsgPublisher) Flush(ctx context.Context) {
 	// Reset fields.
 	p.mu.Lock()
@@ -549,29 +553,4 @@ func (p *DBMsgPublisher) Flush(ctx context.Context) {
 	// For larger amount of messages, we need to query the db again.
 	pipe.flushMsgStream(ctx, pipe.dialect.SelectMsgsByBatch(context.Background(), pipe.db, pipe.table, p.batch))
 
-}
-
-// TxInitialized implements sqlh.TxPlugin interface.
-func (p *TxPlugin) TxInitialized(db *sql.DB, tx *sql.Tx) error {
-	if p.pipe.db != db {
-		panic(errors.New("TxInitialized: db must be the same as pipe.db"))
-	}
-	p.publisher = p.pipe.NewMsgPublisher(tx)
-	return nil
-}
-
-// TxCommitted implements sqlh.TxPlugin interface.
-func (p *TxPlugin) TxCommitted() {
-	p.pipe.runner.Submit(func() {
-		p.publisher.Flush(p.pipe.closeCtx)
-	})
-}
-
-// TxFinalised implements sqlh.TxPlugin interface.
-func (p *TxPlugin) TxFinalised() {
-}
-
-// Publisher returns the publisher for used inside the transaction.
-func (p *TxPlugin) Publisher() nproto.MsgPublisher {
-	return p.publisher
 }
