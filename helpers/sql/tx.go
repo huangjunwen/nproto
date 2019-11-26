@@ -28,7 +28,7 @@ func CurTxContext(ctx context.Context) *TxContext {
 	return ret
 }
 
-// MustTxContext is the `must` version of CurTxContext.
+// MustCurTxContext is the `must` version of CurTxContext.
 func MustCurTxContext(ctx context.Context) *TxContext {
 	ret := CurTxContext(ctx)
 	if ret == nil {
