@@ -190,11 +190,11 @@ func main() {
 				})
 				if runCase.ExpectError {
 					if err == nil {
-						log.Panic("Expect error for run case %v, but got nil", runCase)
+						log.Panicf("Expect error for run case %v, but got nil", runCase)
 					}
 				} else {
 					if reply.Result != runCase.ExpectResult {
-						log.Panic("Expect result %v, but got %v", runCase.ExpectError, reply.Result)
+						log.Panicf("Expect result %v, but got %v", runCase.ExpectError, reply.Result)
 					}
 				}
 			}()
