@@ -337,10 +337,10 @@ func TestFlush(t *testing.T) {
 
 	testErrorFlush([]uint64{}, true)
 	testErrorFlush([]uint64{}, false)
-	testErrorFlush([]uint64{2, 3}, true)              // flushMsgList
-	testErrorFlush([]uint64{2, 3}, false)             // flushMsgList
-	testErrorFlush([]uint64{5, 7, 11, 13, 17}, true)  // flushMsgStream
-	testErrorFlush([]uint64{5, 7, 11, 13, 17}, false) // flushMsgStream
+	testErrorFlush([]uint64{3, 7}, true)              // flushMsgList
+	testErrorFlush([]uint64{3, 7}, false)             // flushMsgList
+	testErrorFlush([]uint64{2, 7, 11, 13, 17}, true)  // flushMsgStream
+	testErrorFlush([]uint64{2, 7, 11, 13, 17}, false) // flushMsgStream
 
 	// --- Test redelivery flush ---
 	log.Printf(">>> Test redelivery ...\n")
@@ -398,10 +398,10 @@ func TestFlush(t *testing.T) {
 
 	testRedelivery([]uint64{}, true)
 	testRedelivery([]uint64{}, false)
-	testRedelivery([]uint64{2, 3}, true)
-	testRedelivery([]uint64{2, 3}, false)
-	testRedelivery([]uint64{5, 7, 11, 13, 17}, true)
-	testRedelivery([]uint64{5, 7, 11, 13, 17}, false)
+	testRedelivery([]uint64{11, 13}, true)
+	testRedelivery([]uint64{11, 13}, false)
+	testRedelivery([]uint64{2, 7, 11, 13, 3}, true)
+	testRedelivery([]uint64{2, 7, 11, 13, 3}, false)
 
 	// --- Test WithTx ---
 	log.Printf(">>> Test WithTx ...\n")
@@ -453,8 +453,8 @@ func TestFlush(t *testing.T) {
 
 	testWithTx([]uint64{}, true)
 	testWithTx([]uint64{}, false)
-	testWithTx([]uint64{2, 3}, true)              // flushMsgList
-	testWithTx([]uint64{2, 3}, false)             // flushMsgList
-	testWithTx([]uint64{5, 7, 11, 13, 17}, true)  // flushMsgStream
-	testWithTx([]uint64{5, 7, 11, 13, 17}, false) // flushMsgStream
+	testWithTx([]uint64{7, 13}, true)            // flushMsgList
+	testWithTx([]uint64{7, 13}, false)           // flushMsgList
+	testWithTx([]uint64{5, 2, 11, 13, 7}, true)  // flushMsgStream
+	testWithTx([]uint64{5, 2, 11, 13, 7}, false) // flushMsgStream
 }
