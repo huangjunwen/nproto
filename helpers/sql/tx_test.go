@@ -108,4 +108,19 @@ func TestWithTx(t *testing.T) {
 		assert.Equal([]int{-2, -1}, events)
 
 	}
+
+	// Locals
+	{
+		val := "aaa"
+		f := func(ctx context.Context) {
+			assert.Equal(val, MustCurTxContext(ctx).Local(struct{}{}))
+		}
+		err := WithTx(bgctx, db, func(ctx context.Context, tx *sql.Tx) error {
+			MustCurTxContext(ctx).SetLocal(struct{}{}, val)
+			f(ctx)
+			return nil
+		})
+		assert.NoError(err)
+
+	}
 }

@@ -16,6 +16,8 @@ type txContextKey struct{}
 // TxContext contains transaction context.
 type TxContext struct {
 	db *sql.DB
+	// tx associated local variables
+	locals map[interface{}]interface{}
 	// stacks of functions
 	onCommitted []func()
 	onFinalised []func()
@@ -42,6 +44,16 @@ func (txCtx *TxContext) DB() *sql.DB {
 	return txCtx.db
 }
 
+// SetLocal sets tx local variable.
+func (txCtx *TxContext) SetLocal(key, val interface{}) {
+	txCtx.locals[key] = val
+}
+
+// Local gets tx local variable.
+func (txCtx *TxContext) Local(key interface{}) interface{} {
+	return txCtx.locals[key]
+}
+
 // OnCommitted adds a function which will be only called after the transaction has been successful committed.
 // The invocation order of OnCommitted functions just like defer functions.
 func (txCtx *TxContext) OnCommitted(fn func()) {
@@ -61,7 +73,8 @@ func (txCtx *TxContext) OnFinalised(fn func()) {
 // Inside one can use OnCommitted/OnFinalised to add functions to be called after tx end.
 func WithTx(ctx context.Context, db *sql.DB, fn func(context.Context, *sql.Tx) error) (err error) {
 	txCtx := &TxContext{
-		db: db,
+		db:     db,
+		locals: make(map[interface{}]interface{}),
 	}
 	ctx = context.WithValue(ctx, txContextKey{}, txCtx)
 	tx, err := db.BeginTx(ctx, nil)
