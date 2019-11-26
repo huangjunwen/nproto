@@ -210,9 +210,9 @@ func TestFlush(t *testing.T) {
 		_, err := db.Exec("DELETE FROM " + table)
 		assert.NoError(err)
 	}
-	assertMsgTableRows := func(expect int) {
+	assertMsgTableRows := func(q sqlh.Queryer, expect int) {
 		cnt := 0
-		assert.NoError(db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&cnt))
+		assert.NoError(q.QueryRowContext(bgctx, "SELECT COUNT(*) FROM "+table).Scan(&cnt))
 		assert.Equal(expect, cnt)
 	}
 
@@ -253,22 +253,22 @@ func TestFlush(t *testing.T) {
 			expect = expect * prime
 		}
 
+		// Check database rows.
+		assertMsgTableRows(tx, len(primes))
+
 		// Commit.
 		assert.NoError(tx.Commit())
-
-		// Check database rows.
-		assertMsgTableRows(len(primes))
 
 		// Flush.
 		wg.Add(len(primes))
 		p.Flush(bgctx)
 		wg.Wait()
 
-		// Check database rows.
-		assertMsgTableRows(0)
-
 		// Check.
 		assert.Equal(expect, resetProduct())
+
+		// Check database rows.
+		assertMsgTableRows(db, 0)
 
 		log.Printf("End normal case: %v, %v\n", primes, async)
 	}
@@ -315,11 +315,11 @@ func TestFlush(t *testing.T) {
 			assert.NoError(err)
 		}
 
+		// Check database rows.
+		assertMsgTableRows(tx, len(primes))
+
 		// Commit.
 		assert.NoError(tx.Commit())
-
-		// Check database rows.
-		assertMsgTableRows(len(primes))
 
 		// UnstableAsyncPublisher makes publishing half failed.
 		expectSucc := len(primes)/2 + len(primes)%2
@@ -330,7 +330,7 @@ func TestFlush(t *testing.T) {
 		wg.Wait()
 
 		// Check database rows.
-		assertMsgTableRows(len(primes) - expectSucc)
+		assertMsgTableRows(db, len(primes)-expectSucc)
 
 		log.Printf("End normal case: %v, %v\n", primes, async)
 	}
@@ -381,7 +381,10 @@ func TestFlush(t *testing.T) {
 			expect = expect * prime
 		}
 
-		// NOTE: Add wait group before commit, since once committed, the redeliveryLoop run immediately.
+		// Check database rows.
+		assertMsgTableRows(tx, len(primes))
+
+		// NOTE: Add wait group before commit, since once committed, the redeliveryLoop will run in short time.
 		wg.Add(len(primes))
 
 		// Commit.
@@ -389,6 +392,8 @@ func TestFlush(t *testing.T) {
 
 		// NOTE: Not call p.Flush, let redeliveryLoop to do it.
 		wg.Wait()
+
+		// NOTE: Also not call assertMsgTableRows since redeliveryLoop is another goroutine.
 
 		// Check.
 		assert.Equal(expect, resetProduct())
@@ -435,6 +440,9 @@ func TestFlush(t *testing.T) {
 				assert.NoError(err)
 				expect = expect * prime
 			}
+
+			// Check database rows.
+			assertMsgTableRows(tx, len(primes))
 
 			// NOTE: Add wait group before commit
 			wg.Add(len(primes))
