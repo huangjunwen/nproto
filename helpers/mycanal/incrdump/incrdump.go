@@ -109,11 +109,9 @@ func IncrDump(
 			}
 
 			// NOTE: We have checked ColumnName above, thus --binlog-row-metadata=FULL should be enabled.
-			// NOTE: unsignedMap still can be nil, in case no numeric column at all.
-			um := unsignedMap(table)
-
+			meta := newTableMeta(table)
 			normRowData := func(data []interface{}) []interface{} {
-				normalizeRowData(data, table, um)
+				normalizeRowData(data, meta)
 				return data
 			}
 

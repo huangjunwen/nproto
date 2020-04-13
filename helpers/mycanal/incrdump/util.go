@@ -2,6 +2,7 @@ package incrdump
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	uuid "github.com/satori/go.uuid"
@@ -27,24 +28,23 @@ func gtidFromGTIDEvent(e *replication.GTIDEvent) string {
 
 func normalizeRowData(
 	data []interface{},
-	e *replication.TableMapEvent,
-	unsignedMap map[int]bool,
+	meta *tableMeta,
 ) {
 	for i, val := range data {
 
 		// NOTE: go-mysql stores int as signed values since before MySQL-8, no signedness
 		// information is presents in binlog. So we need to convert here if it is unsigned.
-		if isNumericColumn(e, i) {
+		if isNumericColumn(meta.Table, i) {
 			if v, ok := val.(decimal.Decimal); ok {
 				data[i] = v.String()
 				continue
 			}
 
-			if !unsignedMap[i] {
+			if !meta.UnsignedMap[i] {
 				continue
 			}
 
-			typ := realType(e, i)
+			typ := realType(meta.Table, i)
 			// Copy from go-mysql/canal/rows.go
 			switch v := val.(type) {
 			case int8:
@@ -73,6 +73,31 @@ func normalizeRowData(
 			continue
 		}
 
+		if isEnumColumn(meta.Table, i) {
+			x, ok := val.(int64)
+			if !ok {
+				panic(fmt.Errorf("Expect int64 for enum field but got %T %#v", val, val))
+			}
+			data[i] = meta.EnumStrValueMap[i][int(x)-1]
+			continue
+		}
+
+		if isSetColumn(meta.Table, i) {
+			x, ok := val.(int64)
+			if !ok {
+				panic(fmt.Errorf("Expect int64 for set field but got %T %#v", val, val))
+			}
+			setStrValue := meta.SetStrValueMap[i]
+			vals := []string{}
+			for j := 0; j < 64; j++ {
+				if (x & (1 << uint(j))) != 0 {
+					vals = append(vals, setStrValue[j])
+				}
+			}
+			data[i] = strings.Join(vals, ",")
+			continue
+		}
+
 		switch v := val.(type) {
 		case time.Time:
 			data[i] = v.UTC()
@@ -88,6 +113,51 @@ func normalizeRowData(
 	My PR has not merged yet: https://github.com/siddontang/go-mysql/pull/482
 	So copy here.
 */
+
+type tableMeta struct {
+	Table           *replication.TableMapEvent
+	UnsignedMap     map[int]bool
+	EnumStrValueMap map[int][]string
+	SetStrValueMap  map[int][]string
+}
+
+func newTableMeta(e *replication.TableMapEvent) *tableMeta {
+	return &tableMeta{
+		Table:           e,
+		UnsignedMap:     unsignedMap(e),
+		EnumStrValueMap: enumStrValueMap(e),
+		SetStrValueMap:  setStrValueMap(e),
+	}
+}
+
+func enumStrValueMap(e *replication.TableMapEvent) map[int][]string {
+	return strValueMap(e, isEnumColumn, e.EnumStrValueString())
+}
+
+func setStrValueMap(e *replication.TableMapEvent) map[int][]string {
+	return strValueMap(e, isSetColumn, e.SetStrValueString())
+}
+
+func strValueMap(
+	e *replication.TableMapEvent,
+	includeType func(*replication.TableMapEvent, int) bool,
+	strValue [][]string,
+) map[int][]string {
+
+	if len(strValue) == 0 {
+		return nil
+	}
+	p := 0
+	ret := make(map[int][]string)
+	for i := 0; i < int(e.ColumnCount); i++ {
+		if !includeType(e, i) {
+			continue
+		}
+		ret[i] = strValue[p]
+		p++
+	}
+	return ret
+}
 
 func unsignedMap(e *replication.TableMapEvent) map[int]bool {
 	if len(e.SignednessBitmap) == 0 {
@@ -120,6 +190,14 @@ func isNumericColumn(e *replication.TableMapEvent, i int) bool {
 	default:
 		return false
 	}
+}
+
+func isEnumColumn(e *replication.TableMapEvent, i int) bool {
+	return realType(e, i) == MYSQL_TYPE_ENUM
+}
+
+func isSetColumn(e *replication.TableMapEvent, i int) bool {
+	return realType(e, i) == MYSQL_TYPE_SET
 }
 
 func realType(e *replication.TableMapEvent, i int) byte {

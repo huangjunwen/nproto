@@ -76,8 +76,6 @@ func TestDump(t *testing.T) {
 		log.Printf("MySQL client created.\n")
 	}
 
-	assert.NoError(err)
-
 	_, err = db.Exec(`CREATE TABLE tst._types (
 		id int unsigned primary key auto_increment,
 		b_bit bit(64) NOT NULL DEFAULT b'0',
@@ -118,12 +116,14 @@ func TestDump(t *testing.T) {
 		c_text text,
 		c_mediumtext mediumtext,
 		c_longtext longtext,
-		e_enum enum('a','b') default 'a',
-		s_set set('x','y', 'z') default 'x',
+		e_enum enum('a', 'b', 'c') default 'a',
+		s_set set('w', 'x', 'y', 'z') default 'x',
 		g_geometry geometry DEFAULT NULL,
 		j_json json DEFAULT NULL
 	)`)
-	assert.NoError(err)
+	if err != nil {
+		log.Panic(err)
+	}
 
 	colNames := []string{"id", "b_bit", "n_boolean", "n_tinyint", "n_smallint", "n_mediumint", "n_int", "n_bigint", "n_decimal", "n_float", "n_double", "nu_tinyint", "nu_smallint", "nu_mediumint", "nu_int", "nu_bigint", "nu_decimal", "nu_float", "nu_double", "t_year", "t_date", "t_time", "t_ftime", "t_datetime", "t_fdatetime", "t_timestamp", "t_ftimestamp", "c_char", "c_varchar", "c_binary", "c_varbinary", "c_tinyblob", "c_blob", "c_mediumblob", "c_longblob", "c_tinytext", "c_text", "c_mediumtext", "c_longtext", "e_enum", "s_set", "g_geometry", "j_json"}
 	marks := make([]string, len(colNames))
@@ -136,9 +136,11 @@ func TestDump(t *testing.T) {
 		strings.Join(marks, ", "),
 	)
 
-	values := []interface{}{1, "1011", false, -128, -32768, -8388608, -2147483648, int64(-9223372036854775808), "-77777.77777", -3.1415, -2.7182, 255, 65535, 16777215, 4294967295, uint64(18446744073709551615), "8888888.8888888", 3.1415, 2.7182, "2020", "2020-04-12", "12:34:56", "12:34:56.789", "2020-04-12 12:34:56", "2020-04-21 12:34:56.789", "2020-04-21 01:23:45", "2020-04-21 01:23:45.678", "char", "varchar", "binary\x00\x01", "varbinary\x00\x02", "tinyblob", "blob", "mediumblob", "longblob", nil, nil, nil, nil, "b", "x,z", nil, "{}"}
+	values := []interface{}{1, "1011", false, -128, -32768, -8388608, -2147483648, int64(-9223372036854775808), "-77777.77777", -3.1415, -2.7182, 255, 65535, 16777215, 4294967295, uint64(18446744073709551615), "8888888.8888888", 3.1415, 2.7182, "2020", "2020-04-12", "12:34:56", "12:34:56.789", "2020-04-12 12:34:56", "2020-04-21 12:34:56.789", "2020-04-21 01:23:45", "2020-04-21 01:23:45.678", "char", "varchar", "binary\x00\x01", "varbinary\x00\x02", "tinyblob", "blob", "mediumblob", "longblob", nil, nil, nil, nil, "c", "w,y,z", nil, `{"xx":[],"a":1.223}`}
 	_, err = db.Exec(query, values...)
-	assert.NoError(err)
+	if err != nil {
+		log.Panic(err)
+	}
 
 	var gset string
 	var fullDumpVals map[string]interface{}
