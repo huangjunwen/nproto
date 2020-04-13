@@ -17,4 +17,11 @@
 //   - https://mysqlhighavailability.com/more-metadata-is-written-into-binary-log/
 //   - https://mysqlhighavailability.com/taking-advantage-of-new-transaction-length-metadata/
 //   - https://github.com/siddontang/go-mysql/pull/468
+//
+// Compatiable between fulldump/incrdump (see tst):
+//   - DECIMAL/NUMERIC fields are returned as string, but may have different trailing zeros.
+//   - BINARY fields are returned as string, but may have different trailing '\x00'.
+//   - JSON fields are returned as string, but elements inside may have different position.
+//   - BIT fields seems have some bugs in incrdump.
+//   - TIME with fraction seems have some bugs in incrdump too.
 package mycanal

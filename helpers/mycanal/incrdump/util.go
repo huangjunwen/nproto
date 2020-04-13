@@ -74,27 +74,51 @@ func normalizeRowData(
 		}
 
 		if isEnumColumn(meta.Table, i) {
-			x, ok := val.(int64)
+			v, ok := val.(int64)
 			if !ok {
-				panic(fmt.Errorf("Expect int64 for enum field but got %T %#v", val, val))
+				panic(fmt.Errorf("Expect int64 for enum (MYSQL_TYPE_ENUM) field but got %T %#v", val, val))
 			}
-			data[i] = meta.EnumStrValueMap[i][int(x)-1]
+			data[i] = meta.EnumStrValueMap[i][int(v)-1]
 			continue
 		}
 
 		if isSetColumn(meta.Table, i) {
-			x, ok := val.(int64)
+			v, ok := val.(int64)
 			if !ok {
-				panic(fmt.Errorf("Expect int64 for set field but got %T %#v", val, val))
+				panic(fmt.Errorf("Expect int64 for set (MYSQL_TYPE_SET) field but got %T %#v", val, val))
 			}
 			setStrValue := meta.SetStrValueMap[i]
 			vals := []string{}
 			for j := 0; j < 64; j++ {
-				if (x & (1 << uint(j))) != 0 {
+				if (v & (1 << uint(j))) != 0 {
 					vals = append(vals, setStrValue[j])
 				}
 			}
 			data[i] = strings.Join(vals, ",")
+			continue
+		}
+
+		if realType(meta.Table, i) == MYSQL_TYPE_YEAR {
+			v, ok := val.(int)
+			if !ok {
+				panic(fmt.Errorf("Expect int for year (MYSQL_TYPE_YEAR) field but got %T %#v", val, val))
+			}
+			// NOTE: Convert to int64 to keep the same as fulldump.
+			data[i] = int64(v)
+			continue
+		}
+
+		if realType(meta.Table, i) == MYSQL_TYPE_NEWDATE {
+			v, ok := val.(string)
+			if !ok {
+				panic(fmt.Errorf("Expect string for date (MYSQL_TYPE_NEWDATE) field but got %T %#v", val, val))
+			}
+			// NOTE: Convert to time.Time to keep the same as fulldump.
+			t, err := time.Parse("2006-01-02", v)
+			if err != nil {
+				panic(err)
+			}
+			data[i] = t
 			continue
 		}
 
