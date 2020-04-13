@@ -173,7 +173,7 @@ func IncrDump(
 		default:
 		}
 
-		// check trx edn.
+		// check trx end.
 		trxRemainSize = safeUint64Minus(trxRemainSize, uint64(binlogEvent.Header.EventSize))
 		if trxRemainSize > 0 {
 			continue
