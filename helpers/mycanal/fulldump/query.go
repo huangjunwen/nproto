@@ -93,7 +93,7 @@ func Query(ctx context.Context, q sqlh.Queryer, query string, args ...interface{
 
 			case sql.NullTime:
 				if v.Valid {
-					val = v.Time.Format(DatetimeFormat)
+					val = v.Time.UTC()
 				}
 
 			case sql.RawBytes:
@@ -102,11 +102,11 @@ func Query(ctx context.Context, q sqlh.Queryer, query string, args ...interface{
 				}
 
 			case time.Time:
-				val = v.Format(DatetimeFormat)
+				val = v.UTC()
 
 			case mysql.NullTime:
 				if v.Valid {
-					val = v.Time.Format(DatetimeFormat)
+					val = v.Time.UTC()
 				}
 
 			default:
@@ -124,5 +124,4 @@ func Query(ctx context.Context, q sqlh.Queryer, query string, args ...interface{
 func FullTableQuery(ctx context.Context, q sqlh.Queryer, dbName, table string) (RowIter, error) {
 	query := fmt.Sprintf("SELECT * FROM %s.%s", dbName, table)
 	return Query(ctx, q, query)
-
 }

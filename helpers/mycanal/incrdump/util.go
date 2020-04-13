@@ -2,8 +2,10 @@ package incrdump
 
 import (
 	"fmt"
+	"time"
 
 	uuid "github.com/satori/go.uuid"
+	"github.com/shopspring/decimal"
 	. "github.com/siddontang/go-mysql/mysql"
 	"github.com/siddontang/go-mysql/replication"
 )
@@ -23,52 +25,60 @@ func gtidFromGTIDEvent(e *replication.GTIDEvent) string {
 	)
 }
 
-// convert bytes to string.
-func handleBytes(data []interface{}) {
-	for i, v := range data {
-		if b, ok := v.([]byte); ok {
-			data[i] = string(b)
-		}
-	}
-}
+func normalizeRowData(
+	data []interface{},
+	e *replication.TableMapEvent,
+	unsignedMap map[int]bool,
+) {
+	for i, val := range data {
 
-// NOTE: go-mysql stores int as signed values since before MySQL-8, no signedness
-// information is presents in binlog.
-func handleUnsigned(data []interface{}, e *replication.TableMapEvent, unsignedMap map[int]bool) {
-	for i, typ := range e.ColumnType {
-		if !isNumericColumn(e, i) {
-			continue
-		}
-
-		if !unsignedMap[i] {
-			continue
-		}
-
-		// Copy from go-mysql/canal/rows.go
-		switch v := data[i].(type) {
-		case int8:
-			data[i] = uint8(v)
-
-		case int16:
-			data[i] = uint16(v)
-
-		case int32:
-			if v < 0 && typ == MYSQL_TYPE_INT24 {
-				// 16777215 is the maximum value of mediumint
-				data[i] = uint32(16777215 + v + 1)
-			} else {
-				data[i] = uint32(v)
+		// NOTE: go-mysql stores int as signed values since before MySQL-8, no signedness
+		// information is presents in binlog. So we need to convert here if it is unsigned.
+		if isNumericColumn(e, i) {
+			if v, ok := val.(decimal.Decimal); ok {
+				data[i] = v.String()
+				continue
 			}
 
-		case int64:
-			data[i] = uint64(v)
+			if !unsignedMap[i] {
+				continue
+			}
 
-		case int:
-			data[i] = uint(v)
+			typ := realType(e, i)
+			// Copy from go-mysql/canal/rows.go
+			switch v := val.(type) {
+			case int8:
+				data[i] = uint8(v)
 
-		default:
-			// float/double ...
+			case int16:
+				data[i] = uint16(v)
 
+			case int32:
+				if v < 0 && typ == MYSQL_TYPE_INT24 {
+					// 16777215 is the maximum value of mediumint
+					data[i] = uint32(16777215 + v + 1)
+				} else {
+					data[i] = uint32(v)
+				}
+
+			case int64:
+				data[i] = uint64(v)
+
+			case int:
+				data[i] = uint(v)
+
+			default:
+				// float/double ...
+			}
+			continue
+		}
+
+		switch v := val.(type) {
+		case time.Time:
+			data[i] = v.UTC()
+
+		case []byte:
+			data[i] = string(v)
 		}
 	}
 }

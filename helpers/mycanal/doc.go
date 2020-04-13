@@ -7,6 +7,8 @@
 //     - `--gtid-mode=ON`
 //     - `--enforce-gtid-consistency=ON`
 //   - binlog enabled with the following:
+//     - `--log-bin=xxxx`: enable bin log
+//     - `--server-id=xxx`: the server id
 //     - `--binlog-format=ROW`: binlog output row changes instead of statments
 //     - `--binlog-row-image=FULL`: before and after image of row changes
 //     - `--binlog-row-metadata=FULL`: extra optional meta for tables such as signedness for numeric columns/column names ...

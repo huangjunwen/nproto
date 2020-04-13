@@ -5,6 +5,8 @@ import (
 	"database/sql"
 
 	"github.com/pkg/errors"
+
+	. "github.com/huangjunwen/nproto/helpers/mycanal"
 )
 
 // FullDump is similar to  mysqldump --single-transaction, see mycanal's doc for prerequisites.
@@ -15,8 +17,18 @@ import (
 //
 // Other refs:
 //   - https://issues.redhat.com/browse/DBZ-210
-func FullDump(ctx context.Context, db *sql.DB, fn func(context.Context, *sql.Conn) error) (gtidSet string, err error) {
-	// 0. Use a single connection within this whole function.
+func FullDump(
+	ctx context.Context,
+	cfg *FullDumpConfig,
+	fn func(context.Context, *sql.Conn) error,
+) (gtidSet string, err error) {
+
+	db, err := sql.Open("mysql", cfg.ToDriverCfg().FormatDSN())
+	if err != nil {
+		return "", errors.WithStack(err)
+	}
+	defer db.Close()
+
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return "", errors.WithStack(err)
@@ -51,7 +63,7 @@ func FullDump(ctx context.Context, db *sql.DB, fn func(context.Context, *sql.Con
 		return "", errors.WithStack(err)
 	}
 	if gtidSet == "" {
-		return "", errors.Errorf("No GTID_EXECUTED, pls make sure you have turn on gtid mode")
+		return "", errors.Errorf("No GTID_EXECUTED, pls make sure you have turn on binlog and gtid mode")
 	}
 
 	// 4. Unlock tables.

@@ -7,20 +7,19 @@ import (
 	"github.com/pkg/errors"
 	"github.com/siddontang/go-mysql/mysql"
 	"github.com/siddontang/go-mysql/replication"
+
+	. "github.com/huangjunwen/nproto/helpers/mycanal"
 )
 
 // IncrDump reads events from mysql binlog, see mycanal's doc for prerequisites
 func IncrDump(
 	ctx context.Context,
-	conf replication.BinlogSyncerConfig,
+	cfg *IncrDumpConfig,
 	gtidSet string,
 	handler Handler,
 ) error {
 
-	// MySQL only!
-	if conf.Flavor != "" && conf.Flavor != "mysql" {
-		panic(fmt.Errorf("Only support MySQL"))
-	}
+	conf := cfg.ToDriverCfg()
 	gset, err := mysql.ParseMysqlGTIDSet(gtidSet)
 	if err != nil {
 		panic(err)
@@ -113,9 +112,8 @@ func IncrDump(
 			// NOTE: unsignedMap still can be nil, in case no numeric column at all.
 			um := unsignedMap(table)
 
-			handleRowData := func(data []interface{}) []interface{} {
-				handleUnsigned(data, table, um)
-				handleBytes(data)
+			normRowData := func(data []interface{}) []interface{} {
+				normalizeRowData(data, table, um)
 				return data
 			}
 
@@ -129,7 +127,7 @@ func IncrDump(
 							schemaName: schemaName,
 							tableName:  tableName,
 							beforeData: nil,
-							afterData:  handleRowData(event.Rows[i]),
+							afterData:  normRowData(event.Rows[i]),
 						},
 					}); err != nil {
 						return err
@@ -144,8 +142,8 @@ func IncrDump(
 							rowsEvent:  event,
 							schemaName: schemaName,
 							tableName:  tableName,
-							beforeData: handleRowData(event.Rows[i]),
-							afterData:  handleRowData(event.Rows[i+1]),
+							beforeData: normRowData(event.Rows[i]),
+							afterData:  normRowData(event.Rows[i+1]),
 						},
 					}); err != nil {
 						return err
@@ -160,7 +158,7 @@ func IncrDump(
 							rowsEvent:  event,
 							schemaName: schemaName,
 							tableName:  tableName,
-							beforeData: handleRowData(event.Rows[i]),
+							beforeData: normRowData(event.Rows[i]),
 							afterData:  nil,
 						},
 					}); err != nil {
