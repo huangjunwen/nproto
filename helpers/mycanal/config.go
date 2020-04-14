@@ -1,6 +1,7 @@
 package mycanal
 
 import (
+	"database/sql"
 	"fmt"
 
 	"github.com/go-sql-driver/mysql"
@@ -48,6 +49,10 @@ func (cfg *FullDumpConfig) ToDriverCfg() *mysql.Config {
 	}
 	ret.Params["charset"] = cfg.getCharset()
 	return ret
+}
+
+func (cfg *FullDumpConfig) Client() (*sql.DB, error) {
+	return sql.Open("mysql", cfg.ToDriverCfg().FormatDSN())
 }
 
 func (cfg *IncrDumpConfig) ToDriverCfg() replication.BinlogSyncerConfig {

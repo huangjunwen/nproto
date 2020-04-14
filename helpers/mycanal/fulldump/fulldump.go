@@ -23,7 +23,7 @@ func FullDump(
 	fn func(context.Context, *sql.Conn) error,
 ) (gtidSet string, err error) {
 
-	db, err := sql.Open("mysql", cfg.ToDriverCfg().FormatDSN())
+	db, err := cfg.Client()
 	if err != nil {
 		return "", errors.WithStack(err)
 	}
@@ -34,6 +34,11 @@ func FullDump(
 		return "", errors.WithStack(err)
 	}
 	defer conn.Close()
+
+	// 0. Set isolation level to repeatable read (the default).
+	if _, err = conn.ExecContext(ctx, "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ"); err != nil {
+		return "", errors.WithStack(err)
+	}
 
 	// 1. Lock tables: to get current GTID set and start trx.
 	_, err = conn.ExecContext(ctx, "FLUSH TABLES WITH READ LOCK")
@@ -46,9 +51,6 @@ func FullDump(
 	}()
 
 	// 2. Start trx with consistent snapshot.
-	if _, err = conn.ExecContext(ctx, "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ"); err != nil {
-		return "", errors.WithStack(err)
-	}
 	if _, err = conn.ExecContext(ctx, "START TRANSACTION WITH CONSISTENT SNAPSHOT"); err != nil {
 		return "", errors.WithStack(err)
 	}
