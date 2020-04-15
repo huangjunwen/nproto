@@ -239,8 +239,9 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 
 	// Now start incr dump to capture changes.
 	err = incrdump.IncrDump(ctx, pipe.slaveCfg, gtidSet, func(ctx context.Context, e interface{}) error {
+
 		switch ev := e.(type) {
-		case incrdump.RowInsertion:
+		case *incrdump.RowInsertion:
 			schema := ev.SchemaName()
 			table := ev.TableName()
 			if !pipe.tableFilter(schema, table) {

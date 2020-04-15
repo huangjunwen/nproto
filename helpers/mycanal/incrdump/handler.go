@@ -8,11 +8,11 @@ import (
 
 // Handler is used to handle events in binlog, can be one of the followings:
 //
-//   - TrxBeginning: the beginning of a gtid trx
-//   - TrxEnding: the end of a gtid trx
-//   - RowInsertion: row insert, between TrxBeginning/TrxEnding
-//   - RowUpdating: row update, between TrxBeginning/TrxEnding
-//   - RowDeletion: row delete, between TrxBeginning/TrxEnding
+//   - *TrxBeginning: the beginning of a gtid trx
+//   - *TrxEnding: the end of a gtid trx
+//   - *RowInsertion: row insert, between TrxBeginning/TrxEnding
+//   - *RowUpdating: row update, between TrxBeginning/TrxEnding
+//   - *RowDeletion: row delete, between TrxBeginning/TrxEnding
 //
 // Maybe more events will be added in the future
 type Handler func(ctx context.Context, e interface{}) error
