@@ -23,7 +23,7 @@ func OptLockName(lockName string) Option {
 	}
 }
 
-// OptMaxInflight sets the max number of messages not yet processed.
+// OptMaxInflight sets the max number of processing messages.
 func OptMaxInflight(maxInflight int) Option {
 	return func(pipe *BinlogMsgPipe) error {
 		if maxInflight <= 0 {
@@ -34,7 +34,7 @@ func OptMaxInflight(maxInflight int) Option {
 	}
 }
 
-// OptRetryWait sets the interval between getting reconnecting db.
+// OptRetryWait sets the interval between reconnection.
 func OptRetryWait(retryWait time.Duration) Option {
 	return func(pipe *BinlogMsgPipe) error {
 		pipe.retryWait = retryWait

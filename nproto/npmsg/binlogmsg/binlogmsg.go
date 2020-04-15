@@ -18,11 +18,17 @@ import (
 )
 
 const (
-	DefaultLockName    = "nproto.binlogmsg"
+	// DefaultLockName is the default lock name for msg pipe.
+	DefaultLockName = "nproto.binlogmsg"
+
+	// DefaultMaxInflight is default max number of processings message.
 	DefaultMaxInflight = 512
-	DefaultRetryWait   = 5 * time.Second
+
+	// DefaultRetryWait is the default interval reconnection.
+	DefaultRetryWait = 5 * time.Second
 )
 
+// BinlogMsgPipe is used to pipe messages from message tables to downstream.
 type BinlogMsgPipe struct {
 	downstream  nproto.MsgPublisher
 	masterCfg   *mycanal.FullDumpConfig
@@ -56,6 +62,7 @@ var (
 	_ nproto.MsgPublisher = (*BinlogMsgPublisher)(nil)
 )
 
+// NewBinlogMsgPipe creates a new BinlogMsgPipe.
 func NewBinlogMsgPipe(
 	downstream nproto.MsgPublisher,
 	masterCfg *mycanal.FullDumpConfig,
@@ -291,7 +298,8 @@ func (pipe *BinlogMsgPipe) flushMsgEntry(ctx context.Context, entry msgEntry, cb
 
 }
 
-// NewBinlogMsgPublisher creates a new BinlogMsgPublisher.
+// NewBinlogMsgPublisher creates a new BinlogMsgPublisher. schema/table is the message table
+// to store messages.
 func NewBinlogMsgPublisher(schema, table string, q sqlh.Queryer) (*BinlogMsgPublisher, error) {
 	return &BinlogMsgPublisher{
 		schema:  schema,
