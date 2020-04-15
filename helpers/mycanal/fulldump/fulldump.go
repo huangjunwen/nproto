@@ -27,26 +27,26 @@ func FullDump(
 
 	db, err := cfg.Client()
 	if err != nil {
-		return "", errors.WithStack(err)
+		return "", errors.WithMessage(err, "fulldump.FullDump open client error")
 	}
 	defer db.Close()
 
 	conn, err := db.Conn(ctx)
 	if err != nil {
-		return "", errors.WithStack(err)
+		return "", errors.WithMessage(err, "fulldump.FullDump open conn error")
 	}
 	defer conn.Close()
 
 	// 0. Set isolation level to repeatable read (the default).
 	if _, err = conn.ExecContext(bgCtx, "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ"); err != nil {
-		return "", errors.WithStack(err)
+		return "", errors.WithMessage(err, "fulldump.FullDump set isolation level error")
 	}
 
 	// 1. Lock tables: to get current GTID set and start trx.
 	// NOTE: the lock will be released if connection closed.
 	_, err = conn.ExecContext(bgCtx, "FLUSH TABLES WITH READ LOCK")
 	if err != nil {
-		return "", errors.WithStack(err)
+		return "", errors.WithMessage(err, "fulldump.FullDump ftwrl error")
 	}
 	defer func() {
 		// XXX: to ensure unlock is run
@@ -55,7 +55,7 @@ func FullDump(
 
 	// 2. Start trx with consistent snapshot.
 	if _, err = conn.ExecContext(bgCtx, "START TRANSACTION WITH CONSISTENT SNAPSHOT"); err != nil {
-		return "", errors.WithStack(err)
+		return "", errors.WithMessage(err, "fulldump.FullDump start transaction error")
 	}
 	defer func() {
 		// fulldump should not modify data
@@ -65,7 +65,7 @@ func FullDump(
 	// 3. Get GTID_EXECUTED
 	err = conn.QueryRowContext(bgCtx, "SELECT @@GLOBAL.GTID_EXECUTED").Scan(&gtidSet)
 	if err != nil {
-		return "", errors.WithStack(err)
+		return "", errors.WithMessage(err, "fulldump.FullDump get gtid error")
 	}
 	if gtidSet == "" {
 		return "", errors.Errorf("No GTID_EXECUTED, pls make sure you have turn on binlog and gtid mode")
@@ -74,7 +74,7 @@ func FullDump(
 	// 4. Unlock tables.
 	_, err = conn.ExecContext(bgCtx, "UNLOCK TABLES")
 	if err != nil {
-		return "", errors.WithStack(err)
+		return "", errors.WithMessage(err, "fulldump.FullDump unlock tables error")
 	}
 
 	// 5. User function

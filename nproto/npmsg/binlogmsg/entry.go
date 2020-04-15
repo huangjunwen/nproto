@@ -1,5 +1,9 @@
 package binlogmsg
 
+import (
+	"errors"
+)
+
 const (
 	msgTableIdField      = "id"
 	msgTableSubjectField = "subject"
@@ -40,10 +44,21 @@ func (entry msgEntry) TableName() string {
 	return entry[tableNameField].(string)
 }
 
+var (
+	noErr = errors.New("no error: this is just a placeholder")
+)
+
 func (entry msgEntry) SetPublishErr(err error) {
+	if err == nil {
+		err = noErr
+	}
 	entry[publishErrField] = err
 }
 
 func (entry msgEntry) GetPublishErr() error {
-	return entry[publishErrField].(error)
+	err := entry[publishErrField].(error)
+	if err == noErr {
+		return nil
+	}
+	return err
 }

@@ -25,7 +25,7 @@ type RowIter func(next bool) (map[string]interface{}, error)
 func Query(ctx context.Context, q sqlh.Queryer, query string, args ...interface{}) (iter RowIter, err error) {
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, errors.WithMessage(err, "fulldump.Query error")
 	}
 	defer func() {
 		if err != nil {
@@ -35,16 +35,16 @@ func Query(ctx context.Context, q sqlh.Queryer, query string, args ...interface{
 
 	colTypes, err := rows.ColumnTypes()
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, errors.WithMessage(err, "fulldump.Query get column types error")
 	}
 
 	return func(next bool) (map[string]interface{}, error) {
 		if !next {
-			return nil, errors.WithStack(rows.Close())
+			return nil, errors.WithMessage(rows.Close(), "fulldump.Query close rows error")
 		}
 
 		if !rows.Next() {
-			return nil, errors.WithStack(rows.Err())
+			return nil, errors.WithMessage(rows.Err(), "fulldump.Query rows error")
 		}
 
 		pointers := []reflect.Value{}
@@ -56,7 +56,7 @@ func Query(ctx context.Context, q sqlh.Queryer, query string, args ...interface{
 		}
 
 		if err := rows.Scan(values...); err != nil {
-			return nil, errors.WithStack(err)
+			return nil, errors.WithMessage(err, "fulldump.Query scan error")
 		}
 
 		m := make(map[string]interface{})

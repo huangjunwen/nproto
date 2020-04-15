@@ -18,10 +18,10 @@ func CreateMsgTable(ctx context.Context, q sqlh.Queryer, schema, table string) e
 		ts TIMESTAMP DEFAULT NOW(),
 		subject VARCHAR(128) NOT NULL,
 		data BLOB,
-		PRIMARY KEY (id)
+		PRIMARY KEY (id))
 	`, schema, table)
 	_, err := q.ExecContext(ctx, sql)
-	return errors.WithStack(err)
+	return errors.WithMessagef(err, "Create msg table %s.%s error", schema, table)
 }
 
 // List all msg table names. NOTE: since 8.0, information.tables is also innodb.
@@ -32,10 +32,10 @@ func listMsgTables(ctx context.Context, q sqlh.Queryer, filter MsgTableFilter) (
 		FROM information_schema.tables
 		WHERE
 			table_type = 'BASE TABLE' AND
-			table_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys'
+			table_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')
 	`)
 	if err != nil {
-		err = errors.WithStack(err)
+		err = errors.WithMessage(err, "List msg tables error")
 		return
 	}
 	defer rows.Close()
@@ -43,7 +43,7 @@ func listMsgTables(ctx context.Context, q sqlh.Queryer, filter MsgTableFilter) (
 	for rows.Next() {
 		var schema, table string
 		if err = rows.Scan(&schema, &table); err != nil {
-			err = errors.WithStack(err)
+			err = errors.WithMessage(err, "List msg tables scan error")
 			return
 		}
 		if !filter(schema, table) {
@@ -59,26 +59,26 @@ func listMsgTables(ctx context.Context, q sqlh.Queryer, filter MsgTableFilter) (
 func getLock(ctx context.Context, q sqlh.Queryer, lockName string) (ok bool, err error) {
 	r := sql.NullInt64{}
 	if err := q.QueryRowContext(ctx, "SELECT GET_LOCK(?, 0)", lockName).Scan(&r); err != nil {
-		return false, errors.WithStack(err)
+		return false, errors.WithMessage(err, "Get lock error")
 	}
 	return r.Int64 == 1, nil
 }
 
 func releaseLock(ctx context.Context, q sqlh.Queryer, lockName string) error {
 	r := sql.NullInt64{}
-	return errors.WithStack(q.QueryRowContext(ctx, "SELECT RELEASE_LOCK(?)", lockName).Scan(&r))
+	return errors.WithMessage(q.QueryRowContext(ctx, "SELECT RELEASE_LOCK(?)", lockName).Scan(&r), "Release lock error")
 }
 
 func addMsg(ctx context.Context, q sqlh.Queryer, schema, table, subject string, data []byte) error {
 	_, err := q.ExecContext(ctx, fmt.Sprintf(`
 		INSERT INTO %s.%s (subject, data) VALUES (?, ?)
 	`, schema, table), subject, data)
-	return errors.WithStack(err)
+	return errors.WithMessage(err, "Insert message error")
 }
 
 func delMsg(ctx context.Context, q sqlh.Queryer, schema, table string, id uint64) error {
 	_, err := q.ExecContext(ctx, fmt.Sprintf(`
 		DELETE FROM %s.%s WHERE id=?
 	`, schema, table), id)
-	return errors.WithStack(err)
+	return errors.WithMessage(err, "Delete message error")
 }

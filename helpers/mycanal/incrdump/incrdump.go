@@ -30,7 +30,7 @@ func IncrDump(
 
 	streamer, err := syncer.StartSyncGTID(gset)
 	if err != nil {
-		return errors.WithStack(err)
+		return errors.WithMessage(err, "incrdump.IncrDump start sync gtid error")
 	}
 
 	var (
@@ -55,7 +55,7 @@ func IncrDump(
 			if err == ctx.Err() {
 				err = nil
 			}
-			return errors.WithStack(err)
+			return errors.WithMessage(err, "incrdump.IncrDump get event error")
 		}
 
 		// Every trx starts with a gtid event.

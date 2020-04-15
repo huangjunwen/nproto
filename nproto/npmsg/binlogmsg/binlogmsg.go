@@ -104,7 +104,6 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 	// Create a connections for lock and delete msgs in msg tables.
 	db, err := pipe.masterCfg.Client()
 	if err != nil {
-		err = errors.WithStack(err)
 		pipe.logger.Error().Err(err).Msg("Open db failed")
 		return err
 	}
@@ -114,7 +113,6 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 	{
 		conn, err := db.Conn(ctx)
 		if err != nil {
-			err = errors.WithStack(err)
 			pipe.logger.Error().Err(err).Msg("Get conn failed")
 			return err
 		}
@@ -178,7 +176,7 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 	flush := func(entry msgEntry) error {
 		select {
 		case <-ctx.Done():
-			return errors.WithStack(ctx.Err())
+			return errors.WithMessage(ctx.Err(), "Context done during flush")
 
 		case c <- struct{}{}:
 		}
