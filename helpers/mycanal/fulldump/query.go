@@ -13,10 +13,6 @@ import (
 	sqlh "github.com/huangjunwen/nproto/helpers/sql"
 )
 
-const (
-	DatetimeFormat = "2006-01-02 15:04:05"
-)
-
 // RowIter is used for result set iteration. It returns nil if no more row.
 // Caller should invoke RowIter(false) to close the iterator and release resource.
 type RowIter func(next bool) (map[string]interface{}, error)
