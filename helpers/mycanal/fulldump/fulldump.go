@@ -2,7 +2,6 @@ package fulldump
 
 import (
 	"context"
-	"database/sql"
 
 	"github.com/pkg/errors"
 
@@ -20,8 +19,11 @@ import (
 func FullDump(
 	ctx context.Context,
 	cfg *FullDumpConfig,
-	fn func(context.Context, *sql.Conn) error,
+	handler Handler,
 ) (gtidSet string, err error) {
+
+	// Some commands does not need cancel.
+	bgCtx := context.Background()
 
 	db, err := cfg.Client()
 	if err != nil {
@@ -36,31 +38,32 @@ func FullDump(
 	defer conn.Close()
 
 	// 0. Set isolation level to repeatable read (the default).
-	if _, err = conn.ExecContext(ctx, "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ"); err != nil {
+	if _, err = conn.ExecContext(bgCtx, "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ"); err != nil {
 		return "", errors.WithStack(err)
 	}
 
 	// 1. Lock tables: to get current GTID set and start trx.
-	_, err = conn.ExecContext(ctx, "FLUSH TABLES WITH READ LOCK")
+	// NOTE: the lock will be released if connection closed.
+	_, err = conn.ExecContext(bgCtx, "FLUSH TABLES WITH READ LOCK")
 	if err != nil {
 		return "", errors.WithStack(err)
 	}
 	defer func() {
 		// XXX: to ensure unlock is run
-		conn.ExecContext(ctx, "UNLOCK TABLES")
+		conn.ExecContext(bgCtx, "UNLOCK TABLES")
 	}()
 
 	// 2. Start trx with consistent snapshot.
-	if _, err = conn.ExecContext(ctx, "START TRANSACTION WITH CONSISTENT SNAPSHOT"); err != nil {
+	if _, err = conn.ExecContext(bgCtx, "START TRANSACTION WITH CONSISTENT SNAPSHOT"); err != nil {
 		return "", errors.WithStack(err)
 	}
 	defer func() {
 		// fulldump should not modify data
-		conn.ExecContext(ctx, "ROLLBACK")
+		conn.ExecContext(bgCtx, "ROLLBACK")
 	}()
 
 	// 3. Get GTID_EXECUTED
-	err = conn.QueryRowContext(ctx, "SELECT @@GLOBAL.GTID_EXECUTED").Scan(&gtidSet)
+	err = conn.QueryRowContext(bgCtx, "SELECT @@GLOBAL.GTID_EXECUTED").Scan(&gtidSet)
 	if err != nil {
 		return "", errors.WithStack(err)
 	}
@@ -69,13 +72,13 @@ func FullDump(
 	}
 
 	// 4. Unlock tables.
-	_, err = conn.ExecContext(ctx, "UNLOCK TABLES")
+	_, err = conn.ExecContext(bgCtx, "UNLOCK TABLES")
 	if err != nil {
 		return "", errors.WithStack(err)
 	}
 
 	// 5. User function
-	err = fn(ctx, conn)
+	err = handler(ctx, conn)
 	if err != nil {
 		return "", err
 	}

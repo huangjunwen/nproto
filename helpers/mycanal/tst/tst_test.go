@@ -15,8 +15,9 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	. "github.com/huangjunwen/nproto/helpers/mycanal"
-	. "github.com/huangjunwen/nproto/helpers/mycanal/fulldump"
-	. "github.com/huangjunwen/nproto/helpers/mycanal/incrdump"
+	"github.com/huangjunwen/nproto/helpers/mycanal/fulldump"
+	"github.com/huangjunwen/nproto/helpers/mycanal/incrdump"
+	sqlh "github.com/huangjunwen/nproto/helpers/sql"
 )
 
 type diffValue struct {
@@ -144,8 +145,8 @@ func TestDump(t *testing.T) {
 
 	var gset string
 	var fullDumpVals map[string]interface{}
-	gset, err = FullDump(context.Background(), fullDumpCfg, func(ctx context.Context, conn *sql.Conn) error {
-		iter, err := FullTableQuery(ctx, conn, "tst", "_types")
+	gset, err = fulldump.FullDump(context.Background(), fullDumpCfg, func(ctx context.Context, q sqlh.Queryer) error {
+		iter, err := fulldump.FullTableQuery(ctx, q, "tst", "_types")
 		if err != nil {
 			return err
 		}
@@ -165,15 +166,15 @@ func TestDump(t *testing.T) {
 	assert.NoError(err)
 
 	// Capture the deletion
-	var rowDeletion *RowDeletion
+	var rowDeletion *incrdump.RowDeletion
 	ctx, cancel := context.WithCancel(context.Background())
-	err = IncrDump(
+	err = incrdump.IncrDump(
 		ctx,
 		incrDumpCfg,
 		gset,
 		func(ctx context.Context, e interface{}) error {
 			switch ev := e.(type) {
-			case *RowDeletion:
+			case *incrdump.RowDeletion:
 				rowDeletion = ev
 				cancel()
 			}
