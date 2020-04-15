@@ -3,6 +3,7 @@ package binlogmsg
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -13,11 +14,13 @@ import (
 	sqlh "github.com/huangjunwen/nproto/helpers/sql"
 	"github.com/huangjunwen/nproto/nproto"
 	"github.com/huangjunwen/nproto/nproto/npmsg/enc"
+	"github.com/huangjunwen/nproto/nproto/zlog"
 )
 
 const (
 	DefaultLockName    = "nproto.binlogmsg"
 	DefaultMaxInflight = 512
+	DefaultRetryWait   = 5 * time.Second
 )
 
 type BinlogMsgPipe struct {
@@ -29,6 +32,7 @@ type BinlogMsgPipe struct {
 	lockName    string
 	logger      zerolog.Logger
 	maxInflight int
+	retryWait   time.Duration
 }
 
 // BinlogMsgPublisher 'publishes' msg to MySQL (>=8.0.2) binlog: it simply insert msg to a table.
@@ -69,7 +73,9 @@ func NewBinlogMsgPipe(
 		lockName:    DefaultLockName,
 		logger:      zerolog.Nop(),
 		maxInflight: DefaultMaxInflight,
+		retryWait:   DefaultRetryWait,
 	}
+	OptLogger(&zlog.DefaultZLogger)(ret)
 
 	for _, opt := range opts {
 		if err := opt(ret); err != nil {
@@ -78,6 +84,19 @@ func NewBinlogMsgPipe(
 	}
 
 	return ret, nil
+}
+
+// Run the main loop (flush messages to downstream) until ctx done.
+func (pipe *BinlogMsgPipe) Run(ctx context.Context) (err error) {
+	for {
+		pipe.run(ctx)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+
+		case <-time.After(pipe.retryWait):
+		}
+	}
 }
 
 func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
@@ -124,6 +143,7 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 	// speed control
 	c := make(chan struct{}, pipe.maxInflight)
 
+	// post-process go routine
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -136,7 +156,7 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 				break
 			}
 
-			// NOTE: Cancel ctx if error, but not break until msgEntry(nil).
+			// NOTE: Cancel ctx if error, but not break loop until msgEntry(nil).
 			if err := entry.GetPublishErr(); err != nil {
 				cancel()
 				pipe.logger.Error().Err(err).Uint64("msgId", entry.Id()).Str("msgSubj", entry.Subject()).Msg("Publish msg failed")
@@ -211,10 +231,11 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 		return nil
 	})
 
-	// Wait all outgoing publish finished.
+	// Wait all ongoing publish finished.
 	pubCbWg.Wait()
 
 	if err != nil {
+		pipe.logger.Error().Err(err).Msg("Full dump returned with error")
 		return err
 	}
 
@@ -237,10 +258,14 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 		return nil
 	})
 
-	// Wait all outgoing publish finished.
+	// Wait all ongoing publish finished.
 	pubCbWg.Wait()
 
-	return err
+	if err != nil {
+		pipe.logger.Error().Err(err).Msg("Incr dump returned with error")
+		return err
+	}
+	return nil
 }
 
 func (pipe *BinlogMsgPipe) flushMsgEntry(ctx context.Context, entry msgEntry, cb func(error)) {
