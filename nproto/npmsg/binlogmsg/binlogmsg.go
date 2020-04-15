@@ -1,0 +1,292 @@
+package binlogmsg
+
+import (
+	"context"
+	"sync"
+
+	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
+
+	"github.com/huangjunwen/nproto/helpers/mycanal"
+	"github.com/huangjunwen/nproto/helpers/mycanal/fulldump"
+	"github.com/huangjunwen/nproto/helpers/mycanal/incrdump"
+	sqlh "github.com/huangjunwen/nproto/helpers/sql"
+	"github.com/huangjunwen/nproto/nproto"
+	"github.com/huangjunwen/nproto/nproto/npmsg/enc"
+)
+
+const (
+	DefaultLockName    = "nproto.binlogmsg"
+	DefaultMaxInflight = 512
+)
+
+type BinlogMsgPipe struct {
+	downstream  nproto.MsgPublisher
+	masterCfg   *mycanal.FullDumpConfig
+	slaveCfg    *mycanal.IncrDumpConfig
+	tableFilter MsgTableFilter
+	decoder     enc.MsgPayloadDecoder
+	lockName    string
+	logger      zerolog.Logger
+	maxInflight int
+}
+
+// BinlogMsgPublisher 'publishes' msg to MySQL (>=8.0.2) binlog: it simply insert msg to a table.
+type BinlogMsgPublisher struct {
+	schema  string
+	table   string
+	q       sqlh.Queryer
+	encoder enc.MsgPayloadEncoder
+}
+
+// MsgTableFilter returns true if a given table is a msg table.
+type MsgTableFilter func(schema, table string) bool
+
+// Option is option for BinlogMsgPipe.
+type Option func(*BinlogMsgPipe) error
+
+// PublisherOption is option for BinlogMsgPublisher.
+type PublisherOption func(*BinlogMsgPublisher) error
+
+var (
+	_ nproto.MsgPublisher = (*BinlogMsgPublisher)(nil)
+)
+
+func NewBinlogMsgPipe(
+	downstream nproto.MsgPublisher,
+	masterCfg *mycanal.FullDumpConfig,
+	slaveCfg *mycanal.IncrDumpConfig,
+	tableFilter MsgTableFilter,
+	opts ...Option,
+) (*BinlogMsgPipe, error) {
+
+	ret := &BinlogMsgPipe{
+		downstream:  downstream,
+		masterCfg:   masterCfg,
+		slaveCfg:    slaveCfg,
+		tableFilter: tableFilter,
+		decoder:     enc.PBMsgPayloadDecoder{},
+		lockName:    DefaultLockName,
+		logger:      zerolog.Nop(),
+		maxInflight: DefaultMaxInflight,
+	}
+
+	for _, opt := range opts {
+		if err := opt(ret); err != nil {
+			return nil, err
+		}
+	}
+
+	return ret, nil
+}
+
+func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
+
+	// Create a connections for lock and delete msgs in msg tables.
+	db, err := pipe.masterCfg.Client()
+	if err != nil {
+		err = errors.WithStack(err)
+		pipe.logger.Error().Err(err).Msg("Open db failed")
+		return err
+	}
+	defer db.Close()
+
+	// Get lock.
+	{
+		conn, err := db.Conn(ctx)
+		if err != nil {
+			err = errors.WithStack(err)
+			pipe.logger.Error().Err(err).Msg("Get conn failed")
+			return err
+		}
+		defer conn.Close()
+
+		ok, err := getLock(ctx, conn, pipe.lockName)
+		if err != nil || !ok {
+			pipe.logger.Error().Err(err).Msg("Get lock failed")
+			return err
+		}
+		defer releaseLock(ctx, conn, pipe.lockName)
+	}
+
+	wg := &sync.WaitGroup{}
+	defer wg.Wait()
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// queue of msgEntry
+	mq := newTaskQ()
+	defer func() {
+		mq.Push(msgEntry(nil))
+	}()
+
+	// speed control
+	c := make(chan struct{}, pipe.maxInflight)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer cancel()
+
+		for {
+			entry := mq.Pop().(msgEntry)
+			if entry == nil {
+				// msgEntry(nil) indicates end
+				break
+			}
+
+			// NOTE: Cancel ctx if error, but not break until msgEntry(nil).
+			if err := entry.GetPublishErr(); err != nil {
+				cancel()
+				pipe.logger.Error().Err(err).Uint64("msgId", entry.Id()).Str("msgSubj", entry.Subject()).Msg("Publish msg failed")
+			} else {
+				// Do not cancel delete, so we use context.Background().
+				err := delMsg(context.Background(), db, entry.SchemaName(), entry.TableName(), entry.Id())
+				if err != nil {
+					cancel()
+					pipe.logger.Error().Err(err).Uint64("msgId", entry.Id()).Str("msgSubj", entry.Subject()).Msg("Delete msg failed")
+				}
+			}
+
+			// The entry is processed.
+			<-c
+		}
+	}()
+
+	pubCbWg := &sync.WaitGroup{}
+	flush := func(entry msgEntry) error {
+		select {
+		case <-ctx.Done():
+			return errors.WithStack(ctx.Err())
+
+		case c <- struct{}{}:
+		}
+
+		pubCbWg.Add(1)
+		pipe.flushMsgEntry(ctx, entry, func(err error) {
+			entry.SetPublishErr(err)
+			mq.Push(entry)
+			pubCbWg.Done()
+		})
+		return nil
+	}
+
+	// Use full dump to publish existent msgs.
+	gtidSet, err := fulldump.FullDump(ctx, pipe.masterCfg, func(ctx context.Context, q sqlh.Queryer) error {
+		schemas, tables, err := listMsgTables(ctx, q, pipe.tableFilter)
+		if err != nil {
+			return err
+		}
+
+		for i := 0; i < len(schemas); i++ {
+			if err := func() error {
+				schema := schemas[i]
+				table := tables[i]
+				iter, err := fulldump.FullTableQuery(ctx, q, schema, table)
+				if err != nil {
+					return err
+				}
+				defer iter(false)
+
+				for {
+					row, err := iter(true)
+					if err != nil {
+						return err
+					}
+					if row == nil {
+						return nil
+					}
+
+					entry := newMsgEntry(schema, table, row)
+					if err := flush(entry); err != nil {
+						return err
+					}
+				}
+			}(); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	// Wait all outgoing publish finished.
+	pubCbWg.Wait()
+
+	if err != nil {
+		return err
+	}
+
+	// Now start incr dump to capture changes.
+	err = incrdump.IncrDump(ctx, pipe.slaveCfg, gtidSet, func(ctx context.Context, e interface{}) error {
+		switch ev := e.(type) {
+		case incrdump.RowInsertion:
+			schema := ev.SchemaName()
+			table := ev.TableName()
+			if !pipe.tableFilter(schema, table) {
+				return nil
+			}
+
+			entry := newMsgEntry(schema, table, ev.AfterDataMap())
+			if err := flush(entry); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	// Wait all outgoing publish finished.
+	pubCbWg.Wait()
+
+	return err
+}
+
+func (pipe *BinlogMsgPipe) flushMsgEntry(ctx context.Context, entry msgEntry, cb func(error)) {
+	// Recover MetaData and MsgData.
+	payload := &enc.MsgPayload{}
+	if err := pipe.decoder.DecodePayload(entry.Data(), payload); err != nil {
+		// Should not happen.
+		panic(err)
+	}
+
+	if payload.MD != nil {
+		ctx = nproto.NewOutgoingContextWithMD(ctx, payload.MD)
+	}
+
+	// Use PublishAsync if downstream is MsgAsyncPublisher for higher throughput.
+	switch downstream := pipe.downstream.(type) {
+	case nproto.MsgAsyncPublisher:
+		if err := downstream.PublishAsync(ctx, entry.Subject(), payload.MsgData, cb); err != nil {
+			cb(err)
+		}
+	default:
+		cb(downstream.Publish(ctx, entry.Subject(), payload.MsgData))
+	}
+
+}
+
+// NewBinlogMsgPublisher creates a new BinlogMsgPublisher.
+func NewBinlogMsgPublisher(schema, table string, q sqlh.Queryer) (*BinlogMsgPublisher, error) {
+	return &BinlogMsgPublisher{
+		schema:  schema,
+		table:   table,
+		q:       q,
+		encoder: enc.PBMsgPayloadEncoder{}, // TODO: option
+	}, nil
+}
+
+// Publish implements nproto.MsgPublisher interface. MetaData attached `ctx` will be
+// passed unmodified to downstream publisher.
+func (p *BinlogMsgPublisher) Publish(ctx context.Context, subject string, msgData []byte) error {
+	data, err := p.encoder.EncodePayload(&enc.MsgPayload{
+		MsgData: msgData,
+		MD:      nproto.MDFromOutgoingContext(ctx),
+	})
+	if err != nil {
+		return err
+	}
+
+	return addMsg(ctx, p.q, p.schema, p.table, subject, data)
+}
