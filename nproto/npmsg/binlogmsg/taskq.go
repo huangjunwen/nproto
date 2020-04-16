@@ -24,7 +24,6 @@ func newTaskQ() *taskQ {
 	}
 }
 
-// non-blocking push item to the end of q
 func (q *taskQ) Push(v interface{}) {
 	if v == nil {
 		panic(errors.New("Push nil"))
@@ -38,7 +37,6 @@ func (q *taskQ) Push(v interface{}) {
 	}
 }
 
-// Pop wait and returns the first element of queue
 func (q *taskQ) Pop() (v interface{}) {
 POP:
 	q.mu.Lock()

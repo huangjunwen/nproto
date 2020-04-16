@@ -153,6 +153,7 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 	go func() {
 		defer wg.Done()
 		defer cancel()
+		defer pipe.logger.Info().Msg("Post-process go routine ends.")
 
 		for {
 			entry := mq.Pop().(msgEntry)
@@ -242,6 +243,8 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 	if err != nil {
 		pipe.logger.Error().Err(err).Msg("Full dump returned with error")
 		return err
+	} else {
+		pipe.logger.Info().Msg("Full dump ends")
 	}
 
 	// Now start incr dump to capture changes.
@@ -269,9 +272,10 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 
 	if err != nil {
 		pipe.logger.Error().Err(err).Msg("Incr dump returned with error")
-		return err
+	} else {
+		pipe.logger.Info().Err(err).Msg("Incr dump ends")
 	}
-	return nil
+	return err
 }
 
 func (pipe *BinlogMsgPipe) flushMsgEntry(ctx context.Context, entry msgEntry, cb func(error)) {
