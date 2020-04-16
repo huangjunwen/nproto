@@ -115,6 +115,7 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 		return err
 	}
 	defer db.Close()
+	pipe.logger.Info().Msg("Open db ok")
 
 	// Get lock.
 	{
@@ -132,6 +133,7 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 		}
 		defer releaseLock(ctx, conn, pipe.lockName)
 	}
+	pipe.logger.Info().Msg("Get lock ok")
 
 	wg := &sync.WaitGroup{}
 	defer wg.Wait()
@@ -153,7 +155,7 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 	go func() {
 		defer wg.Done()
 		defer cancel()
-		defer pipe.logger.Info().Msg("Post-process go routine ends.")
+		defer pipe.logger.Info().Msg("Post process go routine ends.")
 
 		for {
 			entry := mq.Pop().(msgEntry)
@@ -198,6 +200,8 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 		return nil
 	}
 
+	pipe.logger.Info().Msg("Full dump starts")
+
 	// Use full dump to publish existent msgs.
 	gtidSet, err := fulldump.FullDump(ctx, pipe.masterCfg, func(ctx context.Context, q sqlh.Queryer) error {
 		schemas, tables, err := listMsgTables(ctx, q, pipe.tableFilter)
@@ -237,14 +241,15 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 		return nil
 	})
 
-	// Wait all ongoing publish finished.
+	// Wait all outgoing publish callbacks done.
+	// Note that Post process maybe not finished yet.
 	pubCbWg.Wait()
 
 	if err != nil {
 		pipe.logger.Error().Err(err).Msg("Full dump returned with error")
 		return err
 	} else {
-		pipe.logger.Info().Msg("Full dump ends")
+		pipe.logger.Info().Msg("Full dump ok")
 	}
 
 	// Now start incr dump to capture changes.
@@ -267,13 +272,14 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 		return nil
 	})
 
-	// Wait all ongoing publish finished.
+	// Wait all outgoing publish callbacks done.
+	// Note that Post process maybe not finished yet.
 	pubCbWg.Wait()
 
 	if err != nil {
 		pipe.logger.Error().Err(err).Msg("Incr dump returned with error")
 	} else {
-		pipe.logger.Info().Err(err).Msg("Incr dump ends")
+		pipe.logger.Info().Err(err).Msg("Incr dump ok")
 	}
 	return err
 }

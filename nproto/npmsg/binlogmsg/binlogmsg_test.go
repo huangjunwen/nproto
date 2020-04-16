@@ -53,7 +53,8 @@ func newPublisher(db *sql.DB, schema, table string) (*BinlogMsgPublisher, error)
 }
 
 func TestBinlogMsgPipe(t *testing.T) {
-	log.Printf("\n\n")
+	log.Printf("\n")
+	log.Printf("\n")
 	log.Printf(">>> TestBinlogMsgPipe.\n")
 	var err error
 	bgctx := context.Background()
