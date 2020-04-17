@@ -124,5 +124,5 @@ func (d mysqlDialect) ReleaseLock(ctx context.Context, conn *sql.Conn, table str
 }
 
 func (d mysqlDialect) lockName(table string) string {
-	return "npmsg.dbstore.lock:" + table
+	return "nproto.dbpipe.lock:" + table
 }

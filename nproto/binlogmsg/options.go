@@ -10,7 +10,7 @@ import (
 // OptLogger sets structured logger.
 func OptLogger(logger *zerolog.Logger) Option {
 	return func(pipe *BinlogMsgPipe) error {
-		pipe.logger = logger.With().Str("component", "nproto.npmsg.binlogmsg.BinlogMsgPipe").Logger()
+		pipe.logger = logger.With().Str("component", "nproto.binlogmsg.BinlogMsgPipe").Logger()
 		return nil
 	}
 }
@@ -27,7 +27,7 @@ func OptLockName(lockName string) Option {
 func OptMaxInflight(maxInflight int) Option {
 	return func(pipe *BinlogMsgPipe) error {
 		if maxInflight <= 0 {
-			return fmt.Errorf("nproto.npmsg.binlogmsg.BinlogMsgPipe: MaxInflight must >= 1")
+			return fmt.Errorf("nproto.binlogmsg.BinlogMsgPipe: MaxInflight must >= 1")
 		}
 		pipe.maxInflight = maxInflight
 		return nil

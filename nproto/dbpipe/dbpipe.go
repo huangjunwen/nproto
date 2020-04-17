@@ -33,10 +33,10 @@ var (
 
 var (
 	// ErrMaxInflightAndBuf is returned if OptMaxBuf > OptMaxInflight.
-	ErrMaxInflightAndBuf = errors.New("nproto.npmsg.dbpipe.DBMsgPublisherPipe: MaxBuf should be <= MaxInflight")
+	ErrMaxInflightAndBuf = errors.New("nproto.dbpipe.DBMsgPublisherPipe: MaxBuf should be <= MaxInflight")
 	// ErrUnknownDialect is returned if the dialect is not supported.
 	ErrUnknownDialect = func(dialect string) error {
-		return fmt.Errorf("nproto.npmsg.dbpipe.DBMsgPublisherPipe: Unknown dialect: %+q", dialect)
+		return fmt.Errorf("nproto.dbpipe.DBMsgPublisherPipe: Unknown dialect: %+q", dialect)
 	}
 )
 

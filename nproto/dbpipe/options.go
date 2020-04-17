@@ -11,7 +11,7 @@ import (
 // OptLogger sets structured logger.
 func OptLogger(logger *zerolog.Logger) Option {
 	return func(pipe *DBMsgPublisherPipe) error {
-		pipe.logger = logger.With().Str("component", "nproto.npmsg.dbpipe.DBMsgPublisherPipe").Logger()
+		pipe.logger = logger.With().Str("component", "nproto.dbpipe.DBMsgPublisherPipe").Logger()
 		return nil
 	}
 }
@@ -20,7 +20,7 @@ func OptLogger(logger *zerolog.Logger) Option {
 func OptMaxDelBulkSz(bulkSize int) Option {
 	return func(pipe *DBMsgPublisherPipe) error {
 		if bulkSize <= 0 {
-			return fmt.Errorf("nproto.npmsg.dbpipe.DBMsgPublisherPipe: DeleteBulkSize must >= 1")
+			return fmt.Errorf("nproto.dbpipe.DBMsgPublisherPipe: DeleteBulkSize must >= 1")
 		}
 		pipe.maxDelBulkSz = bulkSize
 		return nil
@@ -31,7 +31,7 @@ func OptMaxDelBulkSz(bulkSize int) Option {
 func OptMaxInflight(maxInflight int) Option {
 	return func(pipe *DBMsgPublisherPipe) error {
 		if maxInflight <= 0 {
-			return fmt.Errorf("nproto.npmsg.dbpipe.DBMsgPublisherPipe: MaxInflight must >= 1")
+			return fmt.Errorf("nproto.dbpipe.DBMsgPublisherPipe: MaxInflight must >= 1")
 		}
 		pipe.maxInflight = maxInflight
 		return nil
@@ -42,7 +42,7 @@ func OptMaxInflight(maxInflight int) Option {
 func OptMaxBuf(maxBuf int) Option {
 	return func(pipe *DBMsgPublisherPipe) error {
 		if maxBuf < 0 {
-			return fmt.Errorf("nproto.npmsg.dbpipe.DBMsgPublisherPipe: MaxBuf must >= 0")
+			return fmt.Errorf("nproto.dbpipe.DBMsgPublisherPipe: MaxBuf must >= 0")
 		}
 		pipe.maxBuf = maxBuf
 		return nil

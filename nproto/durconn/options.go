@@ -17,7 +17,7 @@ func OptLogger(logger *zerolog.Logger) Option {
 			nop := zerolog.Nop()
 			logger = &nop
 		}
-		dc.logger = logger.With().Str("component", "nproto.npmsg.durconn.DurConn").Logger()
+		dc.logger = logger.With().Str("component", "nproto.durconn.DurConn").Logger()
 		return nil
 	}
 }
