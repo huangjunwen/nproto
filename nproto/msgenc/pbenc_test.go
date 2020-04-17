@@ -1,4 +1,4 @@
-package enc
+package msgenc
 
 import (
 	"testing"

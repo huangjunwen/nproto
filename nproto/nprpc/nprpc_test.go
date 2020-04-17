@@ -16,8 +16,8 @@ import (
 	nats "github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/huangjunwen/nproto/helpers/taskrunner"
 	"github.com/huangjunwen/nproto/nproto"
-	"github.com/huangjunwen/nproto/nproto/taskrunner"
 )
 
 func TestNatsRPC(t *testing.T) {

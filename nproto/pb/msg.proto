@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package nproto.pb.npmsg;
+package nproto.pb.msg;
 
 option go_package = "github.com/huangjunwen/nproto/nproto/pb";
 

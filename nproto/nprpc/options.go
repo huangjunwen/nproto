@@ -5,7 +5,7 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/huangjunwen/nproto/nproto/taskrunner"
+	"github.com/huangjunwen/nproto/helpers/taskrunner"
 )
 
 // ServerOptLogger sets logger.

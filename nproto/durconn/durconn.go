@@ -12,9 +12,9 @@ import (
 	"github.com/rs/xid"
 	"github.com/rs/zerolog"
 
+	"github.com/huangjunwen/nproto/helpers/taskrunner"
 	"github.com/huangjunwen/nproto/nproto"
-	"github.com/huangjunwen/nproto/nproto/npmsg/enc"
-	"github.com/huangjunwen/nproto/nproto/taskrunner"
+	enc "github.com/huangjunwen/nproto/nproto/msgenc"
 	"github.com/huangjunwen/nproto/nproto/zlog"
 )
 

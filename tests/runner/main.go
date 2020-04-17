@@ -9,8 +9,8 @@ import (
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/duration"
 	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/huangjunwen/nproto/helpers/taskrunner"
 	"github.com/huangjunwen/nproto/nproto/nprpc"
-	"github.com/huangjunwen/nproto/nproto/taskrunner"
 	nats "github.com/nats-io/nats.go"
 
 	runnerapi "github.com/huangjunwen/nproto/tests/runner/api"

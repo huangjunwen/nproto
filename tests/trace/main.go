@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/huangjunwen/nproto/nproto"
-	"github.com/huangjunwen/nproto/nproto/npmsg/durconn"
+	"github.com/huangjunwen/nproto/nproto/durconn"
 	"github.com/huangjunwen/nproto/nproto/nprpc"
 	"github.com/huangjunwen/nproto/nproto/tracing"
 	nats "github.com/nats-io/nats.go"

@@ -7,7 +7,7 @@ import (
 	"github.com/nats-io/stan.go"
 	"github.com/rs/zerolog"
 
-	"github.com/huangjunwen/nproto/nproto/taskrunner"
+	"github.com/huangjunwen/nproto/helpers/taskrunner"
 )
 
 // OptLogger sets structured logger.

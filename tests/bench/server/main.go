@@ -8,8 +8,8 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/huangjunwen/nproto/helpers/taskrunner"
 	"github.com/huangjunwen/nproto/nproto/nprpc"
-	"github.com/huangjunwen/nproto/nproto/taskrunner"
 	"github.com/nats-io/nats.go"
 
 	benchapi "github.com/huangjunwen/nproto/tests/bench/api"

@@ -12,9 +12,9 @@ import (
 	nats "github.com/nats-io/nats.go"
 	"github.com/rs/zerolog"
 
+	"github.com/huangjunwen/nproto/helpers/taskrunner"
 	"github.com/huangjunwen/nproto/nproto"
-	"github.com/huangjunwen/nproto/nproto/nprpc/enc"
-	"github.com/huangjunwen/nproto/nproto/taskrunner"
+	enc "github.com/huangjunwen/nproto/nproto/rpcenc"
 	"github.com/huangjunwen/nproto/nproto/zlog"
 )
 

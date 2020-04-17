@@ -1,4 +1,4 @@
-package enc
+package msgenc
 
 import (
 	"github.com/golang/protobuf/proto"

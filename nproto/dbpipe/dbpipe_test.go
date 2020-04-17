@@ -19,7 +19,7 @@ import (
 
 	"github.com/huangjunwen/nproto/helpers/sql"
 	"github.com/huangjunwen/nproto/nproto"
-	"github.com/huangjunwen/nproto/nproto/npmsg/durconn"
+	"github.com/huangjunwen/nproto/nproto/durconn"
 )
 
 // UnstableAsyncPublisher makes half publish failed.

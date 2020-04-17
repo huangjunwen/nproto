@@ -1,4 +1,4 @@
-package enc
+package rpcenc
 
 import (
 	"errors"
@@ -12,7 +12,7 @@ import (
 	"github.com/huangjunwen/nproto/nproto"
 )
 
-func TestJSONRequest(t *testing.T) {
+func TestPBRequest(t *testing.T) {
 
 	assert := assert.New(t)
 
@@ -27,11 +27,11 @@ func TestJSONRequest(t *testing.T) {
 	{
 		req := &RPCRequest{
 			Param:   param,
-			MD:      md,
 			Timeout: timeout,
+			MD:      md,
 		}
 
-		data, err = JSONClientEncoder{}.EncodeRequest(req)
+		data, err = PBClientEncoder{}.EncodeRequest(req)
 		assert.NoError(err)
 	}
 
@@ -41,27 +41,27 @@ func TestJSONRequest(t *testing.T) {
 		req := &RPCRequest{
 			Param: &p,
 		}
-		err = JSONServerEncoder{}.DecodeRequest(data, req)
+		err = PBServerEncoder{}.DecodeRequest(data, req)
 		assert.NoError(err)
 		md2 := nproto.NewMetaDataFromMD(req.MD)
 
 		assert.Equal(param.Seconds, p.Seconds)
 		assert.Equal(param.Nanos, p.Nanos)
-		assert.Equal(md, md2)
 		assert.Equal(timeout, req.Timeout)
+		assert.Equal(md, md2)
 	}
 
 	// Panic if Param not set
 	{
 		req := &RPCRequest{}
 		assert.Panics(func() {
-			JSONServerEncoder{}.DecodeRequest(data, req)
+			PBServerEncoder{}.DecodeRequest(data, req)
 		})
 	}
 
 }
 
-func TestJSONReply(t *testing.T) {
+func TestPBReply(t *testing.T) {
 
 	assert := assert.New(t)
 
@@ -77,7 +77,7 @@ func TestJSONReply(t *testing.T) {
 			reply := &RPCReply{
 				Result: result,
 			}
-			data, err = JSONServerEncoder{}.EncodeReply(reply)
+			data, err = PBServerEncoder{}.EncodeReply(reply)
 			assert.NoError(err)
 		}
 
@@ -87,7 +87,7 @@ func TestJSONReply(t *testing.T) {
 			reply := &RPCReply{
 				Result: &r,
 			}
-			err = JSONClientEncoder{}.DecodeReply(data, reply)
+			err = PBClientEncoder{}.DecodeReply(data, reply)
 			assert.NoError(err)
 
 			assert.Equal(r.Seconds, result.Seconds)
@@ -109,7 +109,7 @@ func TestJSONReply(t *testing.T) {
 			reply := &RPCReply{
 				Error: errResult,
 			}
-			data, err = JSONServerEncoder{}.EncodeReply(reply)
+			data, err = PBServerEncoder{}.EncodeReply(reply)
 			assert.NoError(err)
 		}
 
@@ -119,7 +119,7 @@ func TestJSONReply(t *testing.T) {
 			reply := &RPCReply{
 				Result: &r,
 			}
-			err = JSONClientEncoder{}.DecodeReply(data, reply)
+			err = PBClientEncoder{}.DecodeReply(data, reply)
 			assert.NoError(err)
 
 			assert.Equal(reply.Error.Error(), errResult.Error())
@@ -131,30 +131,30 @@ func TestJSONReply(t *testing.T) {
 
 }
 
-func BenchmarkJSONEncode(b *testing.B) {
+func BenchmarkPBEncode(b *testing.B) {
 
 	param := ptypes.TimestampNow()
 	md := nproto.NewMetaDataPairs("a", "z")
 	timeout := 10 * time.Nanosecond
 	req := &RPCRequest{
 		Param:   param,
-		MD:      md,
 		Timeout: timeout,
+		MD:      md,
 	}
 
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		JSONClientEncoder{}.EncodeRequest(req)
+		PBClientEncoder{}.EncodeRequest(req)
 	}
 
 }
 
-func BenchmarkJSONDecode(b *testing.B) {
+func BenchmarkPBDecode(b *testing.B) {
 
 	param := ptypes.TimestampNow()
 	md := nproto.NewMetaDataPairs("a", "z")
 	timeout := 10 * time.Nanosecond
-	data, _ := JSONClientEncoder{}.EncodeRequest(&RPCRequest{
+	data, _ := PBClientEncoder{}.EncodeRequest(&RPCRequest{
 		Param:   param,
 		MD:      md,
 		Timeout: timeout,
@@ -165,7 +165,7 @@ func BenchmarkJSONDecode(b *testing.B) {
 	}
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		JSONServerEncoder{}.DecodeRequest(data, req)
+		PBServerEncoder{}.DecodeRequest(data, req)
 	}
 
 }

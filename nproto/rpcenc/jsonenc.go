@@ -1,4 +1,4 @@
-package enc
+package rpcenc
 
 import (
 	"bytes"

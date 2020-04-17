@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package nproto.pb.nprpc;
+package nproto.pb.rpc;
 
 option go_package = "github.com/huangjunwen/nproto/nproto/pb";
 

@@ -13,7 +13,7 @@ import (
 	"github.com/huangjunwen/nproto/helpers/mycanal/incrdump"
 	sqlh "github.com/huangjunwen/nproto/helpers/sql"
 	"github.com/huangjunwen/nproto/nproto"
-	"github.com/huangjunwen/nproto/nproto/npmsg/enc"
+	enc "github.com/huangjunwen/nproto/nproto/msgenc"
 	"github.com/huangjunwen/nproto/nproto/zlog"
 )
 
