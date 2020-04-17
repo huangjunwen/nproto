@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package nproto.pb.msg;
+
+option go_package = "github.com/huangjunwen/nproto/nproto/pb";
+
+import "md.proto";
+
+// MsgPayload is the payload of a message encoded by protobuf.
+message MsgPayload {
+  // MsgData is serialized message data.
+  bytes                            msg_data  = 1;
+  // MetaData dict. 
+  repeated nproto.pb.md.MetaDataKV meta_data = 2;
+}
+

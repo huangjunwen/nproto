@@ -7,7 +7,7 @@ import (
 	"os/signal"
 
 	"github.com/huangjunwen/nproto/nproto"
-	"github.com/huangjunwen/nproto/nproto/nprpc"
+	"github.com/huangjunwen/nproto/nproto/natsrpc"
 	"github.com/nats-io/nats.go"
 
 	mathapi "github.com/huangjunwen/nproto/tests/math/api"
@@ -36,7 +36,7 @@ func main() {
 	log.Printf("NATS connected.\n")
 	defer nc.Close()
 
-	server, err := nprpc.NewNatsRPCServer(nc)
+	server, err := natsrpc.NewNatsRPCServer(nc)
 	if err != nil {
 		log.Panic(err)
 	}
