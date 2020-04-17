@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/huangjunwen/nproto/nproto"
-	"github.com/huangjunwen/nproto/nproto/nprpc"
+	"github.com/huangjunwen/nproto/nproto/natsrpc"
 	"github.com/nats-io/nats.go"
 
 	mathapi "github.com/huangjunwen/nproto/tests/math/api"
@@ -26,7 +26,7 @@ func main() {
 	log.Printf("NATS connected.\n")
 	defer nc.Close()
 
-	client, err := nprpc.NewNatsRPCClient(nc)
+	client, err := natsrpc.NewNatsRPCClient(nc)
 	if err != nil {
 		log.Panic(err)
 	}

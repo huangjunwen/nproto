@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/codahale/hdrhistogram"
-	"github.com/huangjunwen/nproto/nproto/nprpc"
+	"github.com/huangjunwen/nproto/nproto/natsrpc"
 	"github.com/nats-io/nats.go"
 	//"go.uber.org/ratelimit"
 	"github.com/juju/ratelimit"
@@ -69,7 +69,7 @@ func main() {
 		}
 		defer nc.Close()
 
-		client, err := nprpc.NewNatsRPCClient(nc)
+		client, err := natsrpc.NewNatsRPCClient(nc)
 		if err != nil {
 			panic(err)
 		}

@@ -9,7 +9,7 @@ import (
 
 	"github.com/huangjunwen/nproto/nproto"
 	"github.com/huangjunwen/nproto/nproto/durconn"
-	"github.com/huangjunwen/nproto/nproto/nprpc"
+	"github.com/huangjunwen/nproto/nproto/natsrpc"
 	"github.com/huangjunwen/nproto/nproto/tracing"
 	nats "github.com/nats-io/nats.go"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -103,7 +103,7 @@ func main() {
 	}
 
 	{
-		server, err := nprpc.NewNatsRPCServer(nc)
+		server, err := natsrpc.NewNatsRPCServer(nc)
 		if err != nil {
 			log.Panic(err)
 		}
@@ -120,7 +120,7 @@ func main() {
 	}
 
 	{
-		client, err := nprpc.NewNatsRPCClient(nc)
+		client, err := natsrpc.NewNatsRPCClient(nc)
 		if err != nil {
 			log.Panic(err)
 		}

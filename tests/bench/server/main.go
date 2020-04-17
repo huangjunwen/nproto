@@ -9,7 +9,7 @@ import (
 	"os/signal"
 
 	"github.com/huangjunwen/nproto/helpers/taskrunner"
-	"github.com/huangjunwen/nproto/nproto/nprpc"
+	"github.com/huangjunwen/nproto/nproto/natsrpc"
 	"github.com/nats-io/nats.go"
 
 	benchapi "github.com/huangjunwen/nproto/tests/bench/api"
@@ -61,9 +61,9 @@ func main() {
 		}
 		defer nc.Close()
 
-		server, err := nprpc.NewNatsRPCServer(
+		server, err := natsrpc.NewNatsRPCServer(
 			nc,
-			nprpc.ServerOptTaskRunner(runner),
+			natsrpc.ServerOptTaskRunner(runner),
 		)
 		if err != nil {
 			panic(err)

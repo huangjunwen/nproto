@@ -1,4 +1,4 @@
-package nprpc
+package natsrpc
 
 import (
 	"context"
@@ -15,7 +15,7 @@ func ServerOptLogger(logger *zerolog.Logger) ServerOption {
 			nop := zerolog.Nop()
 			logger = &nop
 		}
-		server.logger = logger.With().Str("component", "nproto.nprpc.NatsRPCServer").Logger()
+		server.logger = logger.With().Str("component", "nproto.natsrpc.NatsRPCServer").Logger()
 		return nil
 	}
 }

@@ -1,4 +1,4 @@
-package nprpc
+package natsrpc
 
 import (
 	"context"
@@ -38,16 +38,16 @@ var (
 
 var (
 	// ErrNCMaxReconnect is returned if nc has MaxReconnects >= 0.
-	ErrNCMaxReconnect = errors.New("nproto.nprpc: nats.Conn should have MaxReconnects < 0")
+	ErrNCMaxReconnect = errors.New("nproto.natsrpc: nats.Conn should have MaxReconnects < 0")
 	// ErrServerClosed is returned if the server has been closed.
-	ErrServerClosed = errors.New("nproto.nprpc.NatsRPCServer: Server closed")
+	ErrServerClosed = errors.New("nproto.natsrpc.NatsRPCServer: Server closed")
 	// ErrDupSvcName is returned if service name is duplicated.
 	ErrDupSvcName = func(svcName string) error {
-		return fmt.Errorf("nproto.nprpc.NatsRPCServer: Duplicated service %+q", svcName)
+		return fmt.Errorf("nproto..NatsRPCServer: Duplicated service %+q", svcName)
 	}
 	// ErrDupMethodName is returned if method name is duplicated.
 	ErrDupMethodName = func(methodName string) error {
-		return fmt.Errorf("nproto.nprpc.NatsRPCServer: Duplicated method %+q", methodName)
+		return fmt.Errorf("nproto.natsrpc.NatsRPCServer: Duplicated method %+q", methodName)
 	}
 )
 
