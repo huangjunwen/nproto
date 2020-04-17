@@ -11,7 +11,7 @@ import (
 	"github.com/rs/xid"
 	"github.com/rs/zerolog"
 
-	sqlh "github.com/huangjunwen/nproto/helpers/sql"
+	"github.com/huangjunwen/nproto/helpers/sqlh"
 	"github.com/huangjunwen/nproto/helpers/taskrunner"
 	"github.com/huangjunwen/nproto/nproto"
 	enc "github.com/huangjunwen/nproto/nproto/msgenc"

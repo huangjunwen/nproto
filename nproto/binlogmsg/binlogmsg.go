@@ -11,7 +11,7 @@ import (
 	"github.com/huangjunwen/nproto/helpers/mycanal"
 	"github.com/huangjunwen/nproto/helpers/mycanal/fulldump"
 	"github.com/huangjunwen/nproto/helpers/mycanal/incrdump"
-	sqlh "github.com/huangjunwen/nproto/helpers/sql"
+	"github.com/huangjunwen/nproto/helpers/sqlh"
 	"github.com/huangjunwen/nproto/nproto"
 	enc "github.com/huangjunwen/nproto/nproto/msgenc"
 	"github.com/huangjunwen/nproto/nproto/zlog"

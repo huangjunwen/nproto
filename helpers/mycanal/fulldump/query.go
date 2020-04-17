@@ -10,7 +10,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pkg/errors"
 
-	sqlh "github.com/huangjunwen/nproto/helpers/sql"
+	"github.com/huangjunwen/nproto/helpers/sqlh"
 )
 
 // RowIter is used for result set iteration. It returns nil if no more row.

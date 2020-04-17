@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	sqlh "github.com/huangjunwen/nproto/helpers/sql"
+	"github.com/huangjunwen/nproto/helpers/sqlh"
 )
 
 type mysqlDialect struct{}

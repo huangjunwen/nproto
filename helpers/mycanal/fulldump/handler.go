@@ -3,7 +3,7 @@ package fulldump
 import (
 	"context"
 
-	sqlh "github.com/huangjunwen/nproto/helpers/sql"
+	"github.com/huangjunwen/nproto/helpers/sqlh"
 )
 
 // Handler is used to dump content.

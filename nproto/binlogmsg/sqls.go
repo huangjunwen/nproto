@@ -7,7 +7,7 @@ import (
 
 	"github.com/pkg/errors"
 
-	sqlh "github.com/huangjunwen/nproto/helpers/sql"
+	"github.com/huangjunwen/nproto/helpers/sqlh"
 )
 
 // CreateMsgTable creates a msg table to store msgs.

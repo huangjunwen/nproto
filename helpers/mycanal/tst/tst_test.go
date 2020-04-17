@@ -17,7 +17,7 @@ import (
 	. "github.com/huangjunwen/nproto/helpers/mycanal"
 	"github.com/huangjunwen/nproto/helpers/mycanal/fulldump"
 	"github.com/huangjunwen/nproto/helpers/mycanal/incrdump"
-	sqlh "github.com/huangjunwen/nproto/helpers/sql"
+	"github.com/huangjunwen/nproto/helpers/sqlh"
 )
 
 type diffValue struct {

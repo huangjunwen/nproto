@@ -17,7 +17,7 @@ import (
 	stan "github.com/nats-io/stan.go"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/huangjunwen/nproto/helpers/sql"
+	"github.com/huangjunwen/nproto/helpers/sqlh"
 	"github.com/huangjunwen/nproto/nproto"
 	"github.com/huangjunwen/nproto/nproto/stanmsg"
 )
