@@ -1,4 +1,4 @@
-// Package dbpipe contains DBMsgPublisherPipe which is used as a publisher pipeline from RDBMS to downstream publisher.
+// Package dbpipe contains DBMsgPublisherPipe which is used as a publisher pipeline from RDBMS to downstream publisher (deprecating).
 //
 // Typical workflow (ignore error handling):
 //
