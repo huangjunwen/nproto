@@ -9,6 +9,7 @@ Some easy to use rpc/msg components.
 
 ## Components
 
+- [x] High level interfaces [nproto](https://godoc.org/github.com/huangjunwen/nproto/nproto)
 - [x] RPC server/client using [nats](https://github.com/nats-io/nats-server) as transport with json/protobuf encoding: [natsrpc](https://godoc.org/github.com/huangjunwen/nproto/nproto/natsrpc)
 - [x] Auto reconnection/resubscription client for [nats-streaming](https://github.com/nats-io/nats-streaming-server): [stanmsg](https://godoc.org/github.com/huangjunwen/nproto/nproto/stanmsg)
 - [x] Pipeline msgs from RDBMS to downstream publisher (*deprecating*): [dbpipe](https://godoc.org/github.com/huangjunwen/nproto/nproto/dbpipe)
