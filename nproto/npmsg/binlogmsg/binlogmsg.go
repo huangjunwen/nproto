@@ -62,7 +62,11 @@ var (
 	_ nproto.MsgPublisher = (*BinlogMsgPublisher)(nil)
 )
 
-// NewBinlogMsgPipe creates a new BinlogMsgPipe.
+// NewBinlogMsgPipe creates a new BinlogMsgPipe. Params:
+// 	 - downstream: downstream publisher, can be nproto.MsgPublisher or nproto.MsgAsyncPublisher
+//   - masterCfg: master connection config to read (full dump) and write (delete published message)
+//   - slaveCfg: slave config for binlog subscription
+//   - tableFilter: determine whether a table is used to store messages
 func NewBinlogMsgPipe(
 	downstream nproto.MsgPublisher,
 	masterCfg *mycanal.FullDumpConfig,
