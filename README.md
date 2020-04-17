@@ -5,22 +5,21 @@
 [![Build Status](https://travis-ci.org/huangjunwen/nproto.svg?branch=master)](https://travis-ci.org/huangjunwen/nproto) 
 [![codecov](https://codecov.io/gh/huangjunwen/nproto/branch/master/graph/badge.svg)](https://codecov.io/gh/huangjunwen/nproto)
 
-Some easy to use components using [NATS](https://nats.io) ([nats-server](https://github.com/nats-io/nats-server)/[nats-streaming-server](https://github.com/nats-io/nats-streaming-server)) with [protocol-buffer](https://developers.google.com/protocol-buffers/).
-
-## Why
-
-> NATS Server is a simple, high performance open source messaging system ....
-
-Simple is very important to me. With a single deployment, one gets a high performance message broker with rpc/service discovery/load balancing/at most(or at least) once message delivery/... all at once.
+Some easy to use rpc/msg components.
 
 ## Components
 
-- [x] RPC server/client using nats as transport with json/protobuf encoding: [nprpc](https://godoc.org/github.com/huangjunwen/nproto/nproto/nprpc)
-- [x] Auto reconnection/resubscription client for nats-streaming: [durconn](https://godoc.org/github.com/huangjunwen/nproto/nproto/npmsg/durconn)
-- [x] Pipeline msgs from RDBMS to downstream publisher: [dbpipe](https://godoc.org/github.com/huangjunwen/nproto/nproto/npmsg/dbpipe)
-- [x] Protoc plugin to generate stub code for above components: protoc-gen-nproto
-- [x] Task runner to contorl resource usage: [taskrunner](https://godoc.org/github.com/huangjunwen/nproto/nproto/taskrunner)
+- [x] RPC server/client using [nats](https://github.com/nats-io/nats-server) as transport with json/protobuf encoding: [natsrpc](https://godoc.org/github.com/huangjunwen/nproto/nproto/natsrpc)
+- [x] Auto reconnection/resubscription client for [nats-streaming](https://github.com/nats-io/nats-streaming-server): [stanmsg](https://godoc.org/github.com/huangjunwen/nproto/nproto/stanmsg)
+- [x] Pipeline msgs from RDBMS to downstream publisher (*deprecating*): [dbpipe](https://godoc.org/github.com/huangjunwen/nproto/nproto/dbpipe)
+- [x] Pipeline msgs from MySQL8 binlog to downstream publisher: [binlogmsg](https://godoc.org/github.com/huangjunwen/nproto/nproto/binlogmsg)
 - [x] Opentracing support: [tracing](https://godoc.org/github.com/huangjunwen/nproto/nproto/tracing)
+- [x] Structure (json) logging support using [zerolog](https://github.com/rs/zerolog): [zlog](https://godoc.org/github.com/huangjunwen/nproto/nproto/zlog)
+- [x] Protoc plugin to generate stub code for above components: protoc-gen-nproto
+
+## Helper packages that can be used standalone
+- [x] Task runner to contorl resource usage: [taskrunner](https://godoc.org/github.com/huangjunwen/nproto/helpers/taskrunner)
+- [x] CDC (Change Data Capture) for MySQL8+: [mycanal](https://godoc.org/github.com/huangjunwen/nproto/helpers/mycanal)
 
 ## Install
 
@@ -56,9 +55,9 @@ service Math {
 }
 ```
 
-2. If you want `protoc-gen-nproto` to generate stub code for your service to use with nprpc, add `@@nprpc@@` at any position in the leading comment of the service.
+2. If you want `protoc-gen-nproto` to generate stub code for your service to use with rpc components, add `@@nprpc@@` at any position in the leading comment of the service.
 
-3. Likewise, if you want `protoc-gen-nproto` to generate stub code for your message to use with npmsg, add `@@npmsg@@` at any position in the leading comment of the message.
+3. Likewise, if you want `protoc-gen-nproto` to generate stub code for your message to use with msg components, add `@@npmsg@@` at any position in the leading comment of the message.
 
 4. Run `protoc-gen-nproto`, for example:
 
