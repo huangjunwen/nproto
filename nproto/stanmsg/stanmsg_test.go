@@ -1,4 +1,4 @@
-package durconn
+package stanmsg
 
 import (
 	"bytes"

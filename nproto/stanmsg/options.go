@@ -1,4 +1,4 @@
-package durconn
+package stanmsg
 
 import (
 	"context"
@@ -17,7 +17,7 @@ func OptLogger(logger *zerolog.Logger) Option {
 			nop := zerolog.Nop()
 			logger = &nop
 		}
-		dc.logger = logger.With().Str("component", "nproto.durconn.DurConn").Logger()
+		dc.logger = logger.With().Str("component", "nproto.stanmsg.DurConn").Logger()
 		return nil
 	}
 }

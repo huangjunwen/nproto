@@ -1,4 +1,4 @@
-package durconn
+package stanmsg
 
 import (
 	"context"
@@ -31,17 +31,17 @@ var (
 
 var (
 	// ErrNCMaxReconnect is returned if nc has MaxReconnects >= 0.
-	ErrNCMaxReconnect = errors.New("nproto.durconn.NewDurConn: nats.Conn should have MaxReconnects < 0")
+	ErrNCMaxReconnect = errors.New("nproto.stanmsg.NewDurConn: nats.Conn should have MaxReconnects < 0")
 	// ErrClosed is returned when the DurConn has been closed.
-	ErrClosed = errors.New("nproto.durconn.DurConn: Closed.")
+	ErrClosed = errors.New("nproto.stanmsg.DurConn: Closed.")
 	// ErrNotConnected is returned when the underly connection has not been established.
-	ErrNotConnected = errors.New("nproto.durconn.DurConn: Not connected.")
+	ErrNotConnected = errors.New("nproto.stanmsg.DurConn: Not connected.")
 	// ErrBadSubscriptionOpt is returned if option passing to DurConn.Subscribe is not SubOption.
-	ErrBadSubscriptionOpt = errors.New("nproto.durconn.DurConn: Expect durconn.SubOption.")
+	ErrBadSubscriptionOpt = errors.New("nproto.stanmsg.DurConn: Expect stanmsg.SubOption.")
 	// ErrDupSubscription is returned when duplicated (subject, queue) pair.
 	ErrDupSubscription = func(subject, queue string) error {
 		return fmt.Errorf(
-			"nproto.durconn.DurConn: Duplicated subscription (%q, %q)",
+			"nproto.stanmsg.DurConn: Duplicated subscription (%q, %q)",
 			subject,
 			queue,
 		)

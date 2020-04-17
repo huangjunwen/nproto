@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/huangjunwen/nproto/nproto"
-	"github.com/huangjunwen/nproto/nproto/durconn"
 	"github.com/huangjunwen/nproto/nproto/natsrpc"
+	"github.com/huangjunwen/nproto/nproto/stanmsg"
 	"github.com/huangjunwen/nproto/nproto/tracing"
 	nats "github.com/nats-io/nats.go"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -130,9 +130,9 @@ func main() {
 		svc = traceapi.InvokeTrace(tclient, traceapi.SvcName)
 	}
 
-	var dc *durconn.DurConn
+	var dc *stanmsg.DurConn
 	{
-		dc, err = durconn.NewDurConn(nc, "test-cluster")
+		dc, err = stanmsg.NewDurConn(nc, "test-cluster")
 		if err != nil {
 			log.Panic(err)
 		}

@@ -19,7 +19,7 @@ import (
 
 	"github.com/huangjunwen/nproto/helpers/sql"
 	"github.com/huangjunwen/nproto/nproto"
-	"github.com/huangjunwen/nproto/nproto/durconn"
+	"github.com/huangjunwen/nproto/nproto/stanmsg"
 )
 
 // UnstableAsyncPublisher makes half publish failed.
@@ -132,9 +132,9 @@ func TestFlush(t *testing.T) {
 	}
 
 	// Creates DurConn.
-	var dc *durconn.DurConn
+	var dc *stanmsg.DurConn
 	{
-		dc, err = durconn.NewDurConn(nc, resStan.ClusterId)
+		dc, err = stanmsg.NewDurConn(nc, resStan.ClusterId)
 		if err != nil {
 			log.Panic(err)
 		}
@@ -183,7 +183,7 @@ func TestFlush(t *testing.T) {
 				}
 				return nil
 			},
-			durconn.SubOptSubscribeCb(func(_ stan.Conn, _, _ string) {
+			stanmsg.SubOptSubscribeCb(func(_ stan.Conn, _, _ string) {
 				close(subc)
 			}),
 		)
