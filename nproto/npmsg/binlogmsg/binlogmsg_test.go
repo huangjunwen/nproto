@@ -30,30 +30,25 @@ func countMsgs(db *sql.DB, schema, table string) int {
 	return int(r.Int64)
 }
 
-func clearMsgs(db *sql.DB, schema, table string) {
-	_, err := db.Exec(fmt.Sprintf("DELETE FROM %s.%s", schema, table))
+func dropMsgTable(db *sql.DB, schema, table string) {
+	_, err := db.Exec(fmt.Sprintf("DROP TABLE %s.%s", schema, table))
 	if err != nil {
 		panic(err)
 	}
-	n := countMsgs(db, schema, table)
-	if n != 0 {
-		panic(fmt.Errorf("There are %d msg(s) in %s.%s after delete", n, schema, table))
-	}
 }
 
-func newPublisher(db *sql.DB, schema, table string) (*BinlogMsgPublisher, error) {
+func newPublisher(db *sql.DB, schema, table string) *BinlogMsgPublisher {
 	if err := CreateMsgTable(context.Background(), db, schema, table); err != nil {
-		return nil, err
+		panic(err)
 	}
 	publisher, err := NewBinlogMsgPublisher(schema, table, db)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
-	return publisher, nil
+	return publisher
 }
 
 func TestBinlogMsgPipe(t *testing.T) {
-	log.Printf("\n")
 	log.Printf("\n")
 	log.Printf(">>> TestBinlogMsgPipe.\n")
 	var err error
@@ -118,11 +113,8 @@ func TestBinlogMsgPipe(t *testing.T) {
 		log.Printf("\n")
 		log.Printf(">>>> TestBinlogMsgPipe: test publishing.\n")
 		tableName := "__msg1"
-		publisher, err := newPublisher(db, dbName, tableName)
-		if err != nil {
-			log.Panic(err)
-		}
-		defer clearMsgs(db, dbName, tableName)
+		publisher := newPublisher(db, dbName, tableName)
+		defer dropMsgTable(db, dbName, tableName)
 
 		n := 10
 		for i := 0; i < n; i++ {
@@ -135,11 +127,8 @@ func TestBinlogMsgPipe(t *testing.T) {
 		log.Printf("\n")
 		log.Printf(">>>> TestBinlogMsgPipe: test flushing messages by fulldump.\n")
 		tableName := "__msg2"
-		publisher, err := newPublisher(db, dbName, tableName)
-		if err != nil {
-			log.Panic(err)
-		}
-		defer clearMsgs(db, dbName, tableName)
+		publisher := newPublisher(db, dbName, tableName)
+		defer dropMsgTable(db, dbName, tableName)
 
 		mu := &sync.Mutex{}
 		msgs := map[string][]byte{
@@ -191,11 +180,8 @@ func TestBinlogMsgPipe(t *testing.T) {
 		log.Printf("\n")
 		log.Printf(">>>> TestBinlogMsgPipe: test flushing messages by incrdump.\n")
 		tableName := "__msg3"
-		publisher, err := newPublisher(db, dbName, tableName)
-		if err != nil {
-			log.Panic(err)
-		}
-		defer clearMsgs(db, dbName, tableName)
+		publisher := newPublisher(db, dbName, tableName)
+		defer dropMsgTable(db, dbName, tableName)
 
 		// The init message.
 		assert.NoError(publisher.Publish(bgctx, "subj", []byte("msgData")))
@@ -240,5 +226,93 @@ func TestBinlogMsgPipe(t *testing.T) {
 
 		pipe.Run(runCtx)
 		assert.Equal(0, countMsgs(db, dbName, tableName))
+	}()
+
+	func() {
+		log.Printf("\n")
+		log.Printf(">>>> TestBinlogMsgPipe: test publish error.\n")
+		tableName := "__msg4"
+		publisher := newPublisher(db, dbName, tableName)
+		defer dropMsgTable(db, dbName, tableName)
+
+		// The init message.
+		assert.NoError(publisher.Publish(bgctx, "subj", []byte("msgData")))
+		assert.Equal(1, countMsgs(db, dbName, tableName))
+
+		runCtx, runCancel := context.WithCancel(context.Background())
+		mu := &sync.Mutex{}
+		n := 0
+		downstream := nproto.MsgAsyncPublisherFunc(func(ctx context.Context, subject string, msgData []byte, cb func(error)) error {
+			time.AfterFunc(time.Duration(rand.Int63n(20))*time.Millisecond, func() {
+				mu.Lock()
+				n++
+				cur := n
+				mu.Unlock()
+
+				if cur <= 2 {
+					cb(fmt.Errorf("Some error"))
+					log.Printf("Emulate publish error: %d\n", cur)
+				} else {
+					cb(nil)
+					log.Printf("Emulate publish success: %d\n", cur)
+					runCancel()
+				}
+			})
+			return nil
+		})
+
+		pipe, err := NewBinlogMsgPipe(
+			downstream,
+			masterCfg,
+			slaveCfg,
+			func(schema, table string) bool { return table == tableName },
+			OptRetryWait(500*time.Millisecond),
+		)
+		if err != nil {
+			panic(err)
+		}
+
+		pipe.Run(runCtx)
+		assert.Equal(0, countMsgs(db, dbName, tableName))
+	}()
+
+	func() {
+		log.Printf("\n")
+		log.Printf(">>>> TestBinlogMsgPipe: test max inflight.\n")
+		tableName := "__msg5"
+		publisher := newPublisher(db, dbName, tableName)
+		defer dropMsgTable(db, dbName, tableName)
+
+		n := 10
+		for i := 0; i < n; i++ {
+			assert.NoError(publisher.Publish(bgctx, "subj", []byte("msgData")))
+		}
+		assert.Equal(n, countMsgs(db, dbName, tableName))
+
+		// Downstream callbacks block until runCtx done.
+		runCtx, _ := context.WithTimeout(context.Background(), 2*time.Second)
+		downstream := nproto.MsgAsyncPublisherFunc(func(ctx context.Context, subject string, msgData []byte, cb func(error)) error {
+			go func() {
+				<-runCtx.Done()
+				cb(nil)
+				log.Printf("Emulate publish success after ctx done\n")
+			}()
+			return nil
+		})
+
+		pipe, err := NewBinlogMsgPipe(
+			downstream,
+			masterCfg,
+			slaveCfg,
+			func(schema, table string) bool { return table == tableName },
+			// 1 message remains
+			OptMaxInflight(n-1),
+		)
+		if err != nil {
+			panic(err)
+		}
+
+		pipe.Run(runCtx)
+		assert.Equal(1, countMsgs(db, dbName, tableName))
 	}()
 }

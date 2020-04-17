@@ -155,7 +155,7 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 	go func() {
 		defer wg.Done()
 		defer cancel()
-		defer pipe.logger.Info().Msg("Post process go routine ends.")
+		defer pipe.logger.Info().Msg("Post process go routine ended")
 
 		for {
 			entry := mq.Pop().(msgEntry)
@@ -164,7 +164,7 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 				break
 			}
 
-			// NOTE: Cancel ctx if error, but not break loop until msgEntry(nil).
+			// NOTE: Cancel ctx if error, but don't break loop until msgEntry(nil).
 			if err := entry.GetPublishErr(); err != nil {
 				cancel()
 				pipe.logger.Error().Err(err).Uint64("msgId", entry.Id()).Str("msgSubj", entry.Subject()).Msg("Publish msg failed")
@@ -200,7 +200,7 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 		return nil
 	}
 
-	pipe.logger.Info().Msg("Full dump starts")
+	pipe.logger.Info().Msg("Full dump starting")
 
 	// Use full dump to publish existent msgs.
 	gtidSet, err := fulldump.FullDump(ctx, pipe.masterCfg, func(ctx context.Context, q sqlh.Queryer) error {
@@ -246,10 +246,10 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 	pubCbWg.Wait()
 
 	if err != nil {
-		pipe.logger.Error().Err(err).Msg("Full dump returned with error")
+		pipe.logger.Error().Err(err).Msg("Full dump ended with error")
 		return err
 	} else {
-		pipe.logger.Info().Msg("Full dump ok")
+		pipe.logger.Info().Msg("Full dump ended")
 	}
 
 	// Now start incr dump to capture changes.
@@ -277,9 +277,9 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 	pubCbWg.Wait()
 
 	if err != nil {
-		pipe.logger.Error().Err(err).Msg("Incr dump returned with error")
+		pipe.logger.Error().Err(err).Msg("Incr dump ended with error")
 	} else {
-		pipe.logger.Info().Err(err).Msg("Incr dump ok")
+		pipe.logger.Info().Err(err).Msg("Incr dump ended")
 	}
 	return err
 }
