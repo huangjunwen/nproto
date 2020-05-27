@@ -2,7 +2,8 @@
 
 [![GoDoc](https://godoc.org/github.com/huangjunwen/nproto?status.svg)](http://godoc.org/github.com/huangjunwen/nproto)
 [![Go Report](https://goreportcard.com/badge/github.com/huangjunwen/nproto)](https://goreportcard.com/report/github.com/huangjunwen/nproto)
-[![Build Status](https://travis-ci.org/huangjunwen/nproto.svg?branch=master)](https://travis-ci.org/huangjunwen/nproto) 
+[![Build Status](https://travis-ci.org/huangjunwen/nproto.svg?branch=master)](https://travis-ci.org/huangjunwen/nproto) [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fhuangjunwen%2Fnproto.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fhuangjunwen%2Fnproto?ref=badge_shield)
+
 [![codecov](https://codecov.io/gh/huangjunwen/nproto/branch/master/graph/badge.svg)](https://codecov.io/gh/huangjunwen/nproto)
 
 Some easy to use rpc/msg components.
@@ -67,3 +68,7 @@ $ protoc --go_out=paths=source_relative:. --nproto_out=paths=source_relative:. *
 ```
 
 5. Implement your service/message handler, then glue them with the stub code generated, see [this simple exmaple](https://github.com/huangjunwen/nproto/tree/master/tests/math) for detail.
+
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fhuangjunwen%2Fnproto.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fhuangjunwen%2Fnproto?ref=badge_large)
