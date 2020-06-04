@@ -32,6 +32,11 @@ func normalizeRowData(
 ) {
 	for i, val := range data {
 
+		// No need to handle nil.
+		if val == nil {
+			continue
+		}
+
 		// NOTE: go-mysql stores int as signed values since before MySQL-8, no signedness
 		// information is presents in binlog. So we need to convert here if it is unsigned.
 		if isNumericColumn(meta.Table, i) {
@@ -74,9 +79,6 @@ func normalizeRowData(
 		}
 
 		if isEnumColumn(meta.Table, i) {
-			if val == nil {
-				continue
-			}
 			v, ok := val.(int64)
 			if !ok {
 				panic(fmt.Errorf("Expect int64 for enum (MYSQL_TYPE_ENUM) field but got %T %#v", val, val))
@@ -86,9 +88,6 @@ func normalizeRowData(
 		}
 
 		if isSetColumn(meta.Table, i) {
-			if val == nil {
-				continue
-			}
 			v, ok := val.(int64)
 			if !ok {
 				panic(fmt.Errorf("Expect int64 for set (MYSQL_TYPE_SET) field but got %T %#v", val, val))
@@ -105,9 +104,6 @@ func normalizeRowData(
 		}
 
 		if realType(meta.Table, i) == MYSQL_TYPE_YEAR {
-			if val == nil {
-				continue
-			}
 			v, ok := val.(int)
 			if !ok {
 				panic(fmt.Errorf("Expect int for year (MYSQL_TYPE_YEAR) field but got %T %#v", val, val))
@@ -118,9 +114,6 @@ func normalizeRowData(
 		}
 
 		if realType(meta.Table, i) == MYSQL_TYPE_NEWDATE {
-			if val == nil {
-				continue
-			}
 			v, ok := val.(string)
 			if !ok {
 				panic(fmt.Errorf("Expect string for date (MYSQL_TYPE_NEWDATE) field but got %T %#v", val, val))
