@@ -74,6 +74,9 @@ func normalizeRowData(
 		}
 
 		if isEnumColumn(meta.Table, i) {
+			if val == nil {
+				continue
+			}
 			v, ok := val.(int64)
 			if !ok {
 				panic(fmt.Errorf("Expect int64 for enum (MYSQL_TYPE_ENUM) field but got %T %#v", val, val))
@@ -83,6 +86,9 @@ func normalizeRowData(
 		}
 
 		if isSetColumn(meta.Table, i) {
+			if val == nil {
+				continue
+			}
 			v, ok := val.(int64)
 			if !ok {
 				panic(fmt.Errorf("Expect int64 for set (MYSQL_TYPE_SET) field but got %T %#v", val, val))
@@ -99,16 +105,22 @@ func normalizeRowData(
 		}
 
 		if realType(meta.Table, i) == MYSQL_TYPE_YEAR {
+			if val == nil {
+				continue
+			}
 			v, ok := val.(int)
 			if !ok {
 				panic(fmt.Errorf("Expect int for year (MYSQL_TYPE_YEAR) field but got %T %#v", val, val))
 			}
-			// NOTE: Convert to int64 to keep the same as fulldump.
-			data[i] = int64(v)
+			// NOTE: Convert to uint16 to keep the same as fulldump.
+			data[i] = uint16(v)
 			continue
 		}
 
 		if realType(meta.Table, i) == MYSQL_TYPE_NEWDATE {
+			if val == nil {
+				continue
+			}
 			v, ok := val.(string)
 			if !ok {
 				panic(fmt.Errorf("Expect string for date (MYSQL_TYPE_NEWDATE) field but got %T %#v", val, val))

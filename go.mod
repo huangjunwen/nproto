@@ -40,4 +40,5 @@ require (
 	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e // indirect
 	golang.org/x/sys v0.0.0-20200409092240-59c9f1ba88fa // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
+	gopkg.in/volatiletech/null.v6 v6.0.0-20170828023728-0bef4e07ae1b
 )
