@@ -51,5 +51,6 @@ func extractSpanCtx(tracer ot.Tracer, md nproto.MD) (ot.SpanContext, error) {
 func setSpanError(span ot.Span, err error) {
 	if err != nil {
 		otext.Error.Set(span, true)
+		span.SetTag("error.message", err.Error())
 	}
 }
