@@ -1,0 +1,20 @@
+language: go
+
+go:
+  - '1.13'
+
+services:
+  - docker
+  
+branches:
+  only:
+  - master
+
+env:
+  - GO111MODULE=on
+
+script:
+  - go test -coverprofile=coverage.txt ./...
+
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
