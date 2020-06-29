@@ -24,10 +24,10 @@ type RPCMethod struct {
 	// Name is the name of this method.
 	Name string
 
-	// NewInput is used to generate a new input parameter.
+	// NewInput is used to generate a new input parameter. Should be a pointer.
 	NewInput func() interface{}
 
-	// NewOutput is used to generate a new output parameter.
+	// NewOutput is used to generate a new output parameter. Should be a pointer.
 	NewOutput func() interface{}
 }
 

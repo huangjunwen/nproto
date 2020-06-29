@@ -37,9 +37,9 @@ func NewMsgSubscriberWithMWs(subscriber MsgSubscriber, mws ...MsgMiddleware) *Ms
 }
 
 // Subscribe implements MsgSubscriber interface.
-func (subscriber *MsgSubscriberWithMWs) Subscribe(subject, queue string, handler MsgHandler, opts ...interface{}) error {
+func (subscriber *MsgSubscriberWithMWs) Subscribe(subject, queue string, newMsg func() interface{}, handler MsgHandler, opts ...interface{}) error {
 	for i := len(subscriber.mws) - 1; i >= 0; i-- {
-		handler = subscriber.mws[i](subject, queue, handler)
+		handler = subscriber.mws[i](subject, queue, newMsg, handler)
 	}
-	return subscriber.subscriber.Subscribe(subject, queue, handler, opts...)
+	return subscriber.subscriber.Subscribe(subject, queue, newMsg, handler, opts...)
 }

@@ -26,7 +26,7 @@ type MsgSubscriber interface {
 	// one member of each queue.
 	//
 	// Order of messages is not guaranteed since redelivery.
-	Subscribe(subject, queue string, handler MsgHandler, opts ...interface{}) error
+	Subscribe(subject, queue string, newMsg func() interface{}, handler MsgHandler, opts ...interface{}) error
 }
 
 // MsgHandler handles messages. A message should be redelivered if the handler returns an error.
@@ -38,5 +38,5 @@ type MsgPublisherMiddleware func(MsgPublisherFunc) MsgPublisherFunc
 // MsgAsyncPublisherMiddleware wraps MsgAsyncPublisherFunc into another one.
 type MsgAsyncPublisherMiddleware func(MsgAsyncPublisherFunc) MsgAsyncPublisherFunc
 
-// MsgMiddleware wraps a MsgHandler into another one. The params are (subject, queue, handler).
-type MsgMiddleware func(string, string, MsgHandler) MsgHandler
+// MsgMiddleware wraps a MsgHandler into another one. The params are (subject, queue, newMsg, handler).
+type MsgMiddleware func(string, string, func() interface{}, MsgHandler) MsgHandler
