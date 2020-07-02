@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package nproto.pb;
+
+option go_package = "github.com/huangjunwen/nproto/v2/pb";
+
+// Error represents nproto.Error in protobuf.
+message Error {
+  int32 code = 1;
+  string message = 2;
+}
+
+// MD represents md.MD in protobuf.
+message MD {
+  map<string, ValueList> key_values = 1;
+}
+
+message ValueList {
+  repeated bytes values = 1;
+}
+
+// RawPayload represents enc.RawPayload in protobuf.
+message RawPayload {
+	// EncoderName is the name of the encoder which payload is encoded by.
+  string encoder_name = 1;
+
+	// Data is the encoded payload raw bytes.
+  bytes data = 2;
+}
+
+message NatsRPCRequest {
+  // Input parameter.
+  RawPayload input = 1;
+
+  // MetaData dict.
+  MD meta_data = 2;
+
+  // Timeout optional timeout in nanoseoncds.
+  uint64 timeout = 3;
+}
+
+message NatsRPCResponse {
+  oneof out {
+    // Output parameter when no error.
+    RawPayload output = 1;
+
+    // Err when nproto.Error returned.
+    Error err = 2;
+
+    // Err2 when other error returned.
+    string err2 = 3;
+  }
+}
+
+message RawPayloadWithMD {
+  // Payload data.
+  RawPayload payload = 1;
+
+  // MetaData dict.
+  MD meta_data = 2;
+}
