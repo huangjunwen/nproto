@@ -15,26 +15,30 @@ type Error struct {
 
 // Error implements error interface.
 func (err *Error) Error() string {
-	return fmt.Sprintf("nproto.Error<%d: %s>", err.Code, err.Message)
+	sep := ""
+	if err.Message != "" {
+		sep = ": "
+	}
+	return fmt.Sprintf("nproto.Error(%d%s%s)", err.Code, sep, err.Message)
 }
 
-// ErrorCode describe the reason of Error.
+// ErrorCode describes the reason of Error.
 //
 // Range -32768 ~ -32000 are reserved (like json-rpc).
 // Range -32768 ~ -32500 are not retryable error.
 type ErrorCode int16
 
 const (
-	// ParseError should be returned when requests can't be parsed correctly.
-	ParseError ErrorCode = -32700
+	// ProtocolError should be returned when message is not well-formed.
+	ProtocolError ErrorCode = -32700
 
-	// InvalidError should be returned when requests are well-formed but invalid, for example:
+	// InvalidError should be returned when message is well-formed but invalid, for example:
 	//   - Method not found in rpc.
 	//   - Payload/parameter can't be parsed correctly or value invalid.
 	//   - ...
 	InvalidError ErrorCode = -32600
 
-	// NotRetryableError should be returned when the requests can't be retried due to other reason.
+	// NotRetryableError should be returned when message should not be sent again due to other reason.
 	NotRetryableError ErrorCode = -32500
 )
 
