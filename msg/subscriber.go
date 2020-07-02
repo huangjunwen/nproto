@@ -15,6 +15,7 @@ type MsgSubscriber interface {
 }
 
 // MsgHandler handles messages. A message should be redelivered if the handler returns an error.
+// Except that the error's type is nproto.Error and error.Retryable() is false.
 type MsgHandler func(context.Context, interface{}) error
 
 // MsgMiddleware wraps a MsgHandler into another one.

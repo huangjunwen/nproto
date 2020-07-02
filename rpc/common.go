@@ -20,6 +20,8 @@ type RPCSpec struct {
 }
 
 // RPCHandler do the real job. RPCHandler can be client side or server side.
+// It must be able to transfer normal error and nproto.Error from server side
+// to client side.
 type RPCHandler func(context.Context, interface{}) (interface{}, error)
 
 // RPCMiddleware wraps a RPCHandler into another one.
