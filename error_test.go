@@ -13,8 +13,8 @@ func TestErrorCode(t *testing.T) {
 	assert.False(ProtocolError.Retryable())
 	fmt.Printf("%s\n", &Error{Code: ProtocolError, Message: "xxx"})
 
-	assert.False(InvalidError.Retryable())
-	fmt.Printf("%s\n", &Error{Code: InvalidError})
+	assert.False(PayloadError.Retryable())
+	fmt.Printf("%s\n", &Error{Code: PayloadError})
 
 	assert.False(NotRetryableError.Retryable())
 	fmt.Printf("%s\n", &Error{Code: NotRetryableError})

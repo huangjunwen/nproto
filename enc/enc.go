@@ -4,29 +4,29 @@ import (
 	"io"
 )
 
-// Encoder is used to encode/decode payload.
+// Encoder is used to encode/decode data.
 type Encoder interface {
 	// Name should be a unique identity of encoder.
 	Name() string
 
-	// EncodePayload encodes payload to w.
+	// EncodeData encodes data to w.
 	//
-	// If payload's type is *RawPayload/RawPayload and payload.EncoderName == Encoder.Name(),
-	// then payload.Data should be written to w directly without encoding.
-	EncodePayload(w io.Writer, payload interface{}) error
+	// If data's type is *RawData/RawData and data.EncoderName == Encoder.Name(),
+	// then data.Data should be written to w directly without encoding.
+	EncodeData(w io.Writer, data interface{}) error
 
-	// DecodePayload decodes payload from r.
+	// DecodeData decodes data from r.
 	//
-	// If payload's type is *RawPayload, then payload.EncoderName should be set to Encoder.Name(),
-	// and payload.Data should be read from r directly without decoding.
-	DecodePayload(r io.Reader, payload interface{}) error
+	// If data's type is *RawData, then data.EncoderName should be set to Encoder.Name(),
+	// and data.Data should be read from r directly without decoding.
+	DecodeData(r io.Reader, data interface{}) error
 }
 
-// RawPayload is similar to json.RawMessage which bypasses encoding/decoding.
-type RawPayload struct {
-	// EncoderName is the name of the encoder which payload is encoded by.
+// RawData is similar to json.RawMessage which bypasses encoding/decoding.
+type RawData struct {
+	// EncoderName is the name of the encoder which data is encoded by.
 	EncoderName string
 
-	// Data is the encoded payload raw bytes.
-	Data []byte
+	// Bytes is the encoded data raw bytes.
+	Bytes []byte
 }

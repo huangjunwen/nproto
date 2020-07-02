@@ -13,6 +13,14 @@ type Error struct {
 	Message string `json:"message"`
 }
 
+// Errorf creates a new Error.
+func Errorf(code ErrorCode, msg string, args ...interface{}) *Error {
+	return &Error{
+		Code:    code,
+		Message: fmt.Sprintf(msg, args...),
+	}
+}
+
 // Error implements error interface.
 func (err *Error) Error() string {
 	sep := ""
@@ -29,16 +37,19 @@ func (err *Error) Error() string {
 type ErrorCode int16
 
 const (
-	// ProtocolError should be returned when message is not well-formed.
+	// ProtocolError should be returned when error occurs in protocol level, for example:
+	//   - Parse request error.
+	//   - ...
 	ProtocolError ErrorCode = -32700
 
-	// InvalidError should be returned when message is well-formed but invalid, for example:
+	// PayloadError should be returned when error occurs in payload level, for example:
 	//   - Method not found in rpc.
-	//   - Payload/parameter can't be parsed correctly or value invalid.
+	//   - Parameter can't be encoded/decoded correctly.
+	//   - Parameter's value out of range.
 	//   - ...
-	InvalidError ErrorCode = -32600
+	PayloadError ErrorCode = -32600
 
-	// NotRetryableError should be returned when message should not be sent again due to other reason.
+	// NotRetryableError should be returned when you should not try again.
 	NotRetryableError ErrorCode = -32500
 )
 

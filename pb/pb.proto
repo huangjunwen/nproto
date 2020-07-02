@@ -19,30 +19,33 @@ message ValueList {
   repeated bytes values = 1;
 }
 
-// RawPayload represents enc.RawPayload in protobuf.
-message RawPayload {
-	// EncoderName is the name of the encoder which payload is encoded by.
+// RawData represents enc.RawData in protobuf.
+message RawData {
+	// EncoderName is the name of the encoder which data is encoded by.
   string encoder_name = 1;
 
-	// Data is the encoded payload raw bytes.
-  bytes data = 2;
+	// Bytes is the encoded data raw bytes.
+  bytes bytes = 2;
 }
 
 message NatsRPCRequest {
+  // Method name.
+  string method = 1;
+
   // Input parameter.
-  RawPayload input = 1;
+  RawData input = 2;
 
   // MetaData dict.
-  MD meta_data = 2;
+  MD meta_data = 3;
 
   // Timeout optional timeout in nanoseoncds.
-  uint64 timeout = 3;
+  uint64 timeout = 4;
 }
 
 message NatsRPCResponse {
   oneof out {
     // Output parameter when no error.
-    RawPayload output = 1;
+    RawData output = 1;
 
     // Err when nproto.Error returned.
     Error err = 2;
@@ -52,9 +55,9 @@ message NatsRPCResponse {
   }
 }
 
-message RawPayloadWithMD {
-  // Payload data.
-  RawPayload payload = 1;
+message RawDataWithMD {
+  // Data.
+  RawData data = 1;
 
   // MetaData dict.
   MD meta_data = 2;

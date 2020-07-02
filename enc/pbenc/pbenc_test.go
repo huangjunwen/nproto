@@ -15,126 +15,122 @@ func TestPbEncoder(t *testing.T) {
 	assert := assert.New(t)
 
 	// Encode proto.Message.
-	var data []byte
+	var b []byte
 	{
-		payload := wrapperspb.String("123")
+		data := wrapperspb.String("123")
 
 		w := &bytes.Buffer{}
-		err := Default.EncodePayload(w, payload)
+		err := Default.EncodeData(w, data)
 		assert.NoError(err)
 
-		data = w.Bytes()
-		fmt.Printf("EncodePayload(%+v): data=%+v, err=%+v\n", payload, data, err)
+		b = w.Bytes()
+		fmt.Printf("EncodeData(%+v): bytes=%+v, err=%+v\n", data, b, err)
 	}
 
-	// Encode *RawPayload.
+	// Encode *RawData.
 	{
 		{
-			payload := &RawPayload{
+			data := &RawData{
 				EncoderName: "json",
-				Data:        []byte("{}"),
+				Bytes:       []byte("{}"),
 			}
 
 			w := &bytes.Buffer{}
-			err := Default.EncodePayload(w, payload)
+			err := Default.EncodeData(w, data)
 			assert.Error(err)
 
-			fmt.Printf("EncodePayload(%+v): err=%+v\n", payload, err)
+			fmt.Printf("EncodeData(%+v): err=%+v\n", data, err)
 		}
 
 		{
-			payload := &RawPayload{
+			data := &RawData{
 				EncoderName: Name,
-				Data:        data,
+				Bytes:       b,
 			}
 
 			w := &bytes.Buffer{}
-			err := Default.EncodePayload(w, payload)
+			err := Default.EncodeData(w, data)
 			assert.NoError(err)
+			assert.Equal(b, w.Bytes())
 
-			datax := w.Bytes()
-			assert.Equal(data, datax)
-
-			fmt.Printf("EncodePayload(%+v): data=%+v, err=%+v\n", payload, datax, err)
+			fmt.Printf("EncodeData(%+v): bytes=%+v, err=%+v\n", data, w.Bytes(), err)
 		}
 	}
 
-	// Encode RawPayload.
+	// Encode RawData.
 	{
 		{
-			payload := RawPayload{
+			data := RawData{
 				EncoderName: "json",
-				Data:        []byte("{}"),
+				Bytes:       []byte("{}"),
 			}
 
 			w := &bytes.Buffer{}
-			err := Default.EncodePayload(w, payload)
+			err := Default.EncodeData(w, data)
 			assert.Error(err)
 
-			fmt.Printf("EncodePayload(%+v): err=%+v\n", payload, err)
+			fmt.Printf("EncodeData(%+v): err=%+v\n", data, err)
 		}
 
 		{
-			payload := RawPayload{
+			data := RawData{
 				EncoderName: Name,
-				Data:        data,
+				Bytes:       b,
 			}
 
 			w := &bytes.Buffer{}
-			err := Default.EncodePayload(w, payload)
+			err := Default.EncodeData(w, data)
 			assert.NoError(err)
+			assert.Equal(b, w.Bytes())
 
-			datax := w.Bytes()
-			assert.Equal(data, datax)
-
-			fmt.Printf("EncodePayload(%+v): data=%+v, err=%+v\n", payload, datax, err)
+			fmt.Printf("EncodeData(%+v): bytes=%+v, err=%+v\n", data, w.Bytes(), err)
 		}
 	}
 
 	// Encode non proto.Message.
 	{
-		payload := 3
+		data := 3
 
 		w := &bytes.Buffer{}
-		err := Default.EncodePayload(w, payload)
+		err := Default.EncodeData(w, data)
 		assert.Error(err)
 
-		fmt.Printf("EncodePayload(%+v): err=%+v\n", payload, err)
+		fmt.Printf("EncodeData(%+v): err=%+v\n", data, err)
 	}
 
 	// Decode to proto.Message.
 	{
-		payload := wrapperspb.String("")
+		data := wrapperspb.String("")
 
-		r := bytes.NewReader(data)
-		err := Default.DecodePayload(r, payload)
+		r := bytes.NewReader(b)
+		err := Default.DecodeData(r, data)
 		assert.NoError(err)
 
-		fmt.Printf("DecodePayload(): payload=%+v, err=%+v\n", payload, err)
+		fmt.Printf("DecodeData(): data=%+v, err=%+v\n", data, err)
 	}
 
-	// Decode to *RawPayload.
+	// Decode to *RawData.
 	{
-		payload := &RawPayload{}
+		data := &RawData{}
 
-		r := bytes.NewReader(data)
-		err := Default.DecodePayload(r, payload)
+		r := bytes.NewReader(b)
+		err := Default.DecodeData(r, data)
 		assert.NoError(err)
-		assert.Equal(Name, payload.EncoderName)
-		assert.Equal(data, payload.Data)
+		assert.Equal(Name, data.EncoderName)
+		assert.Equal(b, data.Bytes)
 
-		fmt.Printf("DecodePayload(): payload=%+v, err=%+v\n", payload, err)
+		fmt.Printf("DecodeData(): data=%+v, err=%+v\n", data, err)
 	}
 
 	// Decode non proto.Message.
 	{
-		var payload string
+		var data string
 
-		r := bytes.NewReader(data)
-		err := Default.DecodePayload(r, &payload)
+		r := bytes.NewReader(b)
+		err := Default.DecodeData(r, &data)
 		assert.Error(err)
 
-		fmt.Printf("DecodePayload(): payload=%+v, err=%+v\n", &payload, err)
+		fmt.Printf("DecodeData(): data=%+v, err=%+v\n", &data, err)
 	}
 
 }

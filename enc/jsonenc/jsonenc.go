@@ -15,8 +15,8 @@ import (
 // Name of this encoder.
 const Name = "nproto.json"
 
-// JsonEncoder uses json to encode/decode payload. Payloads must be
-// proto.Message or *RawPayload or JsonIOMarshaler/JsonIOUnmarshaler or
+// JsonEncoder uses json to encode/decode data. Accept
+// proto.Message or *RawData or JsonIOMarshaler/JsonIOUnmarshaler or
 // any json marshalable/unmarshalable object.
 type JsonEncoder struct {
 	PbMarshalOptions   protojson.MarshalOptions
@@ -33,9 +33,9 @@ func (e *JsonEncoder) Name() string {
 	return Name
 }
 
-func (e *JsonEncoder) EncodePayload(w io.Writer, payload interface{}) error {
+func (e *JsonEncoder) EncodeData(w io.Writer, data interface{}) error {
 
-	if m, ok := payload.(JsonIOMarshaler); ok {
+	if m, ok := data.(JsonIOMarshaler); ok {
 		return m.MarshalJSONToWriter(w)
 	}
 
@@ -44,18 +44,18 @@ func (e *JsonEncoder) EncodePayload(w io.Writer, payload interface{}) error {
 		err error
 	)
 
-	switch m := payload.(type) {
-	case *RawPayload:
+	switch m := data.(type) {
+	case *RawData:
 		if m.EncoderName != Name {
-			goto WRONG_PAYLOAD
+			goto WRONG_DATA
 		}
-		b = m.Data
+		b = m.Bytes
 
-	case RawPayload:
+	case RawData:
 		if m.EncoderName != Name {
-			goto WRONG_PAYLOAD
+			goto WRONG_DATA
 		}
-		b = m.Data
+		b = m.Bytes
 
 	case proto.Message:
 		b, err = e.PbMarshalOptions.Marshal(m)
@@ -70,13 +70,13 @@ func (e *JsonEncoder) EncodePayload(w io.Writer, payload interface{}) error {
 	_, err = w.Write(b)
 	return err
 
-WRONG_PAYLOAD:
-	return fmt.Errorf("JsonEncoder can't encode %#v", payload)
+WRONG_DATA:
+	return fmt.Errorf("JsonEncoder can't encode %#v", data)
 }
 
-func (e *JsonEncoder) DecodePayload(r io.Reader, payload interface{}) error {
+func (e *JsonEncoder) DecodeData(r io.Reader, data interface{}) error {
 
-	if m, ok := payload.(JsonIOUnmarshaler); ok {
+	if m, ok := data.(JsonIOUnmarshaler); ok {
 		return m.UnmarshalJSONFromReader(r)
 	}
 
@@ -85,10 +85,10 @@ func (e *JsonEncoder) DecodePayload(r io.Reader, payload interface{}) error {
 		return err
 	}
 
-	switch m := payload.(type) {
-	case *RawPayload:
+	switch m := data.(type) {
+	case *RawData:
 		m.EncoderName = Name
-		m.Data = b
+		m.Bytes = b
 		return nil
 
 	case proto.Message:

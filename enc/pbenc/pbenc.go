@@ -13,8 +13,7 @@ import (
 // Name of this encoder.
 const Name = "nproto.pb"
 
-// PbEncoder uses protobuf to encode/decode payload. Payloads must be
-// proto.Message or *RawPayload.
+// PbEncoder uses protobuf to encode/decode data. Accept proto.Message or *RawData.
 type PbEncoder struct {
 	PbMarshalOptions   proto.MarshalOptions
 	PbUnmarshalOptions proto.UnmarshalOptions
@@ -30,31 +29,31 @@ func (e *PbEncoder) Name() string {
 	return Name
 }
 
-func (e *PbEncoder) EncodePayload(w io.Writer, payload interface{}) error {
+func (e *PbEncoder) EncodeData(w io.Writer, data interface{}) error {
 
 	var (
 		b   []byte
 		err error
 	)
 
-	switch m := payload.(type) {
-	case *RawPayload:
+	switch m := data.(type) {
+	case *RawData:
 		if m.EncoderName != Name {
-			goto WRONG_PAYLOAD
+			goto WRONG_DATA
 		}
-		b = m.Data
+		b = m.Bytes
 
-	case RawPayload:
+	case RawData:
 		if m.EncoderName != Name {
-			goto WRONG_PAYLOAD
+			goto WRONG_DATA
 		}
-		b = m.Data
+		b = m.Bytes
 
 	case proto.Message:
 		b, err = e.PbMarshalOptions.Marshal(m)
 
 	default:
-		goto WRONG_PAYLOAD
+		goto WRONG_DATA
 	}
 
 	if err != nil {
@@ -63,29 +62,29 @@ func (e *PbEncoder) EncodePayload(w io.Writer, payload interface{}) error {
 	_, err = w.Write(b)
 	return err
 
-WRONG_PAYLOAD:
-	return fmt.Errorf("PbEncoder can't encode %#v", payload)
+WRONG_DATA:
+	return fmt.Errorf("PbEncoder can't encode %#v", data)
 
 }
 
-func (e *PbEncoder) DecodePayload(r io.Reader, payload interface{}) error {
+func (e *PbEncoder) DecodeData(r io.Reader, data interface{}) error {
 
 	b, err := ioutil.ReadAll(r)
 	if err != nil {
 		return err
 	}
 
-	switch m := payload.(type) {
-	case *RawPayload:
+	switch m := data.(type) {
+	case *RawData:
 		m.EncoderName = Name
-		m.Data = b
+		m.Bytes = b
 		return nil
 
 	case proto.Message:
 		return e.PbUnmarshalOptions.Unmarshal(b, m)
 
 	default:
-		return fmt.Errorf("PbEncoder can't decode to %#v", payload)
+		return fmt.Errorf("PbEncoder can't decode to %#v", data)
 	}
 
 }

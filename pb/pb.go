@@ -6,14 +6,12 @@ import (
 	npmd "github.com/huangjunwen/nproto/v2/md"
 )
 
-// From fills Error from nproto.Error.
 func (err *Error) From(in *nproto.Error) {
 	err.Reset()
 	err.Code = int32(in.Code)
 	err.Message = in.Message
 }
 
-// To converts Error to nproto.Error.
 func (err *Error) To() *nproto.Error {
 	return &nproto.Error{
 		Code:    nproto.ErrorCode(err.Code),
@@ -21,7 +19,6 @@ func (err *Error) To() *nproto.Error {
 	}
 }
 
-// From fills MD from npmd.MD.
 func (md *MD) From(in npmd.MD) {
 	md.Reset()
 	in.Keys(func(key string) error {
@@ -32,7 +29,6 @@ func (md *MD) From(in npmd.MD) {
 	})
 }
 
-// To converts MD to npmd.MetaData.
 func (md *MD) To() npmd.MetaData {
 	ret := npmd.MetaData{}
 	for key, valueList := range md.KeyValues {
@@ -41,14 +37,14 @@ func (md *MD) To() npmd.MetaData {
 	return ret
 }
 
-func (payload *RawPayload) From(in *npenc.RawPayload) {
-	payload.EncoderName = in.EncoderName
-	payload.Data = in.Data
+func (data *RawData) From(in *npenc.RawData) {
+	data.EncoderName = in.EncoderName
+	data.Bytes = in.Bytes
 }
 
-func (payload *RawPayload) To() *npenc.RawPayload {
-	return &npenc.RawPayload{
-		EncoderName: payload.EncoderName,
-		Data:        payload.Data,
+func (data *RawData) To() *npenc.RawData {
+	return &npenc.RawData{
+		EncoderName: data.EncoderName,
+		Bytes:       data.Bytes,
 	}
 }
