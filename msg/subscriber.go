@@ -18,6 +18,9 @@ type MsgSubscriber interface {
 // Except that the error's type is nproto.Error and error.Retryable() is false.
 type MsgHandler func(context.Context, interface{}) error
 
+// MsgSubscriberFunc is an adapter to allow the use of ordinary functions as MsgSubscriber.
+type MsgSubscriberFunc func(*MsgSpec, string, MsgHandler, ...interface{}) error
+
 // MsgMiddleware wraps a MsgHandler into another one.
 type MsgMiddleware func(spec *MsgSpec, queue string, handler MsgHandler) MsgHandler
 
@@ -28,8 +31,14 @@ type MsgSubscriberWithMWs struct {
 }
 
 var (
+	_ MsgSubscriber = (MsgSubscriberFunc)(nil)
 	_ MsgSubscriber = (*MsgSubscriberWithMWs)(nil)
 )
+
+// Subscribe implements MsgSubscriber interface.
+func (fn MsgSubscriberFunc) Subscribe(spec *MsgSpec, queue string, handler MsgHandler, opts ...interface{}) error {
+	return fn(spec, queue, handler, opts...)
+}
 
 // NewMsgSubscriberWithMWs creates a new MsgSubscriberWithMWs.
 func NewMsgSubscriberWithMWs(subscriber MsgSubscriber, mws ...MsgMiddleware) *MsgSubscriberWithMWs {

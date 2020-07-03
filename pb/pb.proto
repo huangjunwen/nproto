@@ -50,8 +50,8 @@ message NatsRPCResponse {
     // Err when nproto.Error returned.
     Error err = 2;
 
-    // Err2 when other error returned.
-    string err2 = 3;
+    // PlainErr when other plain error returned.
+    string plain_err = 3;
   }
 }
 

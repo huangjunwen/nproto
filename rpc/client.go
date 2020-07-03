@@ -2,9 +2,12 @@ package rpc
 
 // RPCClient is used to invoke rpc services.
 type RPCClient interface {
-	// MakeHandler creates a RPCHandler for a given method of a service.
+	// MakeHandler creates a RPCHandler for a method.
 	MakeHandler(spec *RPCSpec) RPCHandler
 }
+
+// RPCClientFunc is an adapter to allow the use of ordinary functions as RPCClient.
+type RPCClientFunc func(*RPCSpec) RPCHandler
 
 // RPCClientWithMWs wraps an RPCClient with RPCMiddlewares.
 type RPCClientWithMWs struct {
@@ -13,8 +16,14 @@ type RPCClientWithMWs struct {
 }
 
 var (
+	_ RPCClient = (RPCClientFunc)(nil)
 	_ RPCClient = (*RPCClientWithMWs)(nil)
 )
+
+// MakeHandler implements RPCClient interface.
+func (fn RPCClientFunc) MakeHandler(spec *RPCSpec) RPCHandler {
+	return fn(spec)
+}
 
 // NewRPCClientWithMWs creates a new RPCClientWithMWs.
 func NewRPCClientWithMWs(client RPCClient, mws ...RPCMiddleware) *RPCClientWithMWs {
