@@ -6,123 +6,118 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-func TestRPCSepcInput(t *testing.T) {
+func TestRPCSepc(t *testing.T) {
 	assert := assert.New(t)
 
-	newSpec := func(newInput func() interface{}) *RPCSpec {
-		return &RPCSpec{
-			SvcName:    "test",
-			MethodName: "test",
-			NewInput:   newInput,
-			NewOutput:  func() interface{} { return &emptypb.Empty{} },
-		}
-	}
-
 	for i, testCase := range []*struct {
-		Spec        *RPCSpec
-		Input       interface{}
-		ExpectPanic bool
+		Spec                *RPCSpec
+		ExpectValidateError bool
 	}{
-		// NewInput() returns nil.
-		{
-			Spec:        newSpec(func() interface{} { return nil }),
-			Input:       &emptypb.Empty{},
-			ExpectPanic: true,
-		},
-		// NewInput() returns non-pointer.
-		{
-			Spec:        newSpec(func() interface{} { return 0 }),
-			Input:       &emptypb.Empty{},
-			ExpectPanic: true,
-		},
-		// Not the same type.
-		{
-			Spec:        newSpec(func() interface{} { return wrapperspb.String("") }),
-			Input:       &emptypb.Empty{},
-			ExpectPanic: true,
-		},
 		// Ok.
 		{
-			Spec:        newSpec(func() interface{} { return wrapperspb.String("") }),
-			Input:       wrapperspb.String("1"),
-			ExpectPanic: false,
+			Spec: &RPCSpec{
+				SvcName:    "test",
+				MethodName: "test",
+				NewInput:   func() interface{} { return &emptypb.Empty{} },
+				NewOutput:  func() interface{} { return &emptypb.Empty{} },
+			},
+			ExpectValidateError: false,
+		},
+		// SvcName empty.
+		{
+			Spec:                &RPCSpec{},
+			ExpectValidateError: true,
+		},
+		// MethodName empty.
+		{
+			Spec: &RPCSpec{
+				SvcName: "test",
+			},
+			ExpectValidateError: true,
+		},
+		// NewInput empty.
+		{
+			Spec: &RPCSpec{
+				SvcName:    "test",
+				MethodName: "test",
+			},
+			ExpectValidateError: true,
+		},
+		// NewOutput empty.
+		{
+			Spec: &RPCSpec{
+				SvcName:    "test",
+				MethodName: "test",
+				NewInput:   func() interface{} { return &emptypb.Empty{} },
+			},
+			ExpectValidateError: true,
+		},
+		// NewOutput returns nil.
+		{
+			Spec: &RPCSpec{
+				SvcName:    "test",
+				MethodName: "test",
+				NewInput:   func() interface{} { return &emptypb.Empty{} },
+				NewOutput:  func() interface{} { return nil },
+			},
+			ExpectValidateError: true,
+		},
+		// NewOutput returns non pointer.
+		{
+			Spec: &RPCSpec{
+				SvcName:    "test",
+				MethodName: "test",
+				NewInput:   func() interface{} { return &emptypb.Empty{} },
+				NewOutput:  func() interface{} { return 0 },
+			},
+			ExpectValidateError: true,
+		},
+		// NewInput returns nil.
+		{
+			Spec: &RPCSpec{
+				SvcName:    "test",
+				MethodName: "test",
+				NewInput:   func() interface{} { return nil },
+				NewOutput:  func() interface{} { return &emptypb.Empty{} },
+			},
+			ExpectValidateError: true,
+		},
+		// NewInput returns non pointer.
+		{
+			Spec: &RPCSpec{
+				SvcName:    "test",
+				MethodName: "test",
+				NewInput:   func() interface{} { return 0 },
+				NewOutput:  func() interface{} { return &emptypb.Empty{} },
+			},
+			ExpectValidateError: true,
 		},
 	} {
-		f := assert.NotPanics
-		if testCase.ExpectPanic {
-			f = assert.Panics
-		}
-		f(func() {
-			defer func() {
-				err := recover()
-				if err != nil {
-					log.Println(err)
-					panic(err)
-				}
-			}()
-			testCase.Spec.AssertInputType(testCase.Input)
-		}, "test case %d", i)
-	}
-}
 
-func TestRPCSepcOutput(t *testing.T) {
-	assert := assert.New(t)
-
-	newSpec := func(newOutput func() interface{}) *RPCSpec {
-		return &RPCSpec{
-			SvcName:    "test",
-			MethodName: "test",
-			NewInput:   func() interface{} { return &emptypb.Empty{} },
-			NewOutput:  newOutput,
+		err := testCase.Spec.Validate()
+		if testCase.ExpectValidateError {
+			assert.Error(err, "test case %d", i)
+			assert.False(testCase.Spec.Validated(), "test case %d", i)
+		} else {
+			assert.NoError(err, "test case %d", i)
+			assert.True(testCase.Spec.Validated(), "test case %d", i)
 		}
+
+		log.Println(testCase.Spec, err)
 	}
 
-	for i, testCase := range []*struct {
-		Spec        *RPCSpec
-		Output      interface{}
-		ExpectPanic bool
-	}{
-		// NewOutput() returns nil.
-		{
-			Spec:        newSpec(func() interface{} { return nil }),
-			Output:      &emptypb.Empty{},
-			ExpectPanic: true,
-		},
-		// NewOutput() returns non-pointer.
-		{
-			Spec:        newSpec(func() interface{} { return 0 }),
-			Output:      &emptypb.Empty{},
-			ExpectPanic: true,
-		},
-		// Not the same type.
-		{
-			Spec:        newSpec(func() interface{} { return wrapperspb.String("") }),
-			Output:      &emptypb.Empty{},
-			ExpectPanic: true,
-		},
-		// Ok.
-		{
-			Spec:        newSpec(func() interface{} { return wrapperspb.String("") }),
-			Output:      wrapperspb.String("1"),
-			ExpectPanic: false,
-		},
-	} {
-		f := assert.NotPanics
-		if testCase.ExpectPanic {
-			f = assert.Panics
-		}
-		f(func() {
-			defer func() {
-				err := recover()
-				if err != nil {
-					log.Println(err)
-					panic(err)
-				}
-			}()
-			testCase.Spec.AssertOutputType(testCase.Output)
-		}, "test case %d", i)
+	spec := &RPCSpec{
+		SvcName:    "test",
+		MethodName: "test",
+		NewInput:   func() interface{} { return &emptypb.Empty{} },
+		NewOutput:  func() interface{} { return &emptypb.Empty{} },
 	}
+
+	assert.Error(spec.AssertInputType(&emptypb.Empty{}))
+	spec.Validate()
+	assert.NoError(spec.AssertInputType(&emptypb.Empty{}))
+	assert.Error(spec.AssertInputType(3))
+
 }

@@ -6,62 +6,73 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 func TestMsgSpec(t *testing.T) {
 	assert := assert.New(t)
 
-	newSpec := func(newMsg func() interface{}) *MsgSpec {
-		return &MsgSpec{
-			SubjectName: "test",
-			NewMsg:      newMsg,
-		}
-	}
-
 	for i, testCase := range []*struct {
-		Spec        *MsgSpec
-		Msg         interface{}
-		ExpectPanic bool
+		Spec                *MsgSpec
+		ExpectValidateError bool
 	}{
-		// NewMsg() returns nil.
-		{
-			Spec:        newSpec(func() interface{} { return nil }),
-			Msg:         &emptypb.Empty{},
-			ExpectPanic: true,
-		},
-		// NewMsg() returns non-pointer.
-		{
-			Spec:        newSpec(func() interface{} { return 0 }),
-			Msg:         &emptypb.Empty{},
-			ExpectPanic: true,
-		},
-		// Not the same type.
-		{
-			Spec:        newSpec(func() interface{} { return wrapperspb.String("") }),
-			Msg:         &emptypb.Empty{},
-			ExpectPanic: true,
-		},
 		// Ok.
 		{
-			Spec:        newSpec(func() interface{} { return wrapperspb.String("") }),
-			Msg:         wrapperspb.String("1"),
-			ExpectPanic: false,
+			Spec: &MsgSpec{
+				SubjectName: "test",
+				NewMsg:      func() interface{} { return &emptypb.Empty{} },
+			},
+			ExpectValidateError: false,
+		},
+		// SvcName empty.
+		{
+			Spec:                &MsgSpec{},
+			ExpectValidateError: true,
+		},
+		// NewMsg empty.
+		{
+			Spec: &MsgSpec{
+				SubjectName: "test",
+			},
+			ExpectValidateError: true,
+		},
+		// NewMsg returns nil.
+		{
+			Spec: &MsgSpec{
+				SubjectName: "test",
+				NewMsg:      func() interface{} { return nil },
+			},
+			ExpectValidateError: true,
+		},
+		// NewMsg returns non pointer.
+		{
+			Spec: &MsgSpec{
+				SubjectName: "test",
+				NewMsg:      func() interface{} { return 0 },
+			},
+			ExpectValidateError: true,
 		},
 	} {
-		f := assert.NotPanics
-		if testCase.ExpectPanic {
-			f = assert.Panics
+		err := testCase.Spec.Validate()
+		if testCase.ExpectValidateError {
+			assert.Error(err, "test case %d", i)
+			assert.False(testCase.Spec.Validated(), "test case %d", i)
+		} else {
+			assert.NoError(err, "test case %d", i)
+			assert.True(testCase.Spec.Validated(), "test case %d", i)
 		}
-		f(func() {
-			defer func() {
-				err := recover()
-				if err != nil {
-					log.Println(err)
-					panic(err)
-				}
-			}()
-			testCase.Spec.AssertMsgType(testCase.Msg)
-		}, "test case %d", i)
+
+		log.Println(testCase.Spec, err)
+
 	}
+
+	spec := &MsgSpec{
+		SubjectName: "test",
+		NewMsg:      func() interface{} { return &emptypb.Empty{} },
+	}
+
+	assert.Error(spec.AssertMsgType(&emptypb.Empty{}))
+	spec.Validate()
+	assert.NoError(spec.AssertMsgType(&emptypb.Empty{}))
+	assert.Error(spec.AssertMsgType(3))
+
 }
