@@ -58,11 +58,25 @@ func (client *Client) MakeHandler(spec *RPCSpec) RPCHandler {
 
 	return func(ctx context.Context, input interface{}) (interface{}, error) {
 
+		if err := spec.Validate(); err != nil {
+			return nil, Errorf(
+				NotRetryableError,
+				err.Error(),
+			)
+		}
+
+		if err := spec.AssertInputType(input); err != nil {
+			return nil, Errorf(
+				NotRetryableError,
+				err.Error(),
+			)
+		}
+
 		w := &bytes.Buffer{}
 		if err := client.encoder.EncodeData(w, input); err != nil {
 			return nil, Errorf(
 				PayloadError,
-				"natsrpc.Client %s::%s encode input error: %s",
+				"%s::%s natsrpc.Client encode input error: %s",
 				spec.SvcName,
 				spec.MethodName,
 				err.Error(),
@@ -102,7 +116,7 @@ func (client *Client) MakeHandler(spec *RPCSpec) RPCHandler {
 		if err != nil {
 			return nil, Errorf(
 				ProtocolError,
-				"natsrpc.Client %s::%s marshal request error: %s",
+				"%s::%s natsrpc.Client marshal request error: %s",
 				spec.SvcName,
 				spec.MethodName,
 				err.Error(),
@@ -122,7 +136,7 @@ func (client *Client) MakeHandler(spec *RPCSpec) RPCHandler {
 		if err := proto.Unmarshal(respMsg.Data, resp); err != nil {
 			return nil, Errorf(
 				ProtocolError,
-				"natsrpc.Client %s::%s unmarshal response error: %s",
+				"%s::%s natsrpc.Client unmarshal response error: %s",
 				spec.SvcName,
 				spec.MethodName,
 				err.Error(),
@@ -134,7 +148,7 @@ func (client *Client) MakeHandler(spec *RPCSpec) RPCHandler {
 			if out.Output.EncoderName != client.encoder.Name() {
 				return nil, Errorf(
 					ProtocolError,
-					"natsrpc.Client %s::%s expect output encoded by %s, but got %s",
+					"%s::%s natsrpc.Client expect output encoded by %s, but got %s",
 					spec.SvcName,
 					spec.MethodName,
 					client.encoder.Name(),
@@ -146,7 +160,7 @@ func (client *Client) MakeHandler(spec *RPCSpec) RPCHandler {
 			if err := client.encoder.DecodeData(bytes.NewReader(out.Output.Bytes), output); err != nil {
 				return nil, Errorf(
 					PayloadError,
-					"natsrpc.Client %s::%s decode output error: %s",
+					"%s::%s natsrpc.Client decode output error: %s",
 					spec.SvcName,
 					spec.MethodName,
 					err.Error(),

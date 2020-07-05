@@ -138,6 +138,10 @@ func (server *Server) Close() error {
 
 func (server *Server) registHandler(spec *RPCSpec, handler RPCHandler, encoderNames map[string]struct{}) error {
 
+	if err := spec.Validate(); err != nil {
+		return err
+	}
+
 	server.mu.Lock()
 	defer server.mu.Unlock()
 
@@ -179,21 +183,99 @@ func (server *Server) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 	parser := subjectParser(server.subjectPrefix, svcName)
 
 	return func(msg *nats.Msg) {
-		subj := msg.Reply
 
-		if err := server.runner.Submit(func() {
+		ok, methodName := parser(msg.Subject)
+		if !ok {
+			server.logger.Error(
+				nil,
+				"natsrpc.Server unexpected rpc subject",
+				"svcName", svcName,
+				"subject", msg.Subject,
+			)
+			return
+		}
 
-			ok, methodName := parser(msg.Subject)
-			if !ok {
-				server.logger.Error(nil, "natsrpc.Server unexpected rpc subject", "subject", msg.Subject)
+		reply := func(resp *nppb.NatsRPCResponse) {
+			respData, err := proto.Marshal(resp)
+			if err != nil {
+				server.logger.Error(
+					err,
+					"natsrpc.Server marshal response error",
+					"svcName", svcName,
+					"methodName", methodName,
+				)
 				return
 			}
 
+			err = server.nc.Publish(msg.Reply, respData)
+			if err != nil {
+				server.logger.Error(
+					err,
+					"natsrpc.Server publish response error",
+					"svcName", svcName,
+					"methodName", methodName,
+				)
+				return
+			}
+			return
+		}
+
+		replyError := func(err error) {
+			switch err.(type) {
+			case *Error:
+				e := &nppb.Error{}
+				e.From(err.(*Error))
+				reply(&nppb.NatsRPCResponse{
+					Out: &nppb.NatsRPCResponse_Err{
+						Err: e,
+					},
+				})
+
+			default:
+				reply(&nppb.NatsRPCResponse{
+					Out: &nppb.NatsRPCResponse_PlainErr{
+						PlainErr: err.Error(),
+					},
+				})
+			}
+		}
+
+		replyOutput := func(encoder Encoder, output interface{}) {
+			w := &bytes.Buffer{}
+			if err := encoder.EncodeData(w, output); err != nil {
+				replyError(Errorf(
+					PayloadError,
+					"%s::%s natsrpc.Server encode output error: %s",
+					svcName,
+					methodName,
+					err.Error(),
+				))
+				server.logger.Error(
+					err,
+					"natsrpc.Server encode output error",
+					"svcName", svcName,
+					"methodName", methodName,
+				)
+				return
+			}
+
+			reply(&nppb.NatsRPCResponse{
+				Out: &nppb.NatsRPCResponse_Output{
+					Output: &nppb.RawData{
+						EncoderName: encoder.Name(),
+						Bytes:       w.Bytes(),
+					},
+				},
+			})
+		}
+
+		if err := server.runner.Submit(func() {
+
 			req := &nppb.NatsRPCRequest{}
 			if err := proto.Unmarshal(msg.Data, req); err != nil {
-				server.replyError(subj, Errorf(
+				replyError(Errorf(
 					ProtocolError,
-					"natsrpc.Server %s::%s unmarshal request error: %s",
+					"%s::%s natsrpc.Server unmarshal request for error: %s",
 					svcName,
 					methodName,
 					err.Error(),
@@ -203,9 +285,9 @@ func (server *Server) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 
 			info := mm.Get()[methodName]
 			if info == nil {
-				server.replyError(subj, Errorf(
+				replyError(Errorf(
 					PayloadError,
-					"natsrpc.Server %s::%s not found",
+					"%s::%s natsrpc.Server method not found",
 					svcName,
 					methodName,
 				))
@@ -214,22 +296,22 @@ func (server *Server) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 
 			encoderName := req.Input.EncoderName
 			if _, ok := info.EncoderNames[encoderName]; !ok {
-				server.replyError(subj, Errorf(
+				replyError(Errorf(
 					PayloadError,
-					"natsrpc.Server %s::%s does not support encoder %s",
+					"%s::%s natsrpc.Server method does not support encoder %s",
 					svcName,
 					methodName,
 					encoderName,
 				))
 				return
 			}
-
 			encoder := server.encoders[encoderName]
+
 			input := info.Spec.NewInput()
 			if err := encoder.DecodeData(bytes.NewReader(req.Input.Bytes), input); err != nil {
-				server.replyError(subj, Errorf(
+				replyError(Errorf(
 					PayloadError,
-					"natsrpc.Server %s::%s decode input error: %s",
+					"%s::%s natsrpc.Server decode input error: %s",
 					svcName,
 					methodName,
 					err.Error(),
@@ -250,77 +332,32 @@ func (server *Server) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 
 			output, err := info.Handler(ctx, input)
 			if err != nil {
-				server.replyError(subj, err)
-			} else {
-				server.replyOutput(subj, encoder, output)
+				replyError(err)
+				return
 			}
+
+			if err := info.Spec.AssertOutputType(output); err != nil {
+				replyError(Errorf(
+					NotRetryableError,
+					err.Error(),
+				))
+				return
+			}
+
+			replyOutput(encoder, output)
 
 		}); err != nil {
 
-			server.replyError(subj, fmt.Errorf("natsrpc.Server submit task error: %s", err.Error()))
-			server.logger.Error(err, "natsrpc.Server submit task error")
+			server.logger.Error(
+				err,
+				"natsrpc.Server submit task error",
+				"svcName", svcName,
+				"methodName", methodName,
+			)
+			replyError(fmt.Errorf("natsrpc.Server submit task error: %s", err.Error()))
 
 		}
 
 	}
-
-}
-
-func (server *Server) replyOutput(subj string, encoder Encoder, output interface{}) {
-
-	w := &bytes.Buffer{}
-	if err := encoder.EncodeData(w, output); err != nil {
-		server.replyError(subj, Errorf(PayloadError, "natsrpc.Server encode output error: %s", err.Error()))
-		server.logger.Error(err, "natsrpc.Server encode output error")
-		return
-	}
-
-	server.reply(subj, &nppb.NatsRPCResponse{
-		Out: &nppb.NatsRPCResponse_Output{
-			Output: &nppb.RawData{
-				EncoderName: encoder.Name(),
-				Bytes:       w.Bytes(),
-			},
-		},
-	})
-
-}
-
-func (server *Server) replyError(subj string, err error) {
-
-	switch err.(type) {
-	case *Error:
-		e := &nppb.Error{}
-		e.From(err.(*Error))
-		server.reply(subj, &nppb.NatsRPCResponse{
-			Out: &nppb.NatsRPCResponse_Err{
-				Err: e,
-			},
-		})
-
-	default:
-		server.reply(subj, &nppb.NatsRPCResponse{
-			Out: &nppb.NatsRPCResponse_PlainErr{
-				PlainErr: err.Error(),
-			},
-		})
-	}
-
-}
-
-func (server *Server) reply(subj string, resp *nppb.NatsRPCResponse) {
-
-	respData, err := proto.Marshal(resp)
-	if err != nil {
-		server.logger.Error(err, "natsrpc.Server marshal response error")
-		return
-	}
-
-	err = server.nc.Publish(subj, respData)
-	if err != nil {
-		server.logger.Error(err, "natsrpc.Server publish response error")
-		return
-	}
-	return
 
 }
