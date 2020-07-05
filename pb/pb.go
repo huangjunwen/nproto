@@ -20,7 +20,7 @@ func (err *Error) To() *nproto.Error {
 }
 
 func (md *MD) From(in npmd.MD) {
-	md.Reset()
+	md.KeyValues = make(map[string]*ValueList)
 	in.Keys(func(key string) error {
 		md.KeyValues[key] = &ValueList{
 			Values: in.Values(key),

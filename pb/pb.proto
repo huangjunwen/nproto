@@ -29,17 +29,14 @@ message RawData {
 }
 
 message NatsRPCRequest {
-  // Method name.
-  string method = 1;
+  // MetaData dict.
+  MD meta_data = 1;
 
   // Input parameter.
   RawData input = 2;
 
-  // MetaData dict.
-  MD meta_data = 3;
-
   // Timeout optional timeout in nanoseoncds.
-  uint64 timeout = 4;
+  uint64 timeout = 3;
 }
 
 message NatsRPCResponse {
@@ -56,9 +53,9 @@ message NatsRPCResponse {
 }
 
 message RawDataWithMD {
-  // Data.
-  RawData data = 1;
-
   // MetaData dict.
-  MD meta_data = 2;
+  MD meta_data = 1;
+
+  // Data.
+  RawData data = 2;
 }
