@@ -56,31 +56,30 @@ func NewClient(nc *nats.Conn, opts ...ClientOption) (*Client, error) {
 
 func (client *Client) MakeHandler(spec *RPCSpec) RPCHandler {
 
+	nprotoErrorf := func(code ErrorCode, msg string, args ...interface{}) error {
+		a := make([]interface{}, 0, len(args)+2)
+		a = append(a, spec.SvcName, spec.MethodName)
+		a = append(a, args...)
+		return Errorf(
+			code,
+			"natsrpc.Client(%s::%s) "+msg,
+			a...,
+		)
+	}
+
 	return func(ctx context.Context, input interface{}) (interface{}, error) {
 
 		if err := spec.Validate(); err != nil {
-			return nil, Errorf(
-				NotRetryableError,
-				err.Error(),
-			)
+			return nil, nprotoErrorf(NotRetryableError, "spec validate error: %s", err.Error())
 		}
 
 		if err := spec.AssertInputType(input); err != nil {
-			return nil, Errorf(
-				NotRetryableError,
-				err.Error(),
-			)
+			return nil, nprotoErrorf(PayloadError, "assert input error: %s", err.Error())
 		}
 
 		w := &bytes.Buffer{}
 		if err := client.encoder.EncodeData(w, input); err != nil {
-			return nil, Errorf(
-				PayloadError,
-				"%s::%s natsrpc.Client encode input error: %s",
-				spec.SvcName,
-				spec.MethodName,
-				err.Error(),
-			)
+			return nil, nprotoErrorf(PayloadError, "encode input error: %s", err.Error())
 		}
 
 		req := &nppb.NatsRPCRequest{
@@ -114,13 +113,7 @@ func (client *Client) MakeHandler(spec *RPCSpec) RPCHandler {
 
 		reqData, err := proto.Marshal(req)
 		if err != nil {
-			return nil, Errorf(
-				ProtocolError,
-				"%s::%s natsrpc.Client marshal request error: %s",
-				spec.SvcName,
-				spec.MethodName,
-				err.Error(),
-			)
+			return nil, nprotoErrorf(ProtocolError, "marshal request error: %s", err.Error())
 		}
 
 		respMsg, err := client.nc.RequestWithContext(
@@ -134,23 +127,15 @@ func (client *Client) MakeHandler(spec *RPCSpec) RPCHandler {
 
 		resp := &nppb.NatsRPCResponse{}
 		if err := proto.Unmarshal(respMsg.Data, resp); err != nil {
-			return nil, Errorf(
-				ProtocolError,
-				"%s::%s natsrpc.Client unmarshal response error: %s",
-				spec.SvcName,
-				spec.MethodName,
-				err.Error(),
-			)
+			return nil, nprotoErrorf(ProtocolError, "unmarshal response error: %s", err.Error())
 		}
 
 		switch out := resp.Out.(type) {
 		case *nppb.NatsRPCResponse_Output:
 			if out.Output.EncoderName != client.encoder.Name() {
-				return nil, Errorf(
+				return nil, nprotoErrorf(
 					ProtocolError,
-					"%s::%s natsrpc.Client expect output encoded by %s, but got %s",
-					spec.SvcName,
-					spec.MethodName,
+					"expect output encoded by %s, but got %s",
 					client.encoder.Name(),
 					out.Output.EncoderName,
 				)
@@ -158,11 +143,9 @@ func (client *Client) MakeHandler(spec *RPCSpec) RPCHandler {
 
 			output := spec.NewOutput()
 			if err := client.encoder.DecodeData(bytes.NewReader(out.Output.Bytes), output); err != nil {
-				return nil, Errorf(
+				return nil, nprotoErrorf(
 					PayloadError,
-					"%s::%s natsrpc.Client decode output error: %s",
-					spec.SvcName,
-					spec.MethodName,
+					"decode output error: %s",
 					err.Error(),
 				)
 			}
