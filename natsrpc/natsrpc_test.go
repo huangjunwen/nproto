@@ -617,6 +617,7 @@ func TestRPC(t *testing.T) {
 				return context.Background(), &emptypb.Empty{}
 			},
 			Before: func(handler RPCHandler) {
+				// One for worker and one for queue. Then then next request will be unable to handle.
 				go handler(context.Background(), &emptypb.Empty{})
 				time.Sleep(500 * time.Millisecond)
 				go handler(context.Background(), &emptypb.Empty{})
@@ -653,8 +654,14 @@ func TestRPC(t *testing.T) {
 				assert.NoError(err, "test case %d", i)
 			}
 		}
-		log.Printf("[%d] %+v\n\tctx=%+v\n\tinput=%T(%+v)\n\toutput=%T(%+v)\n\terr=%+v\n\n",
-			i, testCase.Spec, ctx, input, input, output, output, err)
+
+		clientName := "pb"
+		if testCase.Client == jsonClient {
+			clientName = "json"
+		}
+
+		log.Printf("[%d] spec=%+v client=%s\n\tctx=%+v\n\tinput=%T(%+v)\n\toutput=%T(%+v)\n\terr=%+v\n\n",
+			i, testCase.Spec, clientName, ctx, input, input, output, output, err)
 	}
 
 }
