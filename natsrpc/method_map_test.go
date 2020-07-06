@@ -2,6 +2,7 @@ package natsrpc
 
 import (
 	"context"
+	"log"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
@@ -11,6 +12,8 @@ import (
 )
 
 func TestMethodMap(t *testing.T) {
+	log.Printf("\n")
+	log.Printf(">>> TestMethodMap.\n")
 	assert := assert.New(t)
 
 	svcName := "svc"

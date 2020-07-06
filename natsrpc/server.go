@@ -46,13 +46,13 @@ var (
 	_ RPCServer = (*Server)(nil)
 )
 
-func NewServer(nc *nats.Conn, opts ...ServerOption) (server *Server, err error) {
+func NewServer(nc *nats.Conn, opts ...ServerOption) (srv *Server, err error) {
 
 	if nc.Opts.MaxReconnect >= 0 {
 		return nil, ErrNCMaxReconnect
 	}
 
-	server = &Server{
+	server := &Server{
 		logger:        logr.Nop,
 		subjectPrefix: DefaultSubjectPrefix,
 		group:         DefaultGroup,
@@ -74,12 +74,12 @@ func NewServer(nc *nats.Conn, opts ...ServerOption) (server *Server, err error) 
 		}
 	}()
 
-	if err := ServerOptEncoders(DefaultServerEncoders...)(server); err != nil {
+	if err = ServerOptEncoders(DefaultServerEncoders...)(server); err != nil {
 		return nil, err
 	}
 
 	for _, opt := range opts {
-		if err := opt(server); err != nil {
+		if err = opt(server); err != nil {
 			return nil, err
 		}
 	}

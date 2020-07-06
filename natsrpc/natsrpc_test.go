@@ -44,8 +44,10 @@ func TestRPC(t *testing.T) {
 	assert := assert.New(t)
 
 	var (
-		svcName = "test"
+		svcName                = "test"
+		baseCtx, baseCtxCancel = context.WithCancel(context.Background())
 	)
+	defer baseCtxCancel()
 
 	// Test normal/error.
 	var (
@@ -231,6 +233,25 @@ func TestRPC(t *testing.T) {
 		}
 	)
 
+	// Test handler block.
+	var (
+		blockSpec = &RPCSpec{
+			SvcName:    svcName,
+			MethodName: "block",
+			NewInput: func() interface{} {
+				return &emptypb.Empty{}
+			},
+			NewOutput: func() interface{} {
+				return &emptypb.Empty{}
+			},
+		}
+		blockCh      = make(chan struct{})
+		blockHandler = func(ctx context.Context, in interface{}) (interface{}, error) {
+			<-blockCh
+			return &emptypb.Empty{}, nil
+		}
+	)
+
 	// Starts test nats server.
 	var res *tstnats.Resource
 	{
@@ -275,6 +296,7 @@ func TestRPC(t *testing.T) {
 		jsonOnlyServer RPCServer
 	)
 
+	// Test NewServer with bad options.
 	{
 		runner, err := limitedrunner.New(
 			limitedrunner.MinWorkers(1),
@@ -285,7 +307,28 @@ func TestRPC(t *testing.T) {
 			log.Panic(err)
 		}
 
-		lg := zerolog.New(os.Stdout)
+		serverBad, err := NewServer(
+			nc1,
+			ServerOptRunner(runner),
+			ServerOptEncoders(), // <- bad option
+		)
+		assert.Nil(serverBad)
+		assert.Error(err)
+	}
+
+	{
+		runner, err := limitedrunner.New(
+			limitedrunner.MinWorkers(1),
+			limitedrunner.MaxWorkers(1),
+			limitedrunner.QueueSize(1),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		out := zerolog.NewConsoleWriter()
+		out.Out = os.Stderr
+		lg := zerolog.New(&out).With().Timestamp().Logger()
 		logger := (*zerologr.Logger)(&lg)
 
 		server, err = NewServer(
@@ -295,6 +338,7 @@ func TestRPC(t *testing.T) {
 			ServerOptEncoders(jsonenc.Default, pbenc.Default),
 			ServerOptRunner(runner),
 			ServerOptLogger(logger),
+			ServerOptContext(baseCtx),
 		)
 		if err != nil {
 			log.Panic(err)
@@ -350,11 +394,19 @@ func TestRPC(t *testing.T) {
 	if err := server.RegistHandler(timeoutSpec, timeoutHandler); err != nil {
 		log.Panic(err)
 	}
+	if err := server.RegistHandler(blockSpec, blockHandler); err != nil {
+		log.Panic(err)
+	}
+
+	assert.Error(server.RegistHandler(&RPCSpec{}, nil))
 
 	testCases := []*struct {
 		Client   RPCClient
 		Spec     *RPCSpec
 		GenInput func() (context.Context, interface{})
+
+		Before func(RPCHandler)
+		After  func()
 
 		ExpectOutput interface{}
 		ExpectError  bool
@@ -545,13 +597,51 @@ func TestRPC(t *testing.T) {
 				assert.False(<-timeoutResultCh)
 			},
 		},
+		// call with already timeout.
+		{
+			Client: jsonClient,
+			Spec:   timeoutSpec,
+			GenInput: func() (context.Context, interface{}) {
+				ctx, _ := context.WithTimeout(context.Background(), time.Millisecond)
+				time.Sleep(100 * time.Millisecond)
+				return ctx, &emptypb.Empty{}
+			},
+			ExpectOutput: nil,
+			ExpectError:  true,
+		},
+		// block handlers.
+		{
+			Client: jsonClient,
+			Spec:   blockSpec,
+			GenInput: func() (context.Context, interface{}) {
+				return context.Background(), &emptypb.Empty{}
+			},
+			Before: func(handler RPCHandler) {
+				go handler(context.Background(), &emptypb.Empty{})
+				time.Sleep(500 * time.Millisecond)
+				go handler(context.Background(), &emptypb.Empty{})
+				time.Sleep(500 * time.Millisecond)
+			},
+			After: func() {
+				blockCh <- struct{}{}
+				blockCh <- struct{}{}
+			},
+			ExpectOutput: nil,
+			ExpectError:  true,
+		},
 	}
 	for i, testCase := range testCases {
 		testCase := testCase
 		handler := testCase.Client.MakeHandler(testCase.Spec)
-		ctx, input := testCase.GenInput()
 
+		if testCase.Before != nil {
+			testCase.Before(handler)
+		}
+		ctx, input := testCase.GenInput()
 		output, err := handler(ctx, input)
+		if testCase.After != nil {
+			testCase.After()
+		}
 
 		if testCase.AlterCheck != nil {
 			testCase.AlterCheck()
@@ -563,7 +653,8 @@ func TestRPC(t *testing.T) {
 				assert.NoError(err, "test case %d", i)
 			}
 		}
-		log.Printf("Test case %d:\n\tctx=%+v\n\tinput=%T(%+v)\n\toutput=%T(%+v)\n\terr=%+v\n\n",
-			i, ctx, input, input, output, output, err)
+		log.Printf("[%d] %+v\n\tctx=%+v\n\tinput=%T(%+v)\n\toutput=%T(%+v)\n\terr=%+v\n\n",
+			i, testCase.Spec, ctx, input, input, output, output, err)
 	}
+
 }

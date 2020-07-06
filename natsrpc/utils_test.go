@@ -2,12 +2,15 @@ package natsrpc
 
 import (
 	"fmt"
+	"log"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestSubjectFormatParse(t *testing.T) {
+	log.Printf("\n")
+	log.Printf(">>> TestSubjectFormatParse.\n")
 	assert := assert.New(t)
 
 	svcName := "test"
