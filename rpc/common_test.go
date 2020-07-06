@@ -25,6 +25,11 @@ func TestRPCSepc(t *testing.T) {
 			},
 			ExpectValidateError: false,
 		},
+		// RPCSpec use RawData as input/output.
+		{
+			Spec:                NewRawDataRPCSpec("test", "test),"),
+			ExpectValidateError: false,
+		},
 		// SvcName empty.
 		{
 			Spec:                &RPCSpec{},

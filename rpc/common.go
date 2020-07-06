@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+
+	. "github.com/huangjunwen/nproto/v2/enc"
 )
 
 // RPCSpec is the contract between rpc server and client.
@@ -33,6 +35,24 @@ type RPCHandler func(context.Context, interface{}) (interface{}, error)
 
 // RPCMiddleware wraps a RPCHandler into another one.
 type RPCMiddleware func(spec *RPCSpec, handler RPCHandler) RPCHandler
+
+var (
+	rawDataType = reflect.TypeOf(&RawData{})
+	newRawData  = func() interface{} { return &RawData{} }
+)
+
+// NewRawDataRPCSpec creates a validated *RPCSpec which use *RawData as input/output.
+// You can use this as a client side spec to proxy raw request without encoding/decoding.
+func NewRawDataRPCSpec(svcName, methodName string) *RPCSpec {
+	return &RPCSpec{
+		SvcName:    svcName,
+		MethodName: methodName,
+		NewInput:   newRawData,
+		NewOutput:  newRawData,
+		inputType:  rawDataType,
+		outputType: rawDataType,
+	}
+}
 
 // Validate the RPCSpec. Call this before any other methods.
 func (spec *RPCSpec) Validate() error {

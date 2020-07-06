@@ -1,6 +1,7 @@
 package natsrpc
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log"
@@ -20,6 +21,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	. "github.com/huangjunwen/nproto/v2/enc"
 	"github.com/huangjunwen/nproto/v2/enc/jsonenc"
 	"github.com/huangjunwen/nproto/v2/enc/pbenc"
 	npmd "github.com/huangjunwen/nproto/v2/md"
@@ -35,6 +37,17 @@ func assertEqual(assert *assert.Assertions, v1, v2 interface{}, args ...interfac
 		return
 	}
 	assert.Equal(v1, v2, args...)
+}
+
+func pbencRawData(m proto.Message) *RawData {
+	w := &bytes.Buffer{}
+	if err := pbenc.Default.EncodeData(w, m); err != nil {
+		panic(err)
+	}
+	return &RawData{
+		EncoderName: pbenc.Default.Name(),
+		Bytes:       w.Bytes(),
+	}
 }
 
 func TestRPC(t *testing.T) {
@@ -69,6 +82,7 @@ func TestRPC(t *testing.T) {
 			}
 			return wrapperspb.Double(math.Sqrt(input)), nil
 		}
+		sqrtRawDataSpec = NewRawDataRPCSpec(svcName, "sqrt")
 	)
 
 	// Test svc not found.
@@ -451,6 +465,32 @@ func TestRPC(t *testing.T) {
 			},
 			ExpectOutput: nil,
 			ExpectError:  true,
+		},
+		// use RawData, encoder is pb
+		{
+			Client: pbClient,
+			Spec:   sqrtRawDataSpec,
+			GenInput: func() (context.Context, interface{}) {
+				return context.Background(), pbencRawData(wrapperspb.Double(9))
+			},
+			ExpectOutput: pbencRawData(wrapperspb.Double(3)),
+			ExpectError:  false,
+		},
+		// use RawData, encoder is json
+		{
+			Client: jsonClient,
+			Spec:   sqrtRawDataSpec,
+			GenInput: func() (context.Context, interface{}) {
+				return context.Background(), &RawData{
+					EncoderName: jsonenc.Name,
+					Bytes:       []byte("9"),
+				}
+			},
+			ExpectOutput: &RawData{
+				EncoderName: jsonenc.Name,
+				Bytes:       []byte("3"),
+			},
+			ExpectError: false,
 		},
 		// svc not found
 		{
