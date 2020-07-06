@@ -5,12 +5,16 @@ import (
 	"errors"
 	"log"
 	"math"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/huangjunwen/golibs/logr/zerologr"
+	"github.com/huangjunwen/golibs/taskrunner/limitedrunner"
 	tstnats "github.com/huangjunwen/tstsvc/nats"
 	"github.com/nats-io/nats.go"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -67,9 +71,9 @@ func TestRPC(t *testing.T) {
 
 	// Test svc not found.
 	var (
-		notFound2Spec = &RPCSpec{
+		svcNotFoundSpec = &RPCSpec{
 			SvcName:    svcName + "1",
-			MethodName: "notFound",
+			MethodName: "svcNotFound",
 			NewInput: func() interface{} {
 				return wrapperspb.String("")
 			},
@@ -93,7 +97,7 @@ func TestRPC(t *testing.T) {
 		}
 	)
 
-	// Test encoder.
+	// Test encoder not support.
 	var (
 		jsonOnlySpec = &RPCSpec{
 			SvcName:    svcName,
@@ -107,6 +111,68 @@ func TestRPC(t *testing.T) {
 		}
 		jsonOnlyHandler = func(ctx context.Context, in interface{}) (interface{}, error) {
 			return &emptypb.Empty{}, nil
+		}
+	)
+
+	// Test assert input type/output type.
+	var (
+		assertTypeSpec = &RPCSpec{
+			SvcName:    svcName,
+			MethodName: "assertType",
+			NewInput: func() interface{} {
+				return wrapperspb.String("")
+			},
+			NewOutput: func() interface{} {
+				return wrapperspb.String("")
+			},
+		}
+		assertTypeHandler = func(ctx context.Context, in interface{}) (interface{}, error) {
+			// XXX: wrong output type
+			return &emptypb.Empty{}, nil
+		}
+	)
+
+	// Test encoding/decoding.
+	var (
+		encodeSpec = &RPCSpec{
+			SvcName:    svcName,
+			MethodName: "encode",
+			NewInput: func() interface{} {
+				return &map[string]interface{}{}
+			},
+			NewOutput: func() interface{} {
+				return &map[string]interface{}{}
+			},
+		}
+		encodeHandler = func(ctx context.Context, in interface{}) (interface{}, error) {
+			input := in.(*map[string]interface{})
+			if (*input)["fn"] != nil {
+				// XXX: function can't be encoded
+				(*input)["fn"] = func() {}
+			}
+			return input, nil
+		}
+		encodeWrongInputSpec = &RPCSpec{
+			SvcName:    svcName,
+			MethodName: "encode",
+			NewInput: func() interface{} {
+				ret := ""
+				return &ret
+			},
+			NewOutput: func() interface{} {
+				return &map[string]interface{}{}
+			},
+		}
+		encodeWrongOutputSpec = &RPCSpec{
+			SvcName:    svcName,
+			MethodName: "encode",
+			NewInput: func() interface{} {
+				return &map[string]interface{}{}
+			},
+			NewOutput: func() interface{} {
+				ret := ""
+				return &ret
+			},
 		}
 	)
 
@@ -133,6 +199,7 @@ func TestRPC(t *testing.T) {
 			for _, value := range values {
 				strs = append(strs, string(value))
 			}
+
 			return wrapperspb.String(strings.Join(strs, " ")), nil
 		}
 	)
@@ -209,11 +276,25 @@ func TestRPC(t *testing.T) {
 	)
 
 	{
+		runner, err := limitedrunner.New(
+			limitedrunner.MinWorkers(1),
+			limitedrunner.MaxWorkers(1),
+			limitedrunner.QueueSize(1),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		lg := zerolog.New(os.Stdout)
+		logger := (*zerologr.Logger)(&lg)
+
 		server, err = NewServer(
 			nc1,
 			ServerOptSubjectPrefix(subjectPrefix),
 			ServerOptGroup(group),
 			ServerOptEncoders(jsonenc.Default, pbenc.Default),
+			ServerOptRunner(runner),
+			ServerOptLogger(logger),
 		)
 		if err != nil {
 			log.Panic(err)
@@ -257,6 +338,12 @@ func TestRPC(t *testing.T) {
 	if err := jsonOnlyServer.RegistHandler(jsonOnlySpec, jsonOnlyHandler); err != nil {
 		log.Panic(err)
 	}
+	if err := server.RegistHandler(assertTypeSpec, assertTypeHandler); err != nil {
+		log.Panic(err)
+	}
+	if err := jsonOnlyServer.RegistHandler(encodeSpec, encodeHandler); err != nil {
+		log.Panic(err)
+	}
 	if err := server.RegistHandler(metaDataSpec, metaDataHandler); err != nil {
 		log.Panic(err)
 	}
@@ -293,7 +380,7 @@ func TestRPC(t *testing.T) {
 			ExpectOutput: wrapperspb.Double(3),
 			ExpectError:  false,
 		},
-		// error case, encoder is pb
+		// handler return error, encoder is pb
 		{
 			Client: pbClient,
 			Spec:   sqrtSpec,
@@ -303,7 +390,7 @@ func TestRPC(t *testing.T) {
 			ExpectOutput: nil,
 			ExpectError:  true,
 		},
-		// error case, encoder is json
+		// handler return error, encoder is json
 		{
 			Client: jsonClient,
 			Spec:   sqrtSpec,
@@ -313,10 +400,10 @@ func TestRPC(t *testing.T) {
 			ExpectOutput: nil,
 			ExpectError:  true,
 		},
-		// svcName not found
+		// svc not found
 		{
 			Client: pbClient,
-			Spec:   notFound2Spec,
+			Spec:   svcNotFoundSpec,
 			GenInput: func() (context.Context, interface{}) {
 				return context.Background(), wrapperspb.String("svcNotFound")
 			},
@@ -352,6 +439,73 @@ func TestRPC(t *testing.T) {
 			},
 			ExpectOutput: &emptypb.Empty{},
 			ExpectError:  false,
+		},
+		// call with wrong input type
+		{
+			Client: pbClient,
+			Spec:   assertTypeSpec,
+			GenInput: func() (context.Context, interface{}) {
+				return context.Background(), &emptypb.Empty{}
+			},
+			ExpectOutput: nil,
+			ExpectError:  true,
+		},
+		// call with wrong output type
+		{
+			Client: pbClient,
+			Spec:   assertTypeSpec,
+			GenInput: func() (context.Context, interface{}) {
+				return context.Background(), wrapperspb.String("1")
+			},
+			ExpectOutput: nil,
+			ExpectError:  true,
+		},
+		// server decode input error
+		{
+			Client: jsonClient,
+			Spec:   encodeWrongInputSpec,
+			GenInput: func() (context.Context, interface{}) {
+				input := "123"
+				return context.Background(), &input
+			},
+			ExpectOutput: nil,
+			ExpectError:  true,
+		},
+		// server encode output error
+		{
+			Client: jsonClient,
+			Spec:   encodeSpec,
+			GenInput: func() (context.Context, interface{}) {
+				return context.Background(), &map[string]interface{}{
+					"fn": "1",
+				}
+			},
+			ExpectOutput: nil,
+			ExpectError:  true,
+		},
+		// client encode input error
+		{
+			Client: jsonClient,
+			Spec:   encodeSpec,
+			GenInput: func() (context.Context, interface{}) {
+				return context.Background(), &map[string]interface{}{
+					"fn": func() {},
+				}
+			},
+			ExpectOutput: nil,
+			ExpectError:  true,
+		},
+		// client decode output error
+		{
+			Client: jsonClient,
+			Spec:   encodeWrongOutputSpec,
+			GenInput: func() (context.Context, interface{}) {
+				return context.Background(), &map[string]interface{}{
+					"a": "b",
+				}
+			},
+			ExpectOutput: nil,
+			ExpectError:  true,
 		},
 		// call with meta data.
 		{

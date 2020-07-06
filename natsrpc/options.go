@@ -18,6 +18,8 @@ func ServerOptLogger(logger logr.Logger) ServerOption {
 	}
 }
 
+// ServerOptRunner sets runner for handlers. Note that the server
+// will call runner.Close() when closed.
 func ServerOptRunner(runner taskrunner.TaskRunner) ServerOption {
 	return func(server *Server) error {
 		// Close it before replacing.
