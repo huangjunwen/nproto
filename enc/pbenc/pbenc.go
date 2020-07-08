@@ -11,7 +11,7 @@ import (
 )
 
 // Name of this encoder.
-const Name = "nproto.pb"
+const Name = "nproto-pb"
 
 // PbEncoder uses protobuf to encode/decode data. Accept proto.Message or *RawData.
 type PbEncoder struct {

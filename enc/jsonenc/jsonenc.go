@@ -13,7 +13,7 @@ import (
 )
 
 // Name of this encoder.
-const Name = "nproto.json"
+const Name = "nproto-json"
 
 // JsonEncoder uses json to encode/decode data. Accept
 // proto.Message or *RawData or JsonIOMarshaler/JsonIOUnmarshaler or
