@@ -40,7 +40,7 @@ func TestMethodMap(t *testing.T) {
 		{
 			Spec:                &RPCSpec{SvcName: svcName, MethodName: methodName},
 			Handler:             func(_ context.Context, input interface{}) (interface{}, error) { return 1, nil },
-			Encoders:            map[string]Encoder{jsonenc.Default.Name(): jsonenc.Default},
+			Encoders:            map[string]Encoder{jsonenc.Default.EncoderName(): jsonenc.Default},
 			ExpectExists:        true,
 			ExpectHandlerResult: 1,
 		},
@@ -48,7 +48,7 @@ func TestMethodMap(t *testing.T) {
 		{
 			Spec:                &RPCSpec{SvcName: svcName, MethodName: methodName},
 			Handler:             func(_ context.Context, input interface{}) (interface{}, error) { return 2, nil },
-			Encoders:            map[string]Encoder{pbenc.Default.Name(): pbenc.Default},
+			Encoders:            map[string]Encoder{pbenc.Default.EncoderName(): pbenc.Default},
 			ExpectExists:        true,
 			ExpectHandlerResult: 2,
 		},
@@ -56,7 +56,7 @@ func TestMethodMap(t *testing.T) {
 		{
 			Spec:                &RPCSpec{SvcName: svcName, MethodName: methodName},
 			Handler:             (func(_ context.Context, input interface{}) (interface{}, error))(nil),
-			Encoders:            map[string]Encoder{pbenc.Default.Name(): pbenc.Default},
+			Encoders:            map[string]Encoder{pbenc.Default.EncoderName(): pbenc.Default},
 			ExpectExists:        false,
 			ExpectHandlerResult: 0,
 		},

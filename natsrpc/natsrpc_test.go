@@ -45,7 +45,7 @@ func pbencRawData(m proto.Message) *RawData {
 		panic(err)
 	}
 	return &RawData{
-		EncoderName: pbenc.Default.Name(),
+		EncoderName: pbenc.Default.EncoderName(),
 		Bytes:       w.Bytes(),
 	}
 }
@@ -482,12 +482,12 @@ func TestRPC(t *testing.T) {
 			Spec:   sqrtRawDataSpec,
 			GenInput: func() (context.Context, interface{}) {
 				return context.Background(), &RawData{
-					EncoderName: jsonenc.Name,
+					EncoderName: jsonenc.Default.EncoderName(),
 					Bytes:       []byte("9"),
 				}
 			},
 			ExpectOutput: &RawData{
-				EncoderName: jsonenc.Name,
+				EncoderName: jsonenc.Default.EncoderName(),
 				Bytes:       []byte("3"),
 			},
 			ExpectError: false,

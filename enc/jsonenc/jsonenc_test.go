@@ -1,24 +1,32 @@
 package jsonenc
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"strings"
 	"testing"
 
-	. "github.com/huangjunwen/nproto/v2/enc"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/wrapperspb"
+
+	. "github.com/huangjunwen/nproto/v2/enc"
 )
 
 type RawIOMessage json.RawMessage
 
 var (
 	_ JsonIOMarshaler   = RawIOMessage{}
+	_ JsonIOMarshaler   = (*RawIOMessage)(nil)
 	_ JsonIOUnmarshaler = (*RawIOMessage)(nil)
 )
+
+func NewRawIOMessage(s string) *RawIOMessage {
+	ret := RawIOMessage(s)
+	return &ret
+}
 
 func (m RawIOMessage) MarshalJSONToWriter(w io.Writer) error {
 	_, err := w.Write([]byte(m))
@@ -34,167 +42,154 @@ func (m *RawIOMessage) UnmarshalJSONFromReader(r io.Reader) error {
 	return nil
 }
 
+func NewString(v string) *string {
+	return &v
+}
+
+func ProtoMessageEqual(left, right interface{}) bool {
+	return proto.Equal(left.(proto.Message), right.(proto.Message))
+}
+
 func TestJsonEncoder(t *testing.T) {
 	assert := assert.New(t)
 
-	// Encode JsonIOMarshaler.
-	{
-		data := RawIOMessage(`"abc"`)
-
-		w := &bytes.Buffer{}
-		err := Default.EncodeData(w, data)
-		assert.NoError(err)
-		assert.Equal([]byte(data), w.Bytes())
-
-		fmt.Printf("EncodeData(%+v): bytes=%+v, err=%v\n", data, w.Bytes(), err)
-	}
-
-	// Encode *RawData.
-	{
-
+	for i, testCase := range []*struct {
+		Data              interface{}
+		ExpectError       bool
+		ExpectEncodedData string
+	}{
+		// JsonIOMarshaler
 		{
-			data := &RawData{
-				EncoderName: "pb",
+			Data:              NewRawIOMessage(`"abc"`),
+			ExpectError:       false,
+			ExpectEncodedData: `"abc"`,
+		},
+		// *RawData
+		{
+			Data: &RawData{
+				EncoderName: "not-json",
 				Bytes:       []byte("\x00\x01\x02"),
-			}
-
-			w := &bytes.Buffer{}
-			err := Default.EncodeData(w, data)
-			assert.Error(err)
-
-			fmt.Printf("EncodeData(%+v): err=%v\n", data, err)
-		}
-
+			},
+			ExpectError: true,
+		},
+		// *RawData
 		{
-			data := &RawData{
-				EncoderName: Name,
-				Bytes:       []byte("{1, 2, 3}"),
-			}
-
-			w := &bytes.Buffer{}
-			err := Default.EncodeData(w, data)
-			assert.NoError(err)
-			assert.Equal(w.Bytes(), data.Bytes)
-
-			fmt.Printf("EncodeData(%+v): bytes=%+v, err=%v\n", data, w.Bytes(), err)
-		}
-
-	}
-
-	// Encode RawData.
-	{
-
+			Data: &RawData{
+				EncoderName: Default.EncoderName(),
+				Bytes:       []byte("{1,2,3}"),
+			},
+			ExpectError:       false,
+			ExpectEncodedData: "{1,2,3}",
+		},
+		// RawData
 		{
-			data := RawData{
-				EncoderName: "pb",
+			Data: RawData{
+				EncoderName: "not-json",
 				Bytes:       []byte("\x00\x01\x02"),
+			},
+			ExpectError: true,
+		},
+		// RawData
+		{
+			Data: RawData{
+				EncoderName: Default.EncoderName(),
+				Bytes:       []byte("{1,2,3}"),
+			},
+			ExpectError:       false,
+			ExpectEncodedData: "{1,2,3}",
+		},
+		// proto.Message
+		{
+			Data:              wrapperspb.String("123"),
+			ExpectError:       false,
+			ExpectEncodedData: `"123"`,
+		},
+		// other
+		{
+			Data:              map[string]interface{}{"a": []int{1, 2, 3}},
+			ExpectError:       false,
+			ExpectEncodedData: `{"a":[1,2,3]}`,
+		},
+		// other
+		{
+			Data:        map[string]interface{}{"a": func() {}},
+			ExpectError: true,
+		},
+	} {
+		w := &strings.Builder{}
+		err := Default.EncodeData(w, testCase.Data)
+		if testCase.ExpectError {
+			assert.Error(err, "test case %d", i)
+			assert.Equal("", w.String(), "test case %d", i)
+		} else {
+			assert.NoError(err, "test case %d", i)
+			assert.Equal(testCase.ExpectEncodedData, w.String(), "test case %d", i)
+		}
+
+		fmt.Printf("EncodeData(%+v): result=%+q, err=%v\n", testCase.Data, w.String(), err)
+	}
+
+	for i, testCase := range []*struct {
+		EncodedData string
+		Data        interface{}
+		ExpectError bool
+		ExpectData  interface{}
+		AlterEqual  func(interface{}, interface{}) bool
+	}{
+		// JsonIOUnmarshaler
+		{
+			EncodedData: `"123"`,
+			Data:        NewRawIOMessage(""),
+			ExpectError: false,
+			ExpectData:  NewRawIOMessage(`"123"`),
+		},
+		// *RawData
+		{
+			EncodedData: `"123"`,
+			Data:        &RawData{},
+			ExpectError: false,
+			ExpectData: &RawData{
+				EncoderName: Default.EncoderName(),
+				Bytes:       []byte(`"123"`),
+			},
+		},
+		// proto.Message
+		{
+			EncodedData: `"123"`,
+			Data:        wrapperspb.String(""),
+			ExpectError: false,
+			ExpectData:  wrapperspb.String("123"),
+			AlterEqual:  ProtoMessageEqual,
+		},
+		// proto.Message
+		{
+			EncodedData: `"123"`,
+			Data:        wrapperspb.Bool(false),
+			ExpectError: true,
+		},
+		// other
+		{
+			EncodedData: `"123"`,
+			Data:        NewString(""),
+			ExpectError: false,
+			ExpectData:  NewString("123"),
+		},
+	} {
+
+		r := strings.NewReader(testCase.EncodedData)
+		err := Default.DecodeData(r, testCase.Data)
+		if testCase.ExpectError {
+			assert.Error(err, "test case %d", i)
+		} else {
+			assert.NoError(err, "test case %d", i)
+			if testCase.AlterEqual != nil {
+				assert.True(testCase.AlterEqual(testCase.ExpectData, testCase.Data), "test case %d", i)
+			} else {
+				assert.Equal(testCase.ExpectData, testCase.Data, "test case %d", i)
 			}
-
-			w := &bytes.Buffer{}
-			err := Default.EncodeData(w, data)
-			assert.Error(err)
-
-			fmt.Printf("EncodeData(%+v): err=%v\n", data, err)
 		}
 
-		{
-			data := RawData{
-				EncoderName: Name,
-				Bytes:       []byte("{1, 2, 3}"),
-			}
-
-			w := &bytes.Buffer{}
-			err := Default.EncodeData(w, data)
-			assert.NoError(err)
-			assert.Equal(w.Bytes(), data.Bytes)
-
-			fmt.Printf("EncodeData(%+v): bytes=%+v, err=%v\n", data, w.Bytes(), err)
-		}
-
+		fmt.Printf("DecodeData(%q): result=%+v, err=%v\n", testCase.EncodedData, testCase.Data, err)
 	}
 
-	// Encode proto.Message.
-	{
-		data := wrapperspb.String("123")
-
-		w := &bytes.Buffer{}
-		err := Default.EncodeData(w, data)
-		assert.NoError(err)
-
-		fmt.Printf("EncodeData(%+v): bytes=%+v, err=%v\n", data, w.Bytes(), err)
-	}
-
-	// Encode other.
-	{
-		data := map[string]interface{}{
-			"a": []int{1, 2, 3},
-			"b": "ccccc",
-		}
-
-		w := &bytes.Buffer{}
-		err := Default.EncodeData(w, data)
-		assert.NoError(err)
-
-		fmt.Printf("EncodeData(%+v): bytes=%+v, err=%v\n", data, w.Bytes(), err)
-	}
-
-	// Decode JsonIOUnmarshaler.
-	b := []byte(`"123"`)
-	{
-		data := &RawIOMessage{}
-
-		r := bytes.NewReader(b)
-		err := Default.DecodeData(r, data)
-		assert.NoError(err)
-
-		fmt.Printf("DecodeData(): data=%+v, err=%v\n", data, err)
-	}
-
-	// Decode *RawData.
-	{
-		data := &RawData{}
-
-		r := bytes.NewReader(b)
-		err := Default.DecodeData(r, data)
-		assert.NoError(err)
-		assert.Equal(Name, data.EncoderName)
-		assert.Equal(b, data.Bytes)
-
-		fmt.Printf("DecodeData(): data=%+v, err=%v\n", data, err)
-	}
-
-	// Decode proto.Message.
-	{
-		{
-			data := wrapperspb.String("")
-
-			r := bytes.NewReader(b)
-			err := Default.DecodeData(r, data)
-			assert.NoError(err)
-
-			fmt.Printf("DecodeData(): data=%+v, err=%v\n", data, err)
-		}
-
-		{
-			data := wrapperspb.Bool(false)
-
-			r := bytes.NewReader(b)
-			err := Default.DecodeData(r, data)
-			assert.Error(err)
-
-			fmt.Printf("DecodeData(): data=%+v, err=%v\n", data, err)
-		}
-	}
-
-	// Decode other.
-	{
-		s := ""
-		data := &s
-
-		r := bytes.NewReader(b)
-		err := Default.DecodeData(r, data)
-		assert.NoError(err)
-
-		fmt.Printf("DecodeData(): data=%+v, err=%v\n", *data, err)
-	}
 }

@@ -6,18 +6,18 @@ import (
 
 // Encoder is used to encode/decode data.
 type Encoder interface {
-	// Name should be a unique identity of encoder.
-	Name() string
+	// EncoderName should be a unique identity of the encoder.
+	EncoderName() string
 
 	// EncodeData encodes data to w.
 	//
-	// If data's type is *RawData/RawData and data.EncoderName == Encoder.Name(),
+	// If data's type is *RawData/RawData and data.EncoderName == Encoder.EncoderName(),
 	// then data.Data should be written to w directly without encoding.
 	EncodeData(w io.Writer, data interface{}) error
 
 	// DecodeData decodes data from r.
 	//
-	// If data's type is *RawData, then data.EncoderName should be set to Encoder.Name(),
+	// If data's type is *RawData, then data.EncoderName should be set to Encoder.EncoderName(),
 	// and data.Data should be read from r directly without decoding.
 	DecodeData(r io.Reader, data interface{}) error
 }

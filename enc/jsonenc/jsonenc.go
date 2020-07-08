@@ -12,27 +12,29 @@ import (
 	. "github.com/huangjunwen/nproto/v2/enc"
 )
 
-// Name of this encoder.
-const Name = "nproto-json"
-
-// JsonEncoder uses json to encode/decode data. Accept
-// proto.Message or *RawData or JsonIOMarshaler/JsonIOUnmarshaler or
-// any json marshalable/unmarshalable object.
+// JsonEncoder uses json to encode/decode data.
 type JsonEncoder struct {
+	Name               string
 	PbMarshalOptions   protojson.MarshalOptions
 	PbUnmarshalOptions protojson.UnmarshalOptions
 }
 
 var (
 	// Default is a JsonEncoder with default options.
-	Default         = &JsonEncoder{}
-	_       Encoder = (*JsonEncoder)(nil)
+	Default = &JsonEncoder{
+		Name: "nproto-json",
+	}
+	_ Encoder = (*JsonEncoder)(nil)
 )
 
-func (e *JsonEncoder) Name() string {
-	return Name
+// EncoderName returns e.Name.
+func (e *JsonEncoder) EncoderName() string {
+	return e.Name
 }
 
+// EncodeData accepts JsonIOMarshaler/proto.Message,
+// *RawData/RawData with same encoder name as the encoder,
+// or any other json.Marshalable data.
 func (e *JsonEncoder) EncodeData(w io.Writer, data interface{}) error {
 
 	if m, ok := data.(JsonIOMarshaler); ok {
@@ -46,13 +48,13 @@ func (e *JsonEncoder) EncodeData(w io.Writer, data interface{}) error {
 
 	switch m := data.(type) {
 	case *RawData:
-		if m.EncoderName != Name {
+		if m.EncoderName != e.Name {
 			goto WRONG_DATA
 		}
 		b = m.Bytes
 
 	case RawData:
-		if m.EncoderName != Name {
+		if m.EncoderName != e.Name {
 			goto WRONG_DATA
 		}
 		b = m.Bytes
@@ -74,6 +76,8 @@ WRONG_DATA:
 	return fmt.Errorf("JsonEncoder can't encode %#v", data)
 }
 
+// DecodeData accepts JsonIOUnmarshaler/proto.Message/*RawData,
+// or any other json.Unmarshalable data.
 func (e *JsonEncoder) DecodeData(r io.Reader, data interface{}) error {
 
 	if m, ok := data.(JsonIOUnmarshaler); ok {
@@ -87,7 +91,7 @@ func (e *JsonEncoder) DecodeData(r io.Reader, data interface{}) error {
 
 	switch m := data.(type) {
 	case *RawData:
-		m.EncoderName = Name
+		m.EncoderName = e.Name
 		m.Bytes = b
 		return nil
 

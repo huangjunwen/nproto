@@ -84,7 +84,7 @@ func (client *Client) MakeHandler(spec *RPCSpec) RPCHandler {
 
 		req := &nppb.NatsRPCRequest{
 			Input: &nppb.RawData{
-				EncoderName: client.encoder.Name(),
+				EncoderName: client.encoder.EncoderName(),
 				Bytes:       w.Bytes(),
 			},
 			MetaData: &nppb.MD{},
@@ -132,11 +132,11 @@ func (client *Client) MakeHandler(spec *RPCSpec) RPCHandler {
 
 		switch out := resp.Out.(type) {
 		case *nppb.NatsRPCResponse_Output:
-			if out.Output.EncoderName != client.encoder.Name() {
+			if out.Output.EncoderName != client.encoder.EncoderName() {
 				return nil, nprotoErrorf(
 					ProtocolError,
 					"expect output encoded by %s, but got %s",
-					client.encoder.Name(),
+					client.encoder.EncoderName(),
 					out.Output.EncoderName,
 				)
 			}

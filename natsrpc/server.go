@@ -98,7 +98,7 @@ func (server *Server) AltEncoderServer(encoders ...Encoder) (RPCServer, error) {
 
 	encoders_ := map[string]Encoder{}
 	for _, encoder := range encoders {
-		encoders_[encoder.Name()] = encoder
+		encoders_[encoder.EncoderName()] = encoder
 	}
 
 	return RPCServerFunc(func(spec *RPCSpec, handler RPCHandler) error {
@@ -307,7 +307,7 @@ func (server *Server) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 			reply(&nppb.NatsRPCResponse{
 				Out: &nppb.NatsRPCResponse_Output{
 					Output: &nppb.RawData{
-						EncoderName: encoder.Name(),
+						EncoderName: encoder.EncoderName(),
 						Bytes:       w.Bytes(),
 					},
 				},

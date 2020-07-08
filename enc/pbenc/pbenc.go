@@ -10,25 +10,28 @@ import (
 	. "github.com/huangjunwen/nproto/v2/enc"
 )
 
-// Name of this encoder.
-const Name = "nproto-pb"
-
-// PbEncoder uses protobuf to encode/decode data. Accept proto.Message or *RawData.
+// PbEncoder uses protobuf to encode/decode data.
 type PbEncoder struct {
+	Name               string
 	PbMarshalOptions   proto.MarshalOptions
 	PbUnmarshalOptions proto.UnmarshalOptions
 }
 
 var (
 	// Default is a PbEncoder with default options.
-	Default         = &PbEncoder{}
-	_       Encoder = (*PbEncoder)(nil)
+	Default = &PbEncoder{
+		Name: "nproto-pb",
+	}
+	_ Encoder = (*PbEncoder)(nil)
 )
 
-func (e *PbEncoder) Name() string {
-	return Name
+// EncoderName returns e.Name.
+func (e *PbEncoder) EncoderName() string {
+	return e.Name
 }
 
+// EncodeData accepts proto.Message,
+// or *RawData/RawData with same encoder name as the encoder.
 func (e *PbEncoder) EncodeData(w io.Writer, data interface{}) error {
 
 	var (
@@ -38,13 +41,13 @@ func (e *PbEncoder) EncodeData(w io.Writer, data interface{}) error {
 
 	switch m := data.(type) {
 	case *RawData:
-		if m.EncoderName != Name {
+		if m.EncoderName != e.Name {
 			goto WRONG_DATA
 		}
 		b = m.Bytes
 
 	case RawData:
-		if m.EncoderName != Name {
+		if m.EncoderName != e.Name {
 			goto WRONG_DATA
 		}
 		b = m.Bytes
@@ -67,6 +70,7 @@ WRONG_DATA:
 
 }
 
+// DecodeDat accepts proto.Message/*RawData.
 func (e *PbEncoder) DecodeData(r io.Reader, data interface{}) error {
 
 	b, err := ioutil.ReadAll(r)
@@ -76,7 +80,7 @@ func (e *PbEncoder) DecodeData(r io.Reader, data interface{}) error {
 
 	switch m := data.(type) {
 	case *RawData:
-		m.EncoderName = Name
+		m.EncoderName = e.Name
 		m.Bytes = b
 		return nil
 

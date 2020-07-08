@@ -50,7 +50,7 @@ func ServerOptEncoders(encoders ...enc.Encoder) ServerOption {
 		}
 		server.encoders = map[string]enc.Encoder{}
 		for _, encoder := range encoders {
-			server.encoders[encoder.Name()] = encoder
+			server.encoders[encoder.EncoderName()] = encoder
 		}
 		return nil
 	}
