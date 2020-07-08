@@ -49,10 +49,8 @@ func ServerOptEncoders(encoders ...enc.Encoder) ServerOption {
 			return fmt.Errorf("natsrpc.ServerOptEncoders no encoder?")
 		}
 		server.encoders = map[string]enc.Encoder{}
-		server.encoderNames = map[string]struct{}{}
 		for _, encoder := range encoders {
 			server.encoders[encoder.Name()] = encoder
-			server.encoderNames[encoder.Name()] = struct{}{}
 		}
 		return nil
 	}

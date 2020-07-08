@@ -360,7 +360,7 @@ func TestRPC(t *testing.T) {
 		defer server.Close()
 		log.Printf("natsrpc.Server created.\n")
 
-		jsonOnlyServer = server.MustSubServer(jsonenc.Name)
+		jsonOnlyServer = server.MustAltEncoderServer(jsonenc.Default)
 	}
 
 	// Creates two rpc clients using different encodings.

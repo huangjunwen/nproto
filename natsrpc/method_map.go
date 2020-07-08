@@ -3,6 +3,7 @@ package natsrpc
 import (
 	"sync/atomic"
 
+	. "github.com/huangjunwen/nproto/v2/enc"
 	. "github.com/huangjunwen/nproto/v2/rpc"
 )
 
@@ -13,9 +14,9 @@ type methodMap struct {
 }
 
 type methodInfo struct {
-	Spec         *RPCSpec
-	Handler      RPCHandler
-	EncoderNames map[string]struct{} // supported encoders for this method
+	Spec     *RPCSpec
+	Handler  RPCHandler
+	Encoders map[string]Encoder // supported encoders for this method
 }
 
 func newMethodMap() *methodMap {
@@ -29,7 +30,7 @@ func (mm *methodMap) Get() map[string]*methodInfo {
 }
 
 // NOTE: though the update is atomic, but this function should be wrapped by a mutex to serialize updates.
-func (mm *methodMap) RegistHandler(spec *RPCSpec, handler RPCHandler, encoderNames map[string]struct{}) {
+func (mm *methodMap) RegistHandler(spec *RPCSpec, handler RPCHandler, encoders map[string]Encoder) {
 
 	// Create a deep copy instead.
 	m := mm.Get()
@@ -41,9 +42,9 @@ func (mm *methodMap) RegistHandler(spec *RPCSpec, handler RPCHandler, encoderNam
 	// Add/Del.
 	if handler != nil {
 		newM[spec.MethodName] = &methodInfo{
-			Spec:         spec,
-			Handler:      handler,
-			EncoderNames: encoderNames,
+			Spec:     spec,
+			Handler:  handler,
+			Encoders: encoders,
 		}
 	} else {
 		delete(newM, spec.MethodName)

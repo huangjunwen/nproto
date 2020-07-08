@@ -8,6 +8,9 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/assert"
 
+	. "github.com/huangjunwen/nproto/v2/enc"
+	"github.com/huangjunwen/nproto/v2/enc/jsonenc"
+	"github.com/huangjunwen/nproto/v2/enc/pbenc"
 	. "github.com/huangjunwen/nproto/v2/rpc"
 )
 
@@ -20,9 +23,9 @@ func TestMethodMap(t *testing.T) {
 	methodName := "method"
 	testCases := []*struct {
 		// Params.
-		Spec         *RPCSpec
-		Handler      RPCHandler
-		EncoderNames map[string]struct{}
+		Spec     *RPCSpec
+		Handler  RPCHandler
+		Encoders map[string]Encoder
 
 		// Store Get() result here to check later.
 		GetResult map[string]*methodInfo
@@ -37,7 +40,7 @@ func TestMethodMap(t *testing.T) {
 		{
 			Spec:                &RPCSpec{SvcName: svcName, MethodName: methodName},
 			Handler:             func(_ context.Context, input interface{}) (interface{}, error) { return 1, nil },
-			EncoderNames:        map[string]struct{}{"json": struct{}{}},
+			Encoders:            map[string]Encoder{jsonenc.Default.Name(): jsonenc.Default},
 			ExpectExists:        true,
 			ExpectHandlerResult: 1,
 		},
@@ -45,7 +48,7 @@ func TestMethodMap(t *testing.T) {
 		{
 			Spec:                &RPCSpec{SvcName: svcName, MethodName: methodName},
 			Handler:             func(_ context.Context, input interface{}) (interface{}, error) { return 2, nil },
-			EncoderNames:        map[string]struct{}{"pb": struct{}{}},
+			Encoders:            map[string]Encoder{pbenc.Default.Name(): pbenc.Default},
 			ExpectExists:        true,
 			ExpectHandlerResult: 2,
 		},
@@ -53,7 +56,7 @@ func TestMethodMap(t *testing.T) {
 		{
 			Spec:                &RPCSpec{SvcName: svcName, MethodName: methodName},
 			Handler:             (func(_ context.Context, input interface{}) (interface{}, error))(nil),
-			EncoderNames:        map[string]struct{}{"pb": struct{}{}},
+			Encoders:            map[string]Encoder{pbenc.Default.Name(): pbenc.Default},
 			ExpectExists:        false,
 			ExpectHandlerResult: 0,
 		},
@@ -65,7 +68,7 @@ func TestMethodMap(t *testing.T) {
 	// Test Regist/Deregist.
 	for i, testCase := range testCases {
 
-		mm.RegistHandler(testCase.Spec, testCase.Handler, testCase.EncoderNames)
+		mm.RegistHandler(testCase.Spec, testCase.Handler, testCase.Encoders)
 		m := mm.Get()
 		testCase.GetResult = m
 
@@ -80,7 +83,7 @@ func TestMethodMap(t *testing.T) {
 		assert.Equal(testCase.Spec, info.Spec)
 		output, _ := info.Handler(context.Background(), nil)
 		assert.Equal(testCase.ExpectHandlerResult, output, "test case %d", i)
-		assert.Equal(testCase.EncoderNames, info.EncoderNames)
+		assert.Equal(testCase.Encoders, info.Encoders)
 
 	}
 
@@ -101,7 +104,7 @@ func TestMethodMap(t *testing.T) {
 		assert.Equal(testCase.Spec, info.Spec)
 		output, _ := info.Handler(context.Background(), nil)
 		assert.Equal(testCase.ExpectHandlerResult, output, "test case %d", i)
-		assert.Equal(testCase.EncoderNames, info.EncoderNames)
+		assert.Equal(testCase.Encoders, info.Encoders)
 
 	}
 

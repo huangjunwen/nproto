@@ -26,8 +26,7 @@ type Server struct {
 	runner        taskrunner.TaskRunner // runner for handlers
 	subjectPrefix string                // subject prefix in nats namespace
 	group         string                // server group
-	encoders      map[string]Encoder    // supported encoders: encoderName -> Encoder
-	encoderNames  map[string]struct{}
+	encoders      map[string]Encoder    // default encoders: encoderName -> Encoder
 
 	// Immutable fields.
 	nc  *nats.Conn
@@ -88,27 +87,28 @@ func NewServer(nc *nats.Conn, opts ...ServerOption) (srv *Server, err error) {
 }
 
 func (server *Server) RegistHandler(spec *RPCSpec, handler RPCHandler) error {
-	return server.registHandler(spec, handler, server.encoderNames)
+	return server.registHandler(spec, handler, server.encoders)
 }
 
-func (server *Server) SubServer(encoderNames ...string) (RPCServer, error) {
+func (server *Server) AltEncoderServer(encoders ...Encoder) (RPCServer, error) {
 
-	encoderNameSet := map[string]struct{}{}
-	for _, encoderName := range encoderNames {
-		if _, ok := server.encoders[encoderName]; !ok {
-			return nil, fmt.Errorf("Encoder %s not found", encoderName)
-		}
-		encoderNameSet[encoderName] = struct{}{}
+	if len(encoders) == 0 {
+		return nil, fmt.Errorf("natsrpc.Server.AltEncoderServer no encoder?")
+	}
+
+	encoders_ := map[string]Encoder{}
+	for _, encoder := range encoders {
+		encoders_[encoder.Name()] = encoder
 	}
 
 	return RPCServerFunc(func(spec *RPCSpec, handler RPCHandler) error {
-		return server.registHandler(spec, handler, encoderNameSet)
+		return server.registHandler(spec, handler, encoders_)
 	}), nil
 
 }
 
-func (server *Server) MustSubServer(encoderNames ...string) RPCServer {
-	ret, err := server.SubServer(encoderNames...)
+func (server *Server) MustAltEncoderServer(encoders ...Encoder) RPCServer {
+	ret, err := server.AltEncoderServer(encoders...)
 	if err != nil {
 		panic(err)
 	}
@@ -136,7 +136,7 @@ func (server *Server) Close() error {
 	return nil
 }
 
-func (server *Server) registHandler(spec *RPCSpec, handler RPCHandler, encoderNames map[string]struct{}) error {
+func (server *Server) registHandler(spec *RPCSpec, handler RPCHandler, encoders map[string]Encoder) error {
 
 	if err := spec.Validate(); err != nil {
 		return err
@@ -173,7 +173,7 @@ func (server *Server) registHandler(spec *RPCSpec, handler RPCHandler, encoderNa
 		server.methodMaps[svcName] = mm
 	}
 
-	server.methodMaps[svcName].RegistHandler(spec, handler, encoderNames)
+	server.methodMaps[svcName].RegistHandler(spec, handler, encoders)
 	return nil
 
 }
@@ -262,11 +262,11 @@ func (server *Server) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 			}
 
 			encoderName := req.Input.EncoderName
-			if _, ok := info.EncoderNames[encoderName]; !ok {
+			encoder, ok := info.Encoders[encoderName]
+			if !ok {
 				replyNprotoError(PayloadError, "method does not support encoder %s", encoderName)
 				return
 			}
-			encoder := server.encoders[encoderName]
 
 			input := info.Spec.NewInput()
 			if err := encoder.DecodeData(bytes.NewReader(req.Input.Bytes), input); err != nil {
