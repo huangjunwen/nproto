@@ -13,7 +13,7 @@ import (
 
 func ServerOptLogger(logger logr.Logger) ServerOption {
 	return func(server *Server) error {
-		server.logger = logger
+		server.logger = logger.WithValues("component", "nproto.natsrpc.Server")
 		return nil
 	}
 }

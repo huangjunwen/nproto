@@ -189,15 +189,15 @@ func (server *Server) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 			// XXX: basically impossible branch
 			server.logger.Error(
 				nil,
-				"natsrpc.Server svc %s got unexpected subject %q",
-				svcName,
-				msg.Subject,
+				"svc got unexpected subject",
+				"svc", svcName,
+				"subject", msg.Subject,
 			)
 			return
 		}
 
 		logError := func(err error, msg string) {
-			server.logger.Error(err, "natsrpc.Server "+msg, "svcName", svcName, "methodName", methodName)
+			server.logger.Error(err, msg, "svc", svcName, "method", methodName)
 		}
 
 		reply := func(resp *nppb.NatsRPCResponse) {
