@@ -1,7 +1,7 @@
 package natsrpc
 
 import (
-	"sync/atomic"
+	"sync"
 
 	. "github.com/huangjunwen/nproto/v2/enc"
 	. "github.com/huangjunwen/nproto/v2/rpc"
@@ -9,8 +9,9 @@ import (
 
 // methodMap stores method info for a service.
 type methodMap struct {
-	// map[methodName]*methodInfo
-	v atomic.Value
+	// XXX: sync.Map ?
+	mu sync.RWMutex
+	v  map[string]*methodInfo
 }
 
 type methodInfo struct {
@@ -20,36 +21,35 @@ type methodInfo struct {
 }
 
 func newMethodMap() *methodMap {
-	ret := &methodMap{}
-	ret.v.Store(make(map[string]*methodInfo))
-	return ret
+	return &methodMap{
+		v: make(map[string]*methodInfo),
+	}
 }
 
-func (mm *methodMap) Get() map[string]*methodInfo {
-	return mm.v.Load().(map[string]*methodInfo)
+func (mm *methodMap) Lookup(methodName string) *methodInfo {
+	mm.mu.RLock()
+	info := mm.v[methodName]
+	mm.mu.RUnlock()
+	return info
 }
 
-// NOTE: though the update is atomic, but this function should be wrapped by a mutex to serialize updates.
-func (mm *methodMap) RegistHandler(spec *RPCSpec, handler RPCHandler, encoders map[string]Encoder) {
+func (mm *methodMap) Regist(spec *RPCSpec, handler RPCHandler, encoders map[string]Encoder) {
 
-	// Create a deep copy instead.
-	m := mm.Get()
-	newM := make(map[string]*methodInfo)
-	for name, info := range m {
-		newM[name] = info
+	if handler == nil {
+		mm.mu.Lock()
+		delete(mm.v, spec.MethodName)
+		mm.mu.Unlock()
+		return
 	}
 
-	// Add/Del.
-	if handler != nil {
-		newM[spec.MethodName] = &methodInfo{
-			Spec:     spec,
-			Handler:  handler,
-			Encoders: encoders,
-		}
-	} else {
-		delete(newM, spec.MethodName)
+	info := &methodInfo{
+		Spec:     spec,
+		Handler:  handler,
+		Encoders: encoders,
 	}
+	mm.mu.Lock()
+	mm.v[spec.MethodName] = info
+	mm.mu.Unlock()
+	return
 
-	// Atomic replace.
-	mm.v.Store(newM)
 }

@@ -111,6 +111,9 @@ func TestRPC(t *testing.T) {
 				return wrapperspb.String("")
 			},
 		}
+		notFoundHandler = func(ctx context.Context, input interface{}) (interface{}, error) {
+			return input, nil
+		}
 	)
 
 	// Test encoder not support.
@@ -412,6 +415,16 @@ func TestRPC(t *testing.T) {
 		log.Panic(err)
 	}
 
+	{
+		// Regist and deregist
+		if err := server.RegistHandler(notFoundSpec, notFoundHandler); err != nil {
+			log.Panic(err)
+		}
+		if err := server.RegistHandler(notFoundSpec, nil); err != nil {
+			log.Panic(err)
+		}
+	}
+
 	assert.Error(server.RegistHandler(&RPCSpec{}, nil))
 
 	testCases := []*struct {
@@ -422,9 +435,9 @@ func TestRPC(t *testing.T) {
 		Before func(RPCHandler)
 		After  func()
 
+		AlterCheck   func()
 		ExpectOutput interface{}
 		ExpectError  bool
-		AlterCheck   func()
 	}{
 		// normal case, encoder is pb
 		{

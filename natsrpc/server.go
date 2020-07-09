@@ -173,7 +173,7 @@ func (server *Server) registHandler(spec *RPCSpec, handler RPCHandler, encoders 
 		server.methodMaps[svcName] = mm
 	}
 
-	server.methodMaps[svcName].RegistHandler(spec, handler, encoders)
+	server.methodMaps[svcName].Regist(spec, handler, encoders)
 	return nil
 
 }
@@ -249,7 +249,7 @@ func (server *Server) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 
 		if err := server.runner.Submit(func() {
 
-			info := mm.Get()[methodName]
+			info := mm.Lookup(methodName)
 			if info == nil {
 				replyNprotoError(RPCMethodNotFound, "method not found")
 				return
