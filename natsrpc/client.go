@@ -70,16 +70,16 @@ func (client *Client) MakeHandler(spec *RPCSpec) RPCHandler {
 	return func(ctx context.Context, input interface{}) (interface{}, error) {
 
 		if err := spec.Validate(); err != nil {
-			return nil, nprotoErrorf(NotRetryableError, "spec validate error: %s", err.Error())
+			return nil, nprotoErrorf(RPCSpecInvalid, err.Error())
 		}
 
 		if err := spec.AssertInputType(input); err != nil {
-			return nil, nprotoErrorf(PayloadError, "assert input error: %s", err.Error())
+			return nil, nprotoErrorf(RPCRequestEncodeError, err.Error())
 		}
 
 		w := &bytes.Buffer{}
 		if err := client.encoder.EncodeData(w, input); err != nil {
-			return nil, nprotoErrorf(PayloadError, "encode input error: %s", err.Error())
+			return nil, nprotoErrorf(RPCRequestEncodeError, err.Error())
 		}
 
 		req := &nppb.NatsRPCRequest{
@@ -113,7 +113,7 @@ func (client *Client) MakeHandler(spec *RPCSpec) RPCHandler {
 
 		reqData, err := proto.Marshal(req)
 		if err != nil {
-			return nil, nprotoErrorf(ProtocolError, "marshal request error: %s", err.Error())
+			return nil, nprotoErrorf(RPCRequestEncodeError, "marshal request error: %s", err.Error())
 		}
 
 		respMsg, err := client.nc.RequestWithContext(
@@ -127,14 +127,14 @@ func (client *Client) MakeHandler(spec *RPCSpec) RPCHandler {
 
 		resp := &nppb.NatsRPCResponse{}
 		if err := proto.Unmarshal(respMsg.Data, resp); err != nil {
-			return nil, nprotoErrorf(ProtocolError, "unmarshal response error: %s", err.Error())
+			return nil, nprotoErrorf(RPCResponseDecodeError, "unmarshal response error: %s", err.Error())
 		}
 
 		switch out := resp.Out.(type) {
 		case *nppb.NatsRPCResponse_Output:
 			if out.Output.EncoderName != client.encoder.EncoderName() {
 				return nil, nprotoErrorf(
-					ProtocolError,
+					RPCResponseDecodeError,
 					"expect output encoded by %s, but got %s",
 					client.encoder.EncoderName(),
 					out.Output.EncoderName,
@@ -144,7 +144,7 @@ func (client *Client) MakeHandler(spec *RPCSpec) RPCHandler {
 			output := spec.NewOutput()
 			if err := client.encoder.DecodeData(bytes.NewReader(out.Output.Bytes), output); err != nil {
 				return nil, nprotoErrorf(
-					PayloadError,
+					RPCResponseDecodeError,
 					"decode output error: %s",
 					err.Error(),
 				)

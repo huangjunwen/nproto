@@ -27,33 +27,5 @@ func (err *Error) Error() string {
 	if err.Message != "" {
 		sep = ": "
 	}
-	return fmt.Sprintf("nproto.Error(%d%s%s)", err.Code, sep, err.Message)
-}
-
-// ErrorCode describes the reason of Error.
-//
-// Range -32768 ~ -32000 are reserved (like json-rpc).
-// Range -32768 ~ -32500 are not retryable error.
-type ErrorCode int16
-
-const (
-	// ProtocolError should be returned when error occurs in protocol level, for example:
-	//   - Parse request error.
-	//   - ...
-	ProtocolError ErrorCode = -32700
-
-	// PayloadError should be returned when error occurs in payload level, for example:
-	//   - Method not found in rpc.
-	//   - Parameter can't be encoded/decoded correctly.
-	//   - Parameter's value out of range.
-	//   - ...
-	PayloadError ErrorCode = -32600
-
-	// NotRetryableError should be returned when you should not try again.
-	NotRetryableError ErrorCode = -32500
-)
-
-// Retryable returns true when the code > -32500.
-func (ec ErrorCode) Retryable() bool {
-	return ec > -32500
+	return fmt.Sprintf("nproto.Error(%s%s%s)", err.Code.String(), sep, err.Message)
 }

@@ -249,28 +249,28 @@ func (server *Server) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 
 		if err := server.runner.Submit(func() {
 
-			req := &nppb.NatsRPCRequest{}
-			if err := proto.Unmarshal(msg.Data, req); err != nil {
-				replyNprotoError(ProtocolError, "unmarshal request error: %s", err.Error())
+			info := mm.Get()[methodName]
+			if info == nil {
+				replyNprotoError(RPCMethodNotFound, "method not found")
 				return
 			}
 
-			info := mm.Get()[methodName]
-			if info == nil {
-				replyNprotoError(PayloadError, "method not found")
+			req := &nppb.NatsRPCRequest{}
+			if err := proto.Unmarshal(msg.Data, req); err != nil {
+				replyNprotoError(RPCRequestDecodeError, "unmarshal request error: %s", err.Error())
 				return
 			}
 
 			encoderName := req.Input.EncoderName
 			encoder, ok := info.Encoders[encoderName]
 			if !ok {
-				replyNprotoError(PayloadError, "method does not support encoder %s", encoderName)
+				replyNprotoError(RPCRequestDecodeError, "method does not support encoder %s", encoderName)
 				return
 			}
 
 			input := info.Spec.NewInput()
 			if err := encoder.DecodeData(bytes.NewReader(req.Input.Bytes), input); err != nil {
-				replyNprotoError(PayloadError, "decode input error: %s", err.Error())
+				replyNprotoError(RPCRequestDecodeError, "decode input error: %s", err.Error())
 				return
 			}
 
@@ -293,14 +293,14 @@ func (server *Server) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 
 			if err := info.Spec.AssertOutputType(output); err != nil {
 				logError(err, "assert output error")
-				replyNprotoError(PayloadError, "assert output error: %s", err.Error())
+				replyNprotoError(RPCResponseEncodeError, "assert output error: %s", err.Error())
 				return
 			}
 
 			w := &bytes.Buffer{}
 			if err := encoder.EncodeData(w, output); err != nil {
 				logError(err, "encode output error")
-				replyNprotoError(PayloadError, "encode output error: %s", err.Error())
+				replyNprotoError(RPCResponseEncodeError, "encode output error: %s", err.Error())
 				return
 			}
 
