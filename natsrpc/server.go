@@ -41,6 +41,19 @@ type Server struct {
 
 type ServerOption func(*Server) error
 
+// methodMap stores method info for a service.
+type methodMap struct {
+	// XXX: sync.Map ?
+	mu sync.RWMutex
+	v  map[string]*methodInfo
+}
+
+type methodInfo struct {
+	Spec     *RPCSpec
+	Handler  RPCHandler
+	Encoders map[string]Encoder // supported encoders for this method
+}
+
 var (
 	_ RPCServer = (*Server)(nil)
 )
@@ -196,21 +209,25 @@ func (server *Server) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 			return
 		}
 
-		logError := func(err error, msg string) {
-			server.logger.Error(err, msg, "svc", svcName, "method", methodName)
+		var _logger logr.Logger
+		logger := func() logr.Logger {
+			if _logger == nil {
+				_logger = server.logger.WithValues("svc", svcName, "method", methodName)
+			}
+			return _logger
 		}
 
 		reply := func(resp *nppb.NatsRPCResponse) {
 			respData, err := proto.Marshal(resp)
 			if err != nil {
 				// XXX: basically impossible branch
-				logError(err, "marshal response error")
+				logger().Error(err, "marshal response error")
 				return
 			}
 
 			err = server.nc.Publish(msg.Reply, respData)
 			if err != nil {
-				logError(err, "publish response error")
+				logger().Error(err, "publish response error")
 				return
 			}
 			return
@@ -292,14 +309,14 @@ func (server *Server) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 			}
 
 			if err := info.Spec.AssertOutputType(output); err != nil {
-				logError(err, "assert output error")
+				logger().Error(err, "assert output error")
 				replyNprotoError(RPCResponseEncodeError, "assert output error: %s", err.Error())
 				return
 			}
 
 			w := &bytes.Buffer{}
 			if err := encoder.EncodeData(w, output); err != nil {
-				logError(err, "encode output error")
+				logger().Error(err, "encode output error")
 				replyNprotoError(RPCResponseEncodeError, "encode output error: %s", err.Error())
 				return
 			}
@@ -315,11 +332,45 @@ func (server *Server) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 
 		}); err != nil {
 
-			logError(err, "submit task error")
+			logger().Error(err, "submit task error")
 			replyError(fmt.Errorf("natsrpc.Server submit task error: %s", err.Error()))
 
 		}
 
 	}
+
+}
+
+func newMethodMap() *methodMap {
+	return &methodMap{
+		v: make(map[string]*methodInfo),
+	}
+}
+
+func (mm *methodMap) Lookup(methodName string) *methodInfo {
+	mm.mu.RLock()
+	info := mm.v[methodName]
+	mm.mu.RUnlock()
+	return info
+}
+
+func (mm *methodMap) Regist(spec *RPCSpec, handler RPCHandler, encoders map[string]Encoder) {
+
+	if handler == nil {
+		mm.mu.Lock()
+		delete(mm.v, spec.MethodName)
+		mm.mu.Unlock()
+		return
+	}
+
+	info := &methodInfo{
+		Spec:     spec,
+		Handler:  handler,
+		Encoders: encoders,
+	}
+	mm.mu.Lock()
+	mm.v[spec.MethodName] = info
+	mm.mu.Unlock()
+	return
 
 }
