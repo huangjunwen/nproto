@@ -21,19 +21,17 @@ import (
 )
 
 type Server struct {
-	// Option fields.
-	logger        logr.Logger
-	runner        taskrunner.TaskRunner // runner for handlers
+	// Immutable fields.
+	nc            *nats.Conn
+	ctx           context.Context
 	subjectPrefix string                // subject prefix in nats namespace
 	group         string                // server group
 	encoders      map[string]Encoder    // default encoders: encoderName -> Encoder
+	runner        taskrunner.TaskRunner // runner for handlers
+	logger        logr.Logger
 
-	// Immutable fields.
-	nc  *nats.Conn
-	ctx context.Context
-
+	mu sync.Mutex
 	// Mutable fields.
-	mu         sync.Mutex
 	closed     bool
 	subs       map[string]*nats.Subscription // svcName -> *nats.Subscription
 	methodMaps map[string]*methodMap         // svcName -> *methodMap
@@ -49,9 +47,9 @@ type methodMap struct {
 }
 
 type methodInfo struct {
-	Spec     *RPCSpec
-	Handler  RPCHandler
-	Encoders map[string]Encoder // supported encoders for this method
+	spec     *RPCSpec
+	handler  RPCHandler
+	encoders map[string]Encoder // supported encoders for this method
 }
 
 var (
@@ -279,13 +277,13 @@ func (server *Server) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 			}
 
 			encoderName := req.Input.EncoderName
-			encoder, ok := info.Encoders[encoderName]
+			encoder, ok := info.encoders[encoderName]
 			if !ok {
 				replyNprotoError(RPCRequestDecodeError, "method does not support encoder %s", encoderName)
 				return
 			}
 
-			input := info.Spec.NewInput()
+			input := info.spec.NewInput()
 			if err := encoder.DecodeData(bytes.NewReader(req.Input.Bytes), input); err != nil {
 				replyNprotoError(RPCRequestDecodeError, "decode input error: %s", err.Error())
 				return
@@ -302,13 +300,13 @@ func (server *Server) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 				defer cancel()
 			}
 
-			output, err := info.Handler(ctx, input)
+			output, err := info.handler(ctx, input)
 			if err != nil {
 				replyError(err)
 				return
 			}
 
-			if err := info.Spec.AssertOutputType(output); err != nil {
+			if err := info.spec.AssertOutputType(output); err != nil {
 				logger().Error(err, "assert output error")
 				replyNprotoError(RPCResponseEncodeError, "assert output error: %s", err.Error())
 				return
@@ -364,9 +362,9 @@ func (mm *methodMap) Regist(spec *RPCSpec, handler RPCHandler, encoders map[stri
 	}
 
 	info := &methodInfo{
-		Spec:     spec,
-		Handler:  handler,
-		Encoders: encoders,
+		spec:     spec,
+		handler:  handler,
+		encoders: encoders,
 	}
 	mm.mu.Lock()
 	mm.v[spec.MethodName] = info

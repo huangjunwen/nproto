@@ -18,13 +18,11 @@ import (
 )
 
 type Client struct {
-	// Option fields.
+	// Immutable fields.
 	subjectPrefix string
 	encoder       Encoder
 	timeout       time.Duration
-
-	// Immutable fields.
-	nc *nats.Conn
+	nc            *nats.Conn
 }
 
 type ClientOption func(*Client) error
