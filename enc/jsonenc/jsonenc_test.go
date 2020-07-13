@@ -1,11 +1,7 @@
 package jsonenc
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,33 +10,6 @@ import (
 
 	. "github.com/huangjunwen/nproto/v2/enc"
 )
-
-type RawIOMessage json.RawMessage
-
-var (
-	_ JsonIOMarshaler   = RawIOMessage{}
-	_ JsonIOMarshaler   = (*RawIOMessage)(nil)
-	_ JsonIOUnmarshaler = (*RawIOMessage)(nil)
-)
-
-func NewRawIOMessage(s string) *RawIOMessage {
-	ret := RawIOMessage(s)
-	return &ret
-}
-
-func (m RawIOMessage) MarshalJSONToWriter(w io.Writer) error {
-	_, err := w.Write([]byte(m))
-	return err
-}
-
-func (m *RawIOMessage) UnmarshalJSONFromReader(r io.Reader) error {
-	b, err := ioutil.ReadAll(r)
-	if err != nil {
-		return err
-	}
-	*m = RawIOMessage(b)
-	return nil
-}
 
 func NewString(v string) *string {
 	return &v
@@ -56,14 +25,8 @@ func TestJsonEncoder(t *testing.T) {
 	for i, testCase := range []*struct {
 		Data              interface{}
 		ExpectError       bool
-		ExpectEncodedData string
+		ExpectEncodedData []byte
 	}{
-		// JsonIOMarshaler
-		{
-			Data:              NewRawIOMessage(`"abc"`),
-			ExpectError:       false,
-			ExpectEncodedData: `"abc"`,
-		},
 		// *RawData
 		{
 			Data: &RawData{
@@ -79,7 +42,7 @@ func TestJsonEncoder(t *testing.T) {
 				Bytes:       []byte("{1,2,3}"),
 			},
 			ExpectError:       false,
-			ExpectEncodedData: "{1,2,3}",
+			ExpectEncodedData: []byte("{1,2,3}"),
 		},
 		// RawData
 		{
@@ -96,19 +59,19 @@ func TestJsonEncoder(t *testing.T) {
 				Bytes:       []byte("{1,2,3}"),
 			},
 			ExpectError:       false,
-			ExpectEncodedData: "{1,2,3}",
+			ExpectEncodedData: []byte("{1,2,3}"),
 		},
 		// proto.Message
 		{
 			Data:              wrapperspb.String("123"),
 			ExpectError:       false,
-			ExpectEncodedData: `"123"`,
+			ExpectEncodedData: []byte(`"123"`),
 		},
 		// other
 		{
 			Data:              map[string]interface{}{"a": []int{1, 2, 3}},
 			ExpectError:       false,
-			ExpectEncodedData: `{"a":[1,2,3]}`,
+			ExpectEncodedData: []byte(`{"a":[1,2,3]}`),
 		},
 		// other
 		{
@@ -116,36 +79,29 @@ func TestJsonEncoder(t *testing.T) {
 			ExpectError: true,
 		},
 	} {
-		w := &strings.Builder{}
-		err := Default.EncodeData(w, testCase.Data)
+		w := []byte{}
+		err := Default.EncodeData(testCase.Data, &w)
 		if testCase.ExpectError {
 			assert.Error(err, "test case %d", i)
-			assert.Equal("", w.String(), "test case %d", i)
+			assert.Len(w, 0, "test case %d", i)
 		} else {
 			assert.NoError(err, "test case %d", i)
-			assert.Equal(testCase.ExpectEncodedData, w.String(), "test case %d", i)
+			assert.Equal(testCase.ExpectEncodedData, w, "test case %d", i)
 		}
 
-		fmt.Printf("EncodeData(%+v): result=%+q, err=%v\n", testCase.Data, w.String(), err)
+		fmt.Printf("EncodeData(%+v): w=%+q, err=%v\n", testCase.Data, w, err)
 	}
 
 	for i, testCase := range []*struct {
-		EncodedData string
+		EncodedData []byte
 		Data        interface{}
 		ExpectError bool
 		ExpectData  interface{}
 		AlterEqual  func(interface{}, interface{}) bool
 	}{
-		// JsonIOUnmarshaler
-		{
-			EncodedData: `"123"`,
-			Data:        NewRawIOMessage(""),
-			ExpectError: false,
-			ExpectData:  NewRawIOMessage(`"123"`),
-		},
 		// *RawData
 		{
-			EncodedData: `"123"`,
+			EncodedData: []byte(`"123"`),
 			Data:        &RawData{},
 			ExpectError: false,
 			ExpectData: &RawData{
@@ -155,7 +111,7 @@ func TestJsonEncoder(t *testing.T) {
 		},
 		// proto.Message
 		{
-			EncodedData: `"123"`,
+			EncodedData: []byte(`"123"`),
 			Data:        wrapperspb.String(""),
 			ExpectError: false,
 			ExpectData:  wrapperspb.String("123"),
@@ -163,20 +119,20 @@ func TestJsonEncoder(t *testing.T) {
 		},
 		// proto.Message
 		{
-			EncodedData: `"123"`,
+			EncodedData: []byte(`"123"`),
 			Data:        wrapperspb.Bool(false),
 			ExpectError: true,
 		},
 		// other
 		{
-			EncodedData: `"123"`,
+			EncodedData: []byte(`"123"`),
 			Data:        NewString(""),
 			ExpectError: false,
 			ExpectData:  NewString("123"),
 		},
 	} {
 
-		r := strings.NewReader(testCase.EncodedData)
+		r := testCase.EncodedData
 		err := Default.DecodeData(r, testCase.Data)
 		if testCase.ExpectError {
 			assert.Error(err, "test case %d", i)
@@ -189,7 +145,7 @@ func TestJsonEncoder(t *testing.T) {
 			}
 		}
 
-		fmt.Printf("DecodeData(%q): result=%+v, err=%v\n", testCase.EncodedData, testCase.Data, err)
+		fmt.Printf("DecodeData(%q): data=%+v, err=%v\n", testCase.EncodedData, testCase.Data, err)
 	}
 
 }

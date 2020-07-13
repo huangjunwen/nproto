@@ -78,8 +78,8 @@ github.com/hashicorp/golang-lru v0.5.0/go.mod h1:/m3WP610KZHVQ1SGc6re/UDhFvYD7pJ
 github.com/hashicorp/raft v1.1.0 h1:qPMePEczgbkiQsqCsRfuHRqvDUO+zmAInDaD5ptXlq0=
 github.com/hashicorp/raft v1.1.0/go.mod h1:4Ak7FSPnuvmb0GV6vgIAJ4vYT4bek9bb6Q+7HVbyzqM=
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
-github.com/huangjunwen/golibs v0.0.0-20200704003801-915852c55f5a h1:UGbxoWlHR2DLQYvywUH/vkbReCXGiJpBnyLuD/mnDBo=
-github.com/huangjunwen/golibs v0.0.0-20200704003801-915852c55f5a/go.mod h1:LO1tHTCYiUGEXALd3sqawg9rfn5s3YzzWNxygAH9fJc=
+github.com/huangjunwen/golibs v0.0.0-20200711223149-49b62b5d022b h1:tnQ2mHp4aND/jkf9fJTK5YNtsZz800yop3Q4DxBnoRw=
+github.com/huangjunwen/golibs v0.0.0-20200711223149-49b62b5d022b/go.mod h1:LO1tHTCYiUGEXALd3sqawg9rfn5s3YzzWNxygAH9fJc=
 github.com/huangjunwen/tstsvc v0.6.0/go.mod h1:2VqI1UNq9A6g2kN3nd/L5LVclSffe/4yIvawRlFjzz4=
 github.com/huangjunwen/tstsvc v0.7.0 h1:rPm+bkioAW4zlMZ3w0Du45Xu9WKcar2Nv94k+WiFcgM=
 github.com/huangjunwen/tstsvc v0.7.0/go.mod h1:EEy0oLVfMEThiO5dYFrtAi36pWN4+JyvT0X5leOJ08Q=

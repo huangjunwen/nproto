@@ -1,7 +1,8 @@
+// Package enc contains Encoder interface.
 package enc
 
 import (
-	"io"
+	"fmt"
 )
 
 // Encoder is used to encode/decode data.
@@ -10,16 +11,10 @@ type Encoder interface {
 	EncoderName() string
 
 	// EncodeData encodes data to w.
-	//
-	// If data's type is *RawData/RawData and data.EncoderName == Encoder.EncoderName(),
-	// then data.Bytes should be written to w directly without encoding.
-	EncodeData(w io.Writer, data interface{}) error
+	EncodeData(data interface{}, w *[]byte) error
 
 	// DecodeData decodes data from r.
-	//
-	// If data's type is *RawData, then data.EncoderName should be set to Encoder.EncoderName(),
-	// and data.Bytes should be read from r directly without decoding.
-	DecodeData(r io.Reader, data interface{}) error
+	DecodeData(r []byte, data interface{}) error
 }
 
 // RawData is similar to json.RawMessage which bypasses encoding/decoding.
@@ -27,6 +22,52 @@ type RawData struct {
 	// EncoderName is the name of the encoder which data is encoded by.
 	EncoderName string
 
-	// Bytes is the encoded data raw bytes.
+	// Bytes is the encoded raw bytes.
 	Bytes []byte
+}
+
+type rawDataEncoder struct {
+	Encoder
+}
+
+// NewEncoder wraps an encoder to add RawData awareness:
+//   - EncodeData: If data is *RawData/RawData and EncoderName is the same as the encoder, then it is copied directly to w without encoding.
+//   - DecodeData: If data is *RawData, then it is copied directly from r without decoding.
+func NewEncoder(encoder Encoder) Encoder {
+	return &rawDataEncoder{encoder}
+}
+
+func (e *rawDataEncoder) EncodeData(data interface{}, w *[]byte) error {
+
+	var rawData *RawData
+	switch d := data.(type) {
+	case *RawData:
+		rawData = d
+
+	case RawData:
+		rawData = &d
+
+	default:
+		return e.Encoder.EncodeData(d, w)
+	}
+
+	if rawData.EncoderName != e.EncoderName() {
+		return fmt.Errorf("Encoder<%s> can't encode RawData<%s>", e.EncoderName(), rawData.EncoderName)
+	}
+	*w = rawData.Bytes
+	return nil
+
+}
+
+func (e *rawDataEncoder) DecodeData(r []byte, data interface{}) error {
+
+	switch d := data.(type) {
+	case *RawData:
+		d.EncoderName = e.EncoderName()
+		d.Bytes = r
+		return nil
+
+	default:
+		return e.Encoder.DecodeData(r, d)
+	}
 }

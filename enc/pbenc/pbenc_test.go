@@ -2,21 +2,21 @@ package pbenc
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 
-	. "github.com/huangjunwen/nproto/v2/enc"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/wrapperspb"
+
+	. "github.com/huangjunwen/nproto/v2/enc"
 )
 
-func EncodedProtoMessage(m proto.Message) string {
+func EncodedProtoMessage(m proto.Message) []byte {
 	b, err := proto.Marshal(m)
 	if err != nil {
 		panic(err)
 	}
-	return string(b)
+	return b
 }
 
 func ProtoMessageEqual(left, right interface{}) bool {
@@ -33,7 +33,7 @@ func TestPbEncoder(t *testing.T) {
 	for i, testCase := range []*struct {
 		Data              interface{}
 		ExpectError       bool
-		ExpectEncodedData string
+		ExpectEncodedData []byte
 	}{
 		// proto.Message
 		{
@@ -53,7 +53,7 @@ func TestPbEncoder(t *testing.T) {
 		{
 			Data: &RawData{
 				EncoderName: Default.EncoderName(),
-				Bytes:       []byte(EncodedProtoMessage(wrapperspb.Bool(true))),
+				Bytes:       EncodedProtoMessage(wrapperspb.Bool(true)),
 			},
 			ExpectError:       false,
 			ExpectEncodedData: EncodedProtoMessage(wrapperspb.Bool(true)),
@@ -70,7 +70,7 @@ func TestPbEncoder(t *testing.T) {
 		{
 			Data: RawData{
 				EncoderName: Default.EncoderName(),
-				Bytes:       []byte(EncodedProtoMessage(wrapperspb.Bool(true))),
+				Bytes:       EncodedProtoMessage(wrapperspb.Bool(true)),
 			},
 			ExpectError:       false,
 			ExpectEncodedData: EncodedProtoMessage(wrapperspb.Bool(true)),
@@ -82,21 +82,21 @@ func TestPbEncoder(t *testing.T) {
 		},
 	} {
 
-		w := &strings.Builder{}
-		err := Default.EncodeData(w, testCase.Data)
+		w := []byte{}
+		err := Default.EncodeData(testCase.Data, &w)
 		if testCase.ExpectError {
 			assert.Error(err, "test case %d", i)
-			assert.Equal("", w.String(), "test case %d", i)
+			assert.Len(w, 0, "test case %d", i)
 		} else {
 			assert.NoError(err, "test case %d", i)
-			assert.Equal(testCase.ExpectEncodedData, w.String(), "test case %d", i)
+			assert.Equal(testCase.ExpectEncodedData, w, "test case %d", i)
 		}
 
-		fmt.Printf("EncodeData(%+v): result=%+q, err=%v\n", testCase.Data, w.String(), err)
+		fmt.Printf("EncodeData(%+v): w=%+q, err=%v\n", testCase.Data, w, err)
 	}
 
 	for i, testCase := range []*struct {
-		EncodedData string
+		EncodedData []byte
 		Data        interface{}
 		ExpectError bool
 		ExpectData  interface{}
@@ -124,8 +124,8 @@ func TestPbEncoder(t *testing.T) {
 			Data:        &RawData{},
 			ExpectError: false,
 			ExpectData: &RawData{
-				EncoderName: Default.Name,
-				Bytes:       []byte(EncodedProtoMessage(wrapperspb.String("321"))),
+				EncoderName: Default.EncoderName(),
+				Bytes:       EncodedProtoMessage(wrapperspb.String("321")),
 			},
 		},
 		// other
@@ -136,7 +136,7 @@ func TestPbEncoder(t *testing.T) {
 		},
 	} {
 
-		r := strings.NewReader(testCase.EncodedData)
+		r := testCase.EncodedData
 		err := Default.DecodeData(r, testCase.Data)
 		if testCase.ExpectError {
 			assert.Error(err, "test case %d", i)
@@ -149,7 +149,7 @@ func TestPbEncoder(t *testing.T) {
 			}
 		}
 
-		fmt.Printf("DecodeData(%q): result=%+v, err=%v\n", testCase.EncodedData, testCase.Data, err)
+		fmt.Printf("DecodeData(%q): data=%+v, err=%v\n", testCase.EncodedData, testCase.Data, err)
 	}
 
 }
