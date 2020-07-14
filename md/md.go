@@ -1,3 +1,4 @@
+// Package md contains meta data related types.
 package md
 
 import (

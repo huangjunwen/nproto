@@ -19,7 +19,7 @@ type PbEncoder struct {
 var (
 	// Default is a PbEncoder with default options.
 	Default = enc.NewEncoder(&PbEncoder{
-		Name: "nppb",
+		Name: "pb",
 	})
 	_ enc.Encoder = (*PbEncoder)(nil)
 )

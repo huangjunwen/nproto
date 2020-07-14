@@ -1,4 +1,4 @@
-// Package enc contains Encoder interface.
+// Package enc contains encode-related types.
 package enc
 
 import (
@@ -7,7 +7,7 @@ import (
 
 // Encoder is used to encode/decode data.
 type Encoder interface {
-	// EncoderName should be a unique identity of the encoder.
+	// EncoderName is used to match Encoder for encoding/decoding.
 	EncoderName() string
 
 	// EncodeData encodes data to w.
@@ -17,9 +17,9 @@ type Encoder interface {
 	DecodeData(r []byte, data interface{}) error
 }
 
-// RawData is similar to json.RawMessage which bypasses encoding/decoding.
+// RawData is encoded data. Similar to json.RawMessage which bypasses encoding/decoding.
 type RawData struct {
-	// EncoderName is the name of the encoder which data is encoded by.
+	// EncoderName is encoder's name which data is encoded by.
 	EncoderName string
 
 	// Bytes is the encoded raw bytes.

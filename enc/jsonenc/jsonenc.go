@@ -20,7 +20,7 @@ type JsonEncoder struct {
 var (
 	// Default is a JsonEncoder with default options.
 	Default = enc.NewEncoder(&JsonEncoder{
-		Name: "npjson",
+		Name: "json",
 	})
 	_ enc.Encoder = (*JsonEncoder)(nil)
 )

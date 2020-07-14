@@ -29,7 +29,7 @@ func RPCErrorf(code RPCErrorCode, msg string, args ...interface{}) *RPCError {
 func (err *RPCError) Error() string {
 	sep := ""
 	if err.Message != "" {
-		sep = ": "
+		sep = " "
 	}
 	return fmt.Sprintf("RPCError(%s%s%s)", err.Code, sep, err.Message)
 }
