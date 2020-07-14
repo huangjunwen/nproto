@@ -5,26 +5,47 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"regexp"
 
 	"github.com/huangjunwen/nproto/v2/enc"
 )
 
+var (
+	// SvcNameRegexp is service name's format: alphanumeric '-'
+	SvcNameRegexp = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9-]*$`)
+
+	// MethodNameRegexp is method name's format: alphanumeric '-'
+	MethodNameRegexp = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9-]*$`)
+)
+
 // RPCSpec is the contract between rpc server and client.
-//
-// It should be filled and call Validate() before use. After that don't modify its content.
-type RPCSpec struct {
-	// SvcName is the name of service.
-	SvcName string
+type RPCSpec interface {
+	// SvcName returns the name of service.
+	SvcName() string
 
-	// MethodName is the name of method.
-	MethodName string
+	// MethodName returns the name of method.
+	MethodName() string
 
-	// NewInput is used to generate a new input parameter. Must be a pointer.
-	NewInput func() interface{}
+	// NewInput generates a new input parameter. Must be a pointer.
+	NewInput() interface{}
 
-	// NewOutput is used to generate a new output parameter. Must be a pointer.
-	NewOutput func() interface{}
+	// NewOutput generates a new output parameter. Must be a pointer.
+	NewOutput() interface{}
 
+	// AssertInputType makes sure input's type conform to the spec:
+	// reflect.TypeOf(input) == reflect.TypeOf(NewInput())
+	AssertInputType(input interface{}) error
+
+	// AssertOutputType makes sure output's type conform to the spec:
+	// reflect.TypeOf(output) == reflect.TypeOf(NewOutput())
+	AssertOutputType(output interface{}) error
+}
+
+type rpcSpec struct {
+	svcName    string
+	methodName string
+	newInput   func() interface{}
+	newOutput  func() interface{}
 	inputType  reflect.Type
 	outputType reflect.Type
 }
@@ -35,98 +56,122 @@ type RPCSpec struct {
 type RPCHandler func(context.Context, interface{}) (interface{}, error)
 
 // RPCMiddleware wraps a RPCHandler into another one.
-type RPCMiddleware func(spec *RPCSpec, handler RPCHandler) RPCHandler
+type RPCMiddleware func(spec RPCSpec, handler RPCHandler) RPCHandler
+
+// MustRPCSpec is must-version of NewRPCSpec.
+func MustRPCSpec(svcName, methodName string, newInput, newOutput func() interface{}) RPCSpec {
+	spec, err := NewRPCSpec(svcName, methodName, newInput, newOutput)
+	if err != nil {
+		panic(err)
+	}
+	return spec
+}
+
+// NewRPCSpec validates and creates a new RPCSpec.
+func NewRPCSpec(svcName, methodName string, newInput, newOutput func() interface{}) (RPCSpec, error) {
+	if !SvcNameRegexp.MatchString(svcName) {
+		return nil, fmt.Errorf("SvcName format invalid")
+	}
+	if !MethodNameRegexp.MatchString(methodName) {
+		return nil, fmt.Errorf("MethodName format invalid")
+	}
+
+	if newInput == nil {
+		return nil, fmt.Errorf("NewInput is empty")
+	}
+	input := newInput()
+	if input == nil {
+		return nil, fmt.Errorf("NewInput() returns nil")
+	}
+	inputType := reflect.TypeOf(input)
+	if inputType.Kind() != reflect.Ptr {
+		return nil, fmt.Errorf("NewInput() returns %s which is not a pointer", inputType.String())
+	}
+
+	if newOutput == nil {
+		return nil, fmt.Errorf("NewOutput is empty")
+	}
+	output := newOutput()
+	if output == nil {
+		return nil, fmt.Errorf("NewOutput() returns nil")
+	}
+	outputType := reflect.TypeOf(output)
+	if outputType.Kind() != reflect.Ptr {
+		return nil, fmt.Errorf("NewOutput() returns %s which is not a pointer", outputType.String())
+	}
+
+	return &rpcSpec{
+		svcName:    svcName,
+		methodName: methodName,
+		newInput:   newInput,
+		newOutput:  newOutput,
+		inputType:  inputType,
+		outputType: outputType,
+	}, nil
+}
 
 var (
 	rawDataType = reflect.TypeOf(&enc.RawData{})
 	newRawData  = func() interface{} { return &enc.RawData{} }
 )
 
-// NewRawDataSpec creates a validated *RPCSpec which use *enc.RawData as input/output.
-func NewRawDataSpec(svcName, methodName string) *RPCSpec {
-	return &RPCSpec{
-		SvcName:    svcName,
-		MethodName: methodName,
-		NewInput:   newRawData,
-		NewOutput:  newRawData,
+// MustRawDataRPCSpec is must-version of NewRawDataSpec.
+func MustRawDataRPCSpec(svcName, methodName string) RPCSpec {
+	spec, err := NewRawDataRPCSpec(svcName, methodName)
+	if err != nil {
+		panic(err)
+	}
+	return spec
+}
+
+// NewRawDataRPCSpec creates a validated RPCSpec which use *enc.RawData as input/output.
+func NewRawDataRPCSpec(svcName, methodName string) (RPCSpec, error) {
+	if !SvcNameRegexp.MatchString(svcName) {
+		return nil, fmt.Errorf("SvcName format invalid")
+	}
+	if !MethodNameRegexp.MatchString(methodName) {
+		return nil, fmt.Errorf("MethodName format invalid")
+	}
+	return &rpcSpec{
+		svcName:    svcName,
+		methodName: methodName,
+		newInput:   newRawData,
+		newOutput:  newRawData,
 		inputType:  rawDataType,
 		outputType: rawDataType,
-	}
+	}, nil
 }
 
-// Validate the RPCSpec. Call this before any other methods.
-func (spec *RPCSpec) Validate() error {
-	// Set inputType in the end of Validate.
-	if spec.Validated() {
-		return nil
-	}
-
-	if spec.SvcName == "" {
-		return fmt.Errorf("RPCSpec.SvcName is empty")
-	}
-	if spec.MethodName == "" {
-		return fmt.Errorf("RPCSpec.MethodName is empty")
-	}
-	if spec.NewInput == nil {
-		return fmt.Errorf("RPCSpec.NewInput is empty")
-	}
-	if spec.NewOutput == nil {
-		return fmt.Errorf("RPCSpec.NewOutput is empty")
-	}
-
-	newOutput := spec.NewOutput()
-	if newOutput == nil {
-		return fmt.Errorf("RPCSpec.NewOutput() returns nil")
-	}
-	outputType := reflect.TypeOf(newOutput)
-	if outputType.Kind() != reflect.Ptr {
-		return fmt.Errorf("RPCSpec.NewOutput() returns non-pointer")
-	}
-
-	newInput := spec.NewInput()
-	if newInput == nil {
-		return fmt.Errorf("RPCSpec.NewInput() returns nil")
-	}
-	inputType := reflect.TypeOf(newInput)
-	if inputType.Kind() != reflect.Ptr {
-		return fmt.Errorf("RPCSpec.NewInput() returns non-pointer")
-	}
-
-	spec.outputType = outputType
-	spec.inputType = inputType
-	return nil
+func (spec *rpcSpec) SvcName() string {
+	return spec.svcName
 }
 
-// Validated returns true if Validate() has been called successful.
-func (spec *RPCSpec) Validated() bool {
-	return spec.inputType != nil
+func (spec *rpcSpec) MethodName() string {
+	return spec.methodName
 }
 
-// AssertInputType makes sure input's type conform to the spec.
-func (spec *RPCSpec) AssertInputType(input interface{}) error {
-	if !spec.Validated() {
-		return fmt.Errorf("RPCSpec has not validated yet")
-	}
+func (spec *rpcSpec) NewInput() interface{} {
+	return spec.newInput()
+}
+
+func (spec *rpcSpec) NewOutput() interface{} {
+	return spec.newOutput()
+}
+
+func (spec *rpcSpec) AssertInputType(input interface{}) error {
 	if inputType := reflect.TypeOf(input); inputType != spec.inputType {
-		return fmt.Errorf("%s input expect %s, but got %s", spec.String(), spec.inputType.String(), inputType.String())
+		return fmt.Errorf("%s input got unexpect type %s", spec, inputType.String())
 	}
 	return nil
 }
 
-// AssertOutputType makes sure output's type conform to the spec.
-func (spec *RPCSpec) AssertOutputType(output interface{}) error {
-	if !spec.Validated() {
-		return fmt.Errorf("RPCSpec has not validated yet")
-	}
+func (spec *rpcSpec) AssertOutputType(output interface{}) error {
 	if outputType := reflect.TypeOf(output); outputType != spec.outputType {
-		return fmt.Errorf("%s output expect %s, but got %s", spec.String(), spec.outputType.String(), outputType.String())
+		return fmt.Errorf("%s output got unexpect type %s", spec, outputType.String())
 	}
 	return nil
 }
 
-func (spec *RPCSpec) String() string {
-	if !spec.Validated() {
-		return fmt.Sprintf("RPCSpec(%s::%s)", spec.SvcName, spec.MethodName)
-	}
-	return fmt.Sprintf("RPCSpec(%s::%s %s=>%s)", spec.SvcName, spec.MethodName, spec.inputType.String(), spec.outputType.String())
+func (spec *rpcSpec) String() string {
+	return fmt.Sprintf("RPCSpec(%s::%s %s=>%s)", spec.svcName, spec.methodName, spec.inputType.String(), spec.outputType.String())
 }
