@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package nproto.enc;
+
+option go_package = "github.com/huangjunwen/nproto/v2/enc/pb";
+
+// RawData represents enc.RawData in protobuf.
+message RawData {
+	// EncoderName is the name of the encoder which data is encoded by.
+  string encoder_name = 1;
+
+	// Bytes is the encoded data raw bytes.
+  bytes bytes = 2;
+}

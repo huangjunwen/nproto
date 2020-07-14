@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package nproto.md;
+
+option go_package = "github.com/huangjunwen/nproto/v2/md/pb";
+
+// MD represents md.MD in protobuf.
+message MD {
+  map<string, ValueList> key_values = 1;
+}
+
+message ValueList {
+  repeated bytes values = 1;
+}
