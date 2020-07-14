@@ -1,4 +1,4 @@
-package pb
+package nppbmd
 
 import (
 	npmd "github.com/huangjunwen/nproto/v2/md"

@@ -1,4 +1,4 @@
-package pb
+package nppbenc
 
 import (
 	npenc "github.com/huangjunwen/nproto/v2/enc"

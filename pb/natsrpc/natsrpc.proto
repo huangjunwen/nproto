@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package nproto.pb.natsrpc;
+
+import "md/md.proto";
+import "enc/enc.proto";
+import "rpc/rpc.proto";
+
+option go_package = "github.com/huangjunwen/nproto/v2/pb/natsrpc;nppbnatsrpc";
+
+// Request is natsrpc request wire format.
+message Request {
+  // MetaData dict.
+  nproto.pb.md.MD meta_data = 1;
+
+  // Input parameter.
+  nproto.pb.enc.RawData input = 2;
+
+  // Timeout optional timeout in nanoseoncds.
+  uint64 timeout = 3;
+}
+
+// Response is natsrpc response wire format.
+message Response {
+  oneof out {
+    // Output parameter when no error.
+    nproto.pb.enc.RawData output = 1;
+
+    // Err when rpc.RPCError returned.
+    nproto.pb.rpc.RPCError err = 2;
+
+    // PlainErr when other plain error returned.
+    string plain_err = 3;
+  }
+}

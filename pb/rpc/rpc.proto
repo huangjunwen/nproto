@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package nproto.pb.rpc;
+
+option go_package = "github.com/huangjunwen/nproto/v2/pb/rpc;nppbrpc";
+
+// RPCError represents rpc.RPCError in protobuf.
+message RPCError {
+  int32 code = 1;
+  string message = 2;
+}
