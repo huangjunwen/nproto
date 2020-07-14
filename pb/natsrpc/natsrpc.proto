@@ -26,10 +26,10 @@ message Response {
     // Output parameter when no error.
     nproto.pb.enc.RawData output = 1;
 
-    // Err when rpc.RPCError returned.
-    nproto.pb.rpc.RPCError err = 2;
+    // RpcErr when rpc.RPCError returned.
+    nproto.pb.rpc.RPCError rpc_err = 2;
 
-    // PlainErr when other plain error returned.
-    string plain_err = 3;
+    // Err when other plain error returned.
+    string err = 3;
   }
 }
