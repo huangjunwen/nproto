@@ -10,24 +10,26 @@ import (
 	"github.com/huangjunwen/nproto/v2/enc"
 )
 
+const (
+	// Name of the encoder.
+	Name = "json"
+)
+
 // JsonEncoder uses json to encode/decode data.
 type JsonEncoder struct {
-	Name               string
 	PbMarshalOptions   protojson.MarshalOptions
 	PbUnmarshalOptions protojson.UnmarshalOptions
 }
 
 var (
 	// Default is a JsonEncoder with default options.
-	Default = enc.NewEncoder(&JsonEncoder{
-		Name: "json",
-	})
-	_ enc.Encoder = (*JsonEncoder)(nil)
+	Default             = enc.NewEncoder(&JsonEncoder{})
+	_       enc.Encoder = (*JsonEncoder)(nil)
 )
 
-// EncoderName returns e.Name.
+// EncoderName returns Name.
 func (e *JsonEncoder) EncoderName() string {
-	return e.Name
+	return Name
 }
 
 // EncodeData accepts proto.Message, or any other json marshalable data.

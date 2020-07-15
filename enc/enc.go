@@ -1,4 +1,4 @@
-// Package enc contains encode-related types.
+// Package enc contains encode related types.
 package enc
 
 import (

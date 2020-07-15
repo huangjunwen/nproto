@@ -9,24 +9,26 @@ import (
 	"github.com/huangjunwen/nproto/v2/enc"
 )
 
+const (
+	// Name of the encoder.
+	Name = "pb"
+)
+
 // PbEncoder uses protobuf to encode/decode data.
 type PbEncoder struct {
-	Name               string
 	PbMarshalOptions   proto.MarshalOptions
 	PbUnmarshalOptions proto.UnmarshalOptions
 }
 
 var (
 	// Default is a PbEncoder with default options.
-	Default = enc.NewEncoder(&PbEncoder{
-		Name: "pb",
-	})
-	_ enc.Encoder = (*PbEncoder)(nil)
+	Default             = enc.NewEncoder(&PbEncoder{})
+	_       enc.Encoder = (*PbEncoder)(nil)
 )
 
-// EncoderName returns e.Name.
+// EncoderName returns Name.
 func (e *PbEncoder) EncoderName() string {
-	return e.Name
+	return Name
 }
 
 // EncodeData accepts proto.Message.
