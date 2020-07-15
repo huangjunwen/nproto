@@ -172,7 +172,7 @@ func (spec *rpcSpec) String() string {
 // reflect.TypeOf(input) == spec.InputType()
 func AssertInputType(spec RPCSpec, input interface{}) error {
 	if inputType := reflect.TypeOf(input); inputType != spec.InputType() {
-		return fmt.Errorf("%s input got unexpect type %s", spec, inputType.String())
+		return fmt.Errorf("%s got unexpect input type %s", spec, inputType.String())
 	}
 	return nil
 }
@@ -181,7 +181,7 @@ func AssertInputType(spec RPCSpec, input interface{}) error {
 // reflect.TypeOf(output) == spec.OutputType()
 func AssertOutputType(spec RPCSpec, output interface{}) error {
 	if outputType := reflect.TypeOf(output); outputType != spec.OutputType() {
-		return fmt.Errorf("%s output got unexpect type %s", spec, outputType.String())
+		return fmt.Errorf("%s got unexpect output type %s", spec, outputType.String())
 	}
 	return nil
 }

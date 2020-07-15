@@ -60,7 +60,7 @@ func (cc *ClientConn) makeHandler(spec RPCSpec, encoder npenc.Encoder) RPCHandle
 		a = append(a, args...)
 		return RPCErrorf(
 			code,
-			"natsrpc::client::%s::%s "+msg,
+			"natsrpc::client[%s::%s] "+msg,
 			a...,
 		)
 	}

@@ -173,7 +173,7 @@ func (sc *ServerConn) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 			a = append(a, args...)
 			return RPCErrorf(
 				code,
-				"natsrpc::server::%s::%s "+msg,
+				"natsrpc::server[%s::%s] "+msg,
 				a...,
 			)
 		}
