@@ -1,7 +1,6 @@
 package natsrpc
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sync"
@@ -13,31 +12,32 @@ import (
 	nats "github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
 
-	. "github.com/huangjunwen/nproto/v2"
-	. "github.com/huangjunwen/nproto/v2/enc"
+	npenc "github.com/huangjunwen/nproto/v2/enc"
 	npmd "github.com/huangjunwen/nproto/v2/md"
-	nppb "github.com/huangjunwen/nproto/v2/pb"
+	nppbenc "github.com/huangjunwen/nproto/v2/pb/enc"
+	nppbnatsrpc "github.com/huangjunwen/nproto/v2/pb/natsrpc"
+	nppbrpc "github.com/huangjunwen/nproto/v2/pb/rpc"
 	. "github.com/huangjunwen/nproto/v2/rpc"
 )
 
-type Server struct {
+type ServerConn struct {
 	// Immutable fields.
 	nc            *nats.Conn
 	ctx           context.Context
 	subjectPrefix string                // subject prefix in nats namespace
 	group         string                // server group
-	encoders      map[string]Encoder    // default encoders: encoderName -> Encoder
 	runner        taskrunner.TaskRunner // runner for handlers
 	logger        logr.Logger
 
-	mu sync.Mutex
+	mu sync.Mutex // to protect mutable fields
+
 	// Mutable fields.
 	closed     bool
 	subs       map[string]*nats.Subscription // svcName -> *nats.Subscription
 	methodMaps map[string]*methodMap         // svcName -> *methodMap
 }
 
-type ServerOption func(*Server) error
+type ServerConnOption func(*ServerConn) error
 
 // methodMap stores method info for a service.
 type methodMap struct {
@@ -47,99 +47,69 @@ type methodMap struct {
 }
 
 type methodInfo struct {
-	spec     *RPCSpec
+	spec     RPCSpec
 	handler  RPCHandler
-	encoders map[string]Encoder // supported encoders for this method
+	encoders map[string]npenc.Encoder // supported encoders for this method
 }
 
-var (
-	_ RPCServer = (*Server)(nil)
-)
-
-func NewServer(nc *nats.Conn, opts ...ServerOption) (srv *Server, err error) {
+func NewServerConn(nc *nats.Conn, opts ...ServerConnOption) (sc *ServerConn, err error) {
 
 	if nc.Opts.MaxReconnect >= 0 {
 		return nil, ErrNCMaxReconnect
 	}
 
-	server := &Server{
-		logger:        logr.Nop,
-		subjectPrefix: DefaultSubjectPrefix,
-		group:         DefaultGroup,
+	serverConn := &ServerConn{
 		nc:            nc,
 		ctx:           context.Background(),
+		subjectPrefix: DefaultSubjectPrefix,
+		group:         DefaultGroup,
+		runner:        limitedrunner.Must(),
+		logger:        logr.Nop,
 		subs:          make(map[string]*nats.Subscription),
 		methodMaps:    make(map[string]*methodMap),
 	}
 
-	server.runner, err = limitedrunner.New()
-	if err != nil {
-		return nil, err
-	}
 	defer func() {
 		if err != nil {
 			// XXX: server.runner maybe not the initial runner since ServerOption
 			// can change it.
-			server.runner.Close()
+			serverConn.runner.Close()
 		}
 	}()
 
-	if err = ServerOptEncoders(DefaultServerEncoders...)(server); err != nil {
-		return nil, err
-	}
-
 	for _, opt := range opts {
-		if err = opt(server); err != nil {
+		if err = opt(serverConn); err != nil {
 			return nil, err
 		}
 	}
 
-	return server, nil
+	return serverConn, nil
 }
 
-func (server *Server) RegistHandler(spec *RPCSpec, handler RPCHandler) error {
-	return server.registHandler(spec, handler, server.encoders)
-}
-
-func (server *Server) AltEncoderServer(encoders ...Encoder) (RPCServer, error) {
-
-	if len(encoders) == 0 {
-		return nil, fmt.Errorf("natsrpc.Server.AltEncoderServer no encoder?")
+func (sc *ServerConn) Server(encoders ...npenc.Encoder) RPCServerFunc {
+	m := map[string]npenc.Encoder{}
+	for _, e := range encoders {
+		m[e.EncoderName()] = e
 	}
-
-	encoders_ := map[string]Encoder{}
-	for _, encoder := range encoders {
-		encoders_[encoder.EncoderName()] = encoder
+	return func(spec RPCSpec, handler RPCHandler) error {
+		return sc.registHandler(spec, handler, m)
 	}
-
-	return RPCServerFunc(func(spec *RPCSpec, handler RPCHandler) error {
-		return server.registHandler(spec, handler, encoders_)
-	}), nil
-
 }
 
-func (server *Server) MustAltEncoderServer(encoders ...Encoder) RPCServer {
-	ret, err := server.AltEncoderServer(encoders...)
-	if err != nil {
-		panic(err)
-	}
-	return ret
-}
+func (sc *ServerConn) Close() error {
 
-func (server *Server) Close() error {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
 
-	server.mu.Lock()
-	defer server.mu.Unlock()
-
-	if server.closed {
+	if sc.closed {
 		return ErrServerClosed
 	}
 
-	server.closed = true
-	server.runner.Close()
+	sc.closed = true
+	sc.runner.Close()
 
-	if len(server.subs) != 0 {
-		for _, sub := range server.subs {
+	if len(sc.subs) != 0 {
+		for _, sub := range sc.subs {
 			sub.Unsubscribe()
 		}
 	}
@@ -147,32 +117,28 @@ func (server *Server) Close() error {
 	return nil
 }
 
-func (server *Server) registHandler(spec *RPCSpec, handler RPCHandler, encoders map[string]Encoder) error {
+func (sc *ServerConn) registHandler(spec RPCSpec, handler RPCHandler, encoders map[string]npenc.Encoder) error {
 
-	if err := spec.Validate(); err != nil {
-		return err
-	}
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
 
-	server.mu.Lock()
-	defer server.mu.Unlock()
-
-	if server.closed {
+	if sc.closed {
 		return ErrServerClosed
 	}
 
-	svcName := spec.SvcName
-	sub, ok := server.subs[svcName]
+	svcName := spec.SvcName()
+	sub, ok := sc.subs[svcName]
 
 	// No subscription means that it's the first method (of the service) registed.
 	if !ok {
 		mm := newMethodMap()
-		msgHandler := server.msgHandler(svcName, mm)
+		msgHandler := sc.msgHandler(svcName, mm)
 
 		// Real subscription.
 		var err error
-		sub, err = server.nc.QueueSubscribe(
-			subjectFormat(server.subjectPrefix, svcName, ">"),
-			server.group,
+		sub, err = sc.nc.QueueSubscribe(
+			subjectFormat(sc.subjectPrefix, svcName, ">"),
+			sc.group,
 			msgHandler,
 		)
 		if err != nil {
@@ -180,42 +146,50 @@ func (server *Server) registHandler(spec *RPCSpec, handler RPCHandler, encoders 
 		}
 
 		// Store subscription and method map.
-		server.subs[svcName] = sub
-		server.methodMaps[svcName] = mm
+		sc.subs[svcName] = sub
+		sc.methodMaps[svcName] = mm
 	}
 
-	server.methodMaps[svcName].Regist(spec, handler, encoders)
+	sc.methodMaps[svcName].Regist(spec, handler, encoders)
 	return nil
 
 }
 
-func (server *Server) msgHandler(svcName string, mm *methodMap) nats.MsgHandler {
+func (sc *ServerConn) msgHandler(svcName string, mm *methodMap) nats.MsgHandler {
 
-	parser := subjectParser(server.subjectPrefix, svcName)
+	parser := subjectParser(sc.subjectPrefix, svcName)
 
 	return func(msg *nats.Msg) {
 
 		ok, methodName := parser(msg.Subject)
 		if !ok {
 			// XXX: basically impossible branch
-			server.logger.Error(
-				nil,
-				"svc got unexpected subject",
-				"svc", svcName,
-				"subject", msg.Subject,
+			panic(fmt.Errorf("svc %q got unexpected subject %q", svcName, msg.Subject))
+		}
+
+		errorf := func(code RPCErrorCode, msg string, args ...interface{}) error {
+			a := make([]interface{}, 0, len(args)+2)
+			a = append(a, svcName, methodName)
+			a = append(a, args...)
+			return RPCErrorf(
+				code,
+				"natsrpc::server::%s::%s "+msg,
+				a...,
 			)
-			return
 		}
 
-		var _logger logr.Logger
-		logger := func() logr.Logger {
-			if _logger == nil {
-				_logger = server.logger.WithValues("svc", svcName, "method", methodName)
+		var logger func() logr.Logger
+		{
+			var l logr.Logger
+			logger = func() logr.Logger {
+				if l == nil {
+					l = sc.logger.WithValues("svc", svcName, "method", methodName)
+				}
+				return l
 			}
-			return _logger
 		}
 
-		reply := func(resp *nppb.NatsRPCResponse) {
+		reply := func(resp *nppbnatsrpc.Response) {
 			respData, err := proto.Marshal(resp)
 			if err != nil {
 				// XXX: basically impossible branch
@@ -223,7 +197,7 @@ func (server *Server) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 				return
 			}
 
-			err = server.nc.Publish(msg.Reply, respData)
+			err = sc.nc.Publish(msg.Reply, respData)
 			if err != nil {
 				logger().Error(err, "publish response error")
 				return
@@ -232,65 +206,54 @@ func (server *Server) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 		}
 
 		replyError := func(err error) {
-			switch err.(type) {
-			case *Error:
-				e := &nppb.Error{}
-				e.From(err.(*Error))
-				reply(&nppb.NatsRPCResponse{
-					Out: &nppb.NatsRPCResponse_Err{
-						Err: e,
+			switch e := err.(type) {
+			case *RPCError:
+				rpcErr := &nppbrpc.RPCError{}
+				rpcErr.From(e)
+				reply(&nppbnatsrpc.Response{
+					Out: &nppbnatsrpc.Response_RpcErr{
+						RpcErr: rpcErr,
 					},
 				})
 
 			default:
-				reply(&nppb.NatsRPCResponse{
-					Out: &nppb.NatsRPCResponse_PlainErr{
-						PlainErr: err.Error(),
+				reply(&nppbnatsrpc.Response{
+					Out: &nppbnatsrpc.Response_Err{
+						Err: err.Error(),
 					},
 				})
 			}
 		}
 
-		replyNprotoError := func(code ErrorCode, msg string, args ...interface{}) {
-			a := make([]interface{}, 0, len(args)+2)
-			a = append(a, svcName, methodName)
-			a = append(a, args...)
-			replyError(Errorf(
-				code,
-				"natsrpc.Server(%s::%s) "+msg,
-				a...,
-			))
-		}
-
-		if err := server.runner.Submit(func() {
+		if err := sc.runner.Submit(func() {
 
 			info := mm.Lookup(methodName)
 			if info == nil {
-				replyNprotoError(RPCMethodNotFound, "method not found")
+				replyError(errorf(MethodNotFound, "method not found"))
 				return
 			}
 
-			req := &nppb.NatsRPCRequest{}
+			req := &nppbnatsrpc.Request{}
 			if err := proto.Unmarshal(msg.Data, req); err != nil {
-				replyNprotoError(RPCRequestDecodeError, "unmarshal request error: %s", err.Error())
+				replyError(errorf(DecodeRequestError, "unmarshal reqeust error %s", err.Error()))
 				return
 			}
 
 			encoderName := req.Input.EncoderName
 			encoder, ok := info.encoders[encoderName]
 			if !ok {
-				replyNprotoError(RPCRequestDecodeError, "method does not support encoder %s", encoderName)
+				replyError(errorf(DecodeRequestError, "method does not support encoder %s", encoderName))
 				return
 			}
 
 			input := info.spec.NewInput()
-			if err := encoder.DecodeData(bytes.NewReader(req.Input.Bytes), input); err != nil {
-				replyNprotoError(RPCRequestDecodeError, "decode input error: %s", err.Error())
+			if err := encoder.DecodeData(req.Input.Bytes, input); err != nil {
+				replyError(errorf(DecodeRequestError, "decode input error %s", err.Error()))
 				return
 			}
 
 			// Setup context.
-			ctx := server.ctx
+			ctx := sc.ctx
 			if req.MetaData != nil {
 				ctx = npmd.NewIncomingContextWithMD(ctx, req.MetaData.To())
 			}
@@ -306,24 +269,24 @@ func (server *Server) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 				return
 			}
 
-			if err := info.spec.AssertOutputType(output); err != nil {
+			if err := AssertOutputType(info.spec, output); err != nil {
 				logger().Error(err, "assert output error")
-				replyNprotoError(RPCResponseEncodeError, "assert output error: %s", err.Error())
+				replyError(errorf(EncodeResponseError, "assert output error %s", err.Error()))
 				return
 			}
 
-			w := &bytes.Buffer{}
-			if err := encoder.EncodeData(w, output); err != nil {
+			w := []byte{}
+			if err := encoder.EncodeData(output, &w); err != nil {
 				logger().Error(err, "encode output error")
-				replyNprotoError(RPCResponseEncodeError, "encode output error: %s", err.Error())
+				replyError(errorf(EncodeResponseError, "encode output error %s", err.Error()))
 				return
 			}
 
-			reply(&nppb.NatsRPCResponse{
-				Out: &nppb.NatsRPCResponse_Output{
-					Output: &nppb.RawData{
+			reply(&nppbnatsrpc.Response{
+				Out: &nppbnatsrpc.Response_Output{
+					Output: &nppbenc.RawData{
 						EncoderName: encoder.EncoderName(),
-						Bytes:       w.Bytes(),
+						Bytes:       w,
 					},
 				},
 			})
@@ -352,11 +315,11 @@ func (mm *methodMap) Lookup(methodName string) *methodInfo {
 	return info
 }
 
-func (mm *methodMap) Regist(spec *RPCSpec, handler RPCHandler, encoders map[string]Encoder) {
+func (mm *methodMap) Regist(spec RPCSpec, handler RPCHandler, encoders map[string]npenc.Encoder) {
 
 	if handler == nil {
 		mm.mu.Lock()
-		delete(mm.v, spec.MethodName)
+		delete(mm.v, spec.MethodName())
 		mm.mu.Unlock()
 		return
 	}
@@ -367,7 +330,7 @@ func (mm *methodMap) Regist(spec *RPCSpec, handler RPCHandler, encoders map[stri
 		encoders: encoders,
 	}
 	mm.mu.Lock()
-	mm.v[spec.MethodName] = info
+	mm.v[spec.MethodName()] = info
 	mm.mu.Unlock()
 	return
 

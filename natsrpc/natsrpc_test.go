@@ -1,7 +1,6 @@
 package natsrpc
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"log"
@@ -40,14 +39,18 @@ func assertEqual(assert *assert.Assertions, v1, v2 interface{}, args ...interfac
 }
 
 func pbencRawData(m proto.Message) *RawData {
-	w := &bytes.Buffer{}
-	if err := pbenc.Default.EncodeData(w, m); err != nil {
+	w := []byte{}
+	if err := pbenc.Default.EncodeData(m, &w); err != nil {
 		panic(err)
 	}
 	return &RawData{
 		EncoderName: pbenc.Default.EncoderName(),
-		Bytes:       w.Bytes(),
+		Bytes:       w,
 	}
+}
+
+func newString(s string) *string {
+	return &s
 }
 
 func TestRPC(t *testing.T) {
@@ -64,16 +67,12 @@ func TestRPC(t *testing.T) {
 
 	// Test normal/error.
 	var (
-		sqrtSpec = &RPCSpec{
-			SvcName:    svcName,
-			MethodName: "sqrt",
-			NewInput: func() interface{} {
-				return wrapperspb.Double(0)
-			},
-			NewOutput: func() interface{} {
-				return wrapperspb.Double(0)
-			},
-		}
+		sqrtSpec = MustRPCSpec(
+			svcName,
+			"sqrt",
+			func() interface{} { return wrapperspb.Double(0) },
+			func() interface{} { return wrapperspb.Double(0) },
+		)
 		sqrtError   = errors.New("sqrt only accepts non-negative numbers")
 		sqrtHandler = func(ctx context.Context, in interface{}) (interface{}, error) {
 			input := in.(*wrapperspb.DoubleValue).Value
@@ -82,35 +81,27 @@ func TestRPC(t *testing.T) {
 			}
 			return wrapperspb.Double(math.Sqrt(input)), nil
 		}
-		sqrtRawDataSpec = NewRawDataRPCSpec(svcName, "sqrt")
+		sqrtRawDataSpec = MustRawDataRPCSpec(svcName, "sqrt")
 	)
 
 	// Test svc not found.
 	var (
-		svcNotFoundSpec = &RPCSpec{
-			SvcName:    svcName + "1",
-			MethodName: "svcNotFound",
-			NewInput: func() interface{} {
-				return wrapperspb.String("")
-			},
-			NewOutput: func() interface{} {
-				return wrapperspb.String("")
-			},
-		}
+		svcNotFoundSpec = MustRPCSpec(
+			svcName+"1",
+			"svcNotFound",
+			func() interface{} { return wrapperspb.String("") },
+			func() interface{} { return wrapperspb.String("") },
+		)
 	)
 
 	// Test method not found.
 	var (
-		notFoundSpec = &RPCSpec{
-			SvcName:    svcName,
-			MethodName: "notFound",
-			NewInput: func() interface{} {
-				return wrapperspb.String("")
-			},
-			NewOutput: func() interface{} {
-				return wrapperspb.String("")
-			},
-		}
+		notFoundSpec = MustRPCSpec(
+			svcName,
+			"notFound",
+			func() interface{} { return wrapperspb.String("") },
+			func() interface{} { return wrapperspb.String("") },
+		)
 		notFoundHandler = func(ctx context.Context, input interface{}) (interface{}, error) {
 			return input, nil
 		}
@@ -118,16 +109,12 @@ func TestRPC(t *testing.T) {
 
 	// Test encoder not support.
 	var (
-		jsonOnlySpec = &RPCSpec{
-			SvcName:    svcName,
-			MethodName: "jsonOnly",
-			NewInput: func() interface{} {
-				return &emptypb.Empty{}
-			},
-			NewOutput: func() interface{} {
-				return &emptypb.Empty{}
-			},
-		}
+		jsonOnlySpec = MustRPCSpec(
+			svcName,
+			"jsonOnly",
+			func() interface{} { return &emptypb.Empty{} },
+			func() interface{} { return &emptypb.Empty{} },
+		)
 		jsonOnlyHandler = func(ctx context.Context, in interface{}) (interface{}, error) {
 			return &emptypb.Empty{}, nil
 		}
@@ -135,16 +122,12 @@ func TestRPC(t *testing.T) {
 
 	// Test assert input type/output type.
 	var (
-		assertTypeSpec = &RPCSpec{
-			SvcName:    svcName,
-			MethodName: "assertType",
-			NewInput: func() interface{} {
-				return wrapperspb.String("")
-			},
-			NewOutput: func() interface{} {
-				return wrapperspb.String("")
-			},
-		}
+		assertTypeSpec = MustRPCSpec(
+			svcName,
+			"assertType",
+			func() interface{} { return wrapperspb.String("") },
+			func() interface{} { return wrapperspb.String("") },
+		)
 		assertTypeHandler = func(ctx context.Context, in interface{}) (interface{}, error) {
 			// XXX: wrong output type
 			return &emptypb.Empty{}, nil
@@ -153,16 +136,12 @@ func TestRPC(t *testing.T) {
 
 	// Test encoding/decoding.
 	var (
-		encodeSpec = &RPCSpec{
-			SvcName:    svcName,
-			MethodName: "encode",
-			NewInput: func() interface{} {
-				return &map[string]interface{}{}
-			},
-			NewOutput: func() interface{} {
-				return &map[string]interface{}{}
-			},
-		}
+		encodeSpec = MustRPCSpec(
+			svcName,
+			"encode",
+			func() interface{} { return &map[string]interface{}{} },
+			func() interface{} { return &map[string]interface{}{} },
+		)
 		encodeHandler = func(ctx context.Context, in interface{}) (interface{}, error) {
 			input := in.(*map[string]interface{})
 			if (*input)["fn"] != nil {
@@ -171,42 +150,28 @@ func TestRPC(t *testing.T) {
 			}
 			return input, nil
 		}
-		encodeWrongInputSpec = &RPCSpec{
-			SvcName:    svcName,
-			MethodName: "encode",
-			NewInput: func() interface{} {
-				ret := ""
-				return &ret
-			},
-			NewOutput: func() interface{} {
-				return &map[string]interface{}{}
-			},
-		}
-		encodeWrongOutputSpec = &RPCSpec{
-			SvcName:    svcName,
-			MethodName: "encode",
-			NewInput: func() interface{} {
-				return &map[string]interface{}{}
-			},
-			NewOutput: func() interface{} {
-				ret := ""
-				return &ret
-			},
-		}
+		encodeWrongInputSpec = MustRPCSpec(
+			svcName,
+			"encode",
+			func() interface{} { return newString("") },
+			func() interface{} { return &map[string]interface{}{} },
+		)
+		encodeWrongOutputSpec = MustRPCSpec(
+			svcName,
+			"encode",
+			func() interface{} { return &map[string]interface{}{} },
+			func() interface{} { return newString("") },
+		)
 	)
 
 	// Test meta data.
 	var (
-		metaDataSpec = &RPCSpec{
-			SvcName:    svcName,
-			MethodName: "metaData",
-			NewInput: func() interface{} {
-				return &emptypb.Empty{}
-			},
-			NewOutput: func() interface{} {
-				return wrapperspb.String("")
-			},
-		}
+		metaDataSpec = MustRPCSpec(
+			svcName,
+			"metaData",
+			func() interface{} { return &emptypb.Empty{} },
+			func() interface{} { return wrapperspb.String("") },
+		)
 		metaDataError   = errors.New("No metaData found")
 		metaDataHandler = func(ctx context.Context, in interface{}) (interface{}, error) {
 			md := npmd.MDFromIncomingContext(ctx)
@@ -225,16 +190,12 @@ func TestRPC(t *testing.T) {
 
 	// Test timeout.
 	var (
-		timeoutSpec = &RPCSpec{
-			SvcName:    svcName,
-			MethodName: "timeout",
-			NewInput: func() interface{} {
-				return &emptypb.Empty{}
-			},
-			NewOutput: func() interface{} {
-				return &emptypb.Empty{}
-			},
-		}
+		timeoutSpec = MustRPCSpec(
+			svcName,
+			"timeout",
+			func() interface{} { return &emptypb.Empty{} },
+			func() interface{} { return &emptypb.Empty{} },
+		)
 		// NOTE: we can't get result from rpc output since client maybe context cancel.
 		// So put result here.
 		timeoutResultCh = make(chan bool, 1)
@@ -252,16 +213,12 @@ func TestRPC(t *testing.T) {
 
 	// Test handler block.
 	var (
-		blockSpec = &RPCSpec{
-			SvcName:    svcName,
-			MethodName: "block",
-			NewInput: func() interface{} {
-				return &emptypb.Empty{}
-			},
-			NewOutput: func() interface{} {
-				return &emptypb.Empty{}
-			},
-		}
+		blockSpec = MustRPCSpec(
+			svcName,
+			"block",
+			func() interface{} { return &emptypb.Empty{} },
+			func() interface{} { return &emptypb.Empty{} },
+		)
 		blockCh      = make(chan struct{})
 		blockHandler = func(ctx context.Context, in interface{}) (interface{}, error) {
 			<-blockCh
@@ -307,31 +264,10 @@ func TestRPC(t *testing.T) {
 		group         = "group2"
 	)
 
-	// Creates server.
+	// Creates server conn.
 	var (
-		server         *Server
-		jsonOnlyServer RPCServer
+		sc *ServerConn
 	)
-
-	// Test NewServer with bad options.
-	{
-		runner, err := limitedrunner.New(
-			limitedrunner.MinWorkers(1),
-			limitedrunner.MaxWorkers(1),
-			limitedrunner.QueueSize(1),
-		)
-		if err != nil {
-			log.Panic(err)
-		}
-
-		serverBad, err := NewServer(
-			nc1,
-			ServerOptRunner(runner),
-			ServerOptEncoders(), // <- bad option
-		)
-		assert.Nil(serverBad)
-		assert.Error(err)
-	}
 
 	{
 		runner, err := limitedrunner.New(
@@ -348,89 +284,97 @@ func TestRPC(t *testing.T) {
 		lg := zerolog.New(&out).With().Timestamp().Logger()
 		logger := (*zerologr.Logger)(&lg)
 
-		server, err = NewServer(
+		sc, err = NewServerConn(
 			nc1,
-			ServerOptSubjectPrefix(subjectPrefix),
-			ServerOptGroup(group),
-			ServerOptEncoders(jsonenc.Default, pbenc.Default),
-			ServerOptRunner(runner),
-			ServerOptLogger(logger),
-			ServerOptContext(baseCtx),
+			SCOptSubjectPrefix(subjectPrefix),
+			SCOptGroup(group),
+			SCOptRunner(runner),
+			SCOptLogger(logger),
+			SCOptContext(baseCtx),
 		)
 		if err != nil {
 			log.Panic(err)
 		}
-		defer server.Close()
-		log.Printf("natsrpc.Server created.\n")
-
-		jsonOnlyServer = server.MustAltEncoderServer(jsonenc.Default)
+		defer sc.Close()
+		log.Printf("natsrpc.ServerConn created.\n")
 	}
 
-	// Creates two rpc clients using different encodings.
-	var pbClient, jsonClient *Client
+	// This server accepts protobuf specs.
+	pbServer := sc.Server(jsonenc.Default, pbenc.Default)
+
+	// This server accepts json marshalable specs.
+	jsonServer := sc.Server(jsonenc.Default)
+
+	// Creates client conns.
+	var (
+		cc1, cc2 *ClientConn
+	)
 	{
-		pbClient, err = NewClient(
+		cc1, err = NewClientConn(
 			nc1,
-			ClientOptSubjectPrefix(subjectPrefix),
-			ClientOptEncoder(pbenc.Default),
-			ClientOptTimeout(time.Second),
+			CCOptSubjectPrefix(subjectPrefix),
+			CCOptTimeout(time.Second),
 		)
 		if err != nil {
 			log.Panic(err)
 		}
-		log.Printf("natsrpc.Client (pb) created.\n")
+		log.Printf("natsrpc.ClientConn 1 created.\n")
 
-		jsonClient, err = NewClient(
+		cc2, err = NewClientConn(
 			nc2,
-			ClientOptSubjectPrefix(subjectPrefix),
-			ClientOptEncoder(jsonenc.Default),
-			ClientOptTimeout(time.Second),
+			CCOptSubjectPrefix(subjectPrefix),
+			CCOptTimeout(time.Second),
 		)
 		if err != nil {
 			log.Panic(err)
 		}
-		log.Printf("natsrpc.Client (json) created.\n")
+		log.Printf("natsrpc.ClientConn 2 created.\n")
 	}
+
+	// This client accepts protobuf specs.
+	pbClient := cc1.Client(pbenc.Default)
+
+	// This client accepts json marshalable specs.
+	jsonClient := cc2.Client(jsonenc.Default)
 
 	// Regist handlers.
-	if err := server.RegistHandler(sqrtSpec, sqrtHandler); err != nil {
+	if err := pbServer.RegistHandler(sqrtSpec, sqrtHandler); err != nil {
 		log.Panic(err)
 	}
-	if err := jsonOnlyServer.RegistHandler(jsonOnlySpec, jsonOnlyHandler); err != nil {
+	if err := jsonServer.RegistHandler(jsonOnlySpec, jsonOnlyHandler); err != nil {
 		log.Panic(err)
 	}
-	if err := server.RegistHandler(assertTypeSpec, assertTypeHandler); err != nil {
+	if err := pbServer.RegistHandler(assertTypeSpec, assertTypeHandler); err != nil {
 		log.Panic(err)
 	}
-	if err := jsonOnlyServer.RegistHandler(encodeSpec, encodeHandler); err != nil {
+	if err := jsonServer.RegistHandler(encodeSpec, encodeHandler); err != nil {
 		log.Panic(err)
 	}
-	if err := server.RegistHandler(metaDataSpec, metaDataHandler); err != nil {
+	if err := pbServer.RegistHandler(metaDataSpec, metaDataHandler); err != nil {
 		log.Panic(err)
 	}
-	if err := server.RegistHandler(timeoutSpec, timeoutHandler); err != nil {
+	if err := pbServer.RegistHandler(timeoutSpec, timeoutHandler); err != nil {
 		log.Panic(err)
 	}
-	if err := server.RegistHandler(blockSpec, blockHandler); err != nil {
+	if err := pbServer.RegistHandler(blockSpec, blockHandler); err != nil {
 		log.Panic(err)
 	}
 
 	{
 		// Regist and deregist
-		if err := server.RegistHandler(notFoundSpec, notFoundHandler); err != nil {
+		if err := pbServer.RegistHandler(notFoundSpec, notFoundHandler); err != nil {
 			log.Panic(err)
 		}
-		if err := server.RegistHandler(notFoundSpec, nil); err != nil {
+		if err := pbServer.RegistHandler(notFoundSpec, nil); err != nil {
 			log.Panic(err)
 		}
 	}
 
-	assert.Error(server.RegistHandler(&RPCSpec{}, nil))
-
 	testCases := []*struct {
-		Client   RPCClient
-		Spec     *RPCSpec
-		GenInput func() (context.Context, interface{})
+		Client     RPCClient
+		ClientName string
+		Spec       RPCSpec
+		GenInput   func() (context.Context, interface{})
 
 		Before func(RPCHandler)
 		After  func()
@@ -441,8 +385,9 @@ func TestRPC(t *testing.T) {
 	}{
 		// normal case, encoder is pb
 		{
-			Client: pbClient,
-			Spec:   sqrtSpec,
+			Client:     pbClient,
+			ClientName: "pb",
+			Spec:       sqrtSpec,
 			GenInput: func() (context.Context, interface{}) {
 				return context.Background(), wrapperspb.Double(9)
 			},
@@ -451,8 +396,9 @@ func TestRPC(t *testing.T) {
 		},
 		// normal case, encoder is json
 		{
-			Client: jsonClient,
-			Spec:   sqrtSpec,
+			Client:     jsonClient,
+			ClientName: "json",
+			Spec:       sqrtSpec,
 			GenInput: func() (context.Context, interface{}) {
 				return context.Background(), wrapperspb.Double(9)
 			},
@@ -461,8 +407,9 @@ func TestRPC(t *testing.T) {
 		},
 		// handler return error, encoder is pb
 		{
-			Client: pbClient,
-			Spec:   sqrtSpec,
+			Client:     pbClient,
+			ClientName: "pb",
+			Spec:       sqrtSpec,
 			GenInput: func() (context.Context, interface{}) {
 				return context.Background(), wrapperspb.Double(-9)
 			},
@@ -471,8 +418,9 @@ func TestRPC(t *testing.T) {
 		},
 		// handler return error, encoder is json
 		{
-			Client: jsonClient,
-			Spec:   sqrtSpec,
+			Client:     jsonClient,
+			ClientName: "json",
+			Spec:       sqrtSpec,
 			GenInput: func() (context.Context, interface{}) {
 				return context.Background(), wrapperspb.Double(-9)
 			},
@@ -481,8 +429,9 @@ func TestRPC(t *testing.T) {
 		},
 		// use RawData, encoder is pb
 		{
-			Client: pbClient,
-			Spec:   sqrtRawDataSpec,
+			Client:     pbClient,
+			ClientName: "pb",
+			Spec:       sqrtRawDataSpec,
 			GenInput: func() (context.Context, interface{}) {
 				return context.Background(), pbencRawData(wrapperspb.Double(9))
 			},
@@ -491,8 +440,9 @@ func TestRPC(t *testing.T) {
 		},
 		// use RawData, encoder is json
 		{
-			Client: jsonClient,
-			Spec:   sqrtRawDataSpec,
+			Client:     jsonClient,
+			ClientName: "json",
+			Spec:       sqrtRawDataSpec,
 			GenInput: func() (context.Context, interface{}) {
 				return context.Background(), &RawData{
 					EncoderName: jsonenc.Default.EncoderName(),
@@ -507,8 +457,9 @@ func TestRPC(t *testing.T) {
 		},
 		// svc not found
 		{
-			Client: pbClient,
-			Spec:   svcNotFoundSpec,
+			Client:     pbClient,
+			ClientName: "pb",
+			Spec:       svcNotFoundSpec,
 			GenInput: func() (context.Context, interface{}) {
 				return context.Background(), wrapperspb.String("svcNotFound")
 			},
@@ -517,8 +468,9 @@ func TestRPC(t *testing.T) {
 		},
 		// method not found
 		{
-			Client: pbClient,
-			Spec:   notFoundSpec,
+			Client:     pbClient,
+			ClientName: "pb",
+			Spec:       notFoundSpec,
 			GenInput: func() (context.Context, interface{}) {
 				return context.Background(), wrapperspb.String("methodNotFound")
 			},
@@ -527,8 +479,9 @@ func TestRPC(t *testing.T) {
 		},
 		// call json method with pb client
 		{
-			Client: pbClient,
-			Spec:   jsonOnlySpec,
+			Client:     pbClient,
+			ClientName: "pb",
+			Spec:       jsonOnlySpec,
 			GenInput: func() (context.Context, interface{}) {
 				return context.Background(), &emptypb.Empty{}
 			},
@@ -537,8 +490,9 @@ func TestRPC(t *testing.T) {
 		},
 		// call json method with json client
 		{
-			Client: jsonClient,
-			Spec:   jsonOnlySpec,
+			Client:     jsonClient,
+			ClientName: "json",
+			Spec:       jsonOnlySpec,
 			GenInput: func() (context.Context, interface{}) {
 				return context.Background(), &emptypb.Empty{}
 			},
@@ -547,8 +501,9 @@ func TestRPC(t *testing.T) {
 		},
 		// call with wrong input type
 		{
-			Client: pbClient,
-			Spec:   assertTypeSpec,
+			Client:     pbClient,
+			ClientName: "pb",
+			Spec:       assertTypeSpec,
 			GenInput: func() (context.Context, interface{}) {
 				return context.Background(), &emptypb.Empty{}
 			},
@@ -557,8 +512,9 @@ func TestRPC(t *testing.T) {
 		},
 		// call with wrong output type
 		{
-			Client: pbClient,
-			Spec:   assertTypeSpec,
+			Client:     pbClient,
+			ClientName: "pb",
+			Spec:       assertTypeSpec,
 			GenInput: func() (context.Context, interface{}) {
 				return context.Background(), wrapperspb.String("1")
 			},
@@ -567,19 +523,20 @@ func TestRPC(t *testing.T) {
 		},
 		// server decode input error
 		{
-			Client: jsonClient,
-			Spec:   encodeWrongInputSpec,
+			Client:     jsonClient,
+			ClientName: "json",
+			Spec:       encodeWrongInputSpec,
 			GenInput: func() (context.Context, interface{}) {
-				input := "123"
-				return context.Background(), &input
+				return context.Background(), newString("123")
 			},
 			ExpectOutput: nil,
 			ExpectError:  true,
 		},
 		// server encode output error
 		{
-			Client: jsonClient,
-			Spec:   encodeSpec,
+			Client:     jsonClient,
+			ClientName: "json",
+			Spec:       encodeSpec,
 			GenInput: func() (context.Context, interface{}) {
 				return context.Background(), &map[string]interface{}{
 					"fn": "1",
@@ -590,8 +547,9 @@ func TestRPC(t *testing.T) {
 		},
 		// client encode input error
 		{
-			Client: jsonClient,
-			Spec:   encodeSpec,
+			Client:     jsonClient,
+			ClientName: "json",
+			Spec:       encodeSpec,
 			GenInput: func() (context.Context, interface{}) {
 				return context.Background(), &map[string]interface{}{
 					"fn": func() {},
@@ -602,8 +560,9 @@ func TestRPC(t *testing.T) {
 		},
 		// client decode output error
 		{
-			Client: jsonClient,
-			Spec:   encodeWrongOutputSpec,
+			Client:     jsonClient,
+			ClientName: "json",
+			Spec:       encodeWrongOutputSpec,
 			GenInput: func() (context.Context, interface{}) {
 				return context.Background(), &map[string]interface{}{
 					"a": "b",
@@ -614,8 +573,9 @@ func TestRPC(t *testing.T) {
 		},
 		// call with meta data.
 		{
-			Client: pbClient,
-			Spec:   metaDataSpec,
+			Client:     pbClient,
+			ClientName: "pb",
+			Spec:       metaDataSpec,
 			GenInput: func() (context.Context, interface{}) {
 				ctx := npmd.NewOutgoingContextWithMD(
 					context.Background(),
@@ -628,8 +588,9 @@ func TestRPC(t *testing.T) {
 		},
 		// call with timeout 2 seconds.
 		{
-			Client: pbClient,
-			Spec:   timeoutSpec,
+			Client:     pbClient,
+			ClientName: "pb",
+			Spec:       timeoutSpec,
 			GenInput: func() (context.Context, interface{}) {
 				ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
 				return ctx, &emptypb.Empty{}
@@ -640,8 +601,9 @@ func TestRPC(t *testing.T) {
 		},
 		// call with timeout 0.2 seconds.
 		{
-			Client: jsonClient,
-			Spec:   timeoutSpec,
+			Client:     jsonClient,
+			ClientName: "json",
+			Spec:       timeoutSpec,
 			GenInput: func() (context.Context, interface{}) {
 				ctx, _ := context.WithTimeout(context.Background(), 200*time.Millisecond)
 				return ctx, &emptypb.Empty{}
@@ -652,8 +614,9 @@ func TestRPC(t *testing.T) {
 		},
 		// call with already timeout.
 		{
-			Client: jsonClient,
-			Spec:   timeoutSpec,
+			Client:     jsonClient,
+			ClientName: "json",
+			Spec:       timeoutSpec,
 			GenInput: func() (context.Context, interface{}) {
 				ctx, _ := context.WithTimeout(context.Background(), time.Millisecond)
 				time.Sleep(100 * time.Millisecond)
@@ -664,8 +627,9 @@ func TestRPC(t *testing.T) {
 		},
 		// block handlers.
 		{
-			Client: jsonClient,
-			Spec:   blockSpec,
+			Client:     jsonClient,
+			ClientName: "json",
+			Spec:       blockSpec,
 			GenInput: func() (context.Context, interface{}) {
 				return context.Background(), &emptypb.Empty{}
 			},
@@ -708,13 +672,8 @@ func TestRPC(t *testing.T) {
 			}
 		}
 
-		clientName := "pb"
-		if testCase.Client == jsonClient {
-			clientName = "json"
-		}
-
 		log.Printf("[%d] spec=%+v client=%s\n\tctx=%+v\n\tinput=%T(%+v)\n\toutput=%T(%+v)\n\terr=%+v\n\n",
-			i, testCase.Spec, clientName, ctx, input, input, output, output, err)
+			i, testCase.Spec, testCase.ClientName, ctx, input, input, output, output, err)
 	}
 
 }

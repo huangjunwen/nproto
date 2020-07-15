@@ -8,6 +8,7 @@ import (
 // Encoder is used to encode/decode data.
 type Encoder interface {
 	// EncoderName is used to match Encoder for encoding/decoding.
+	// Usually describes the format it used.
 	EncoderName() string
 
 	// EncodeData encodes data to w.

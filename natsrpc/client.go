@@ -1,7 +1,6 @@
 package natsrpc
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -10,82 +9,79 @@ import (
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
 
-	. "github.com/huangjunwen/nproto/v2"
-	. "github.com/huangjunwen/nproto/v2/enc"
+	npenc "github.com/huangjunwen/nproto/v2/enc"
 	npmd "github.com/huangjunwen/nproto/v2/md"
-	nppb "github.com/huangjunwen/nproto/v2/pb"
+	nppbenc "github.com/huangjunwen/nproto/v2/pb/enc"
+	nppbmd "github.com/huangjunwen/nproto/v2/pb/md"
+	nppbnatsrpc "github.com/huangjunwen/nproto/v2/pb/natsrpc"
 	. "github.com/huangjunwen/nproto/v2/rpc"
 )
 
-type Client struct {
+type ClientConn struct {
 	// Immutable fields.
 	subjectPrefix string
-	encoder       Encoder
 	timeout       time.Duration
 	nc            *nats.Conn
 }
 
-type ClientOption func(*Client) error
+type ClientConnOption func(*ClientConn) error
 
-var (
-	_ RPCClient = (*Client)(nil)
-)
-
-func NewClient(nc *nats.Conn, opts ...ClientOption) (*Client, error) {
+func NewClientConn(nc *nats.Conn, opts ...ClientConnOption) (*ClientConn, error) {
 
 	if nc.Opts.MaxReconnect >= 0 {
 		return nil, ErrNCMaxReconnect
 	}
 
-	client := &Client{
+	cc := &ClientConn{
 		subjectPrefix: DefaultSubjectPrefix,
-		encoder:       DefaultClientEncoder,
 		timeout:       DefaultClientTimeout,
 		nc:            nc,
 	}
 	for _, opt := range opts {
-		if err := opt(client); err != nil {
+		if err := opt(cc); err != nil {
 			return nil, err
 		}
 	}
 
-	return client, nil
+	return cc, nil
 }
 
-func (client *Client) MakeHandler(spec *RPCSpec) RPCHandler {
+func (cc *ClientConn) Client(encoder npenc.Encoder) RPCClientFunc {
+	return func(spec RPCSpec) RPCHandler {
+		return cc.makeHandler(spec, encoder)
+	}
+}
 
-	nprotoErrorf := func(code ErrorCode, msg string, args ...interface{}) error {
+func (cc *ClientConn) makeHandler(spec RPCSpec, encoder npenc.Encoder) RPCHandler {
+
+	errorf := func(code RPCErrorCode, msg string, args ...interface{}) error {
 		a := make([]interface{}, 0, len(args)+2)
-		a = append(a, spec.SvcName, spec.MethodName)
+		a = append(a, spec.SvcName(), spec.MethodName())
 		a = append(a, args...)
-		return Errorf(
+		return RPCErrorf(
 			code,
-			"natsrpc.Client(%s::%s) "+msg,
+			"natsrpc::client::%s::%s "+msg,
 			a...,
 		)
 	}
 
 	return func(ctx context.Context, input interface{}) (interface{}, error) {
 
-		if err := spec.Validate(); err != nil {
-			return nil, nprotoErrorf(RPCSpecInvalid, err.Error())
+		if err := AssertInputType(spec, input); err != nil {
+			return nil, errorf(EncodeRequestError, "assert input type error %s", err.Error())
 		}
 
-		if err := spec.AssertInputType(input); err != nil {
-			return nil, nprotoErrorf(RPCRequestEncodeError, err.Error())
+		w := []byte{}
+		if err := encoder.EncodeData(input, &w); err != nil {
+			return nil, errorf(EncodeRequestError, "encode input error %s", err.Error())
 		}
 
-		w := &bytes.Buffer{}
-		if err := client.encoder.EncodeData(w, input); err != nil {
-			return nil, nprotoErrorf(RPCRequestEncodeError, err.Error())
-		}
-
-		req := &nppb.NatsRPCRequest{
-			Input: &nppb.RawData{
-				EncoderName: client.encoder.EncoderName(),
-				Bytes:       w.Bytes(),
+		req := &nppbnatsrpc.Request{
+			MetaData: &nppbmd.MD{},
+			Input: &nppbenc.RawData{
+				EncoderName: encoder.EncoderName(),
+				Bytes:       w,
 			},
-			MetaData: &nppb.MD{},
 		}
 
 		md := npmd.MDFromOutgoingContext(ctx)
@@ -96,7 +92,7 @@ func (client *Client) MakeHandler(spec *RPCSpec) RPCHandler {
 		dl, ok := ctx.Deadline()
 		if !ok {
 			var cancel context.CancelFunc
-			ctx, cancel = context.WithTimeout(ctx, client.timeout)
+			ctx, cancel = context.WithTimeout(ctx, cc.timeout)
 			defer cancel()
 			dl, ok = ctx.Deadline()
 			if !ok {
@@ -111,38 +107,38 @@ func (client *Client) MakeHandler(spec *RPCSpec) RPCHandler {
 
 		reqData, err := proto.Marshal(req)
 		if err != nil {
-			return nil, nprotoErrorf(RPCRequestEncodeError, "marshal request error: %s", err.Error())
+			return nil, errorf(EncodeRequestError, "marshal request error %s", err.Error())
 		}
 
-		respMsg, err := client.nc.RequestWithContext(
+		respMsg, err := cc.nc.RequestWithContext(
 			ctx,
-			subjectFormat(client.subjectPrefix, spec.SvcName, spec.MethodName),
+			subjectFormat(cc.subjectPrefix, spec.SvcName(), spec.MethodName()),
 			reqData,
 		)
 		if err != nil {
 			return nil, err
 		}
 
-		resp := &nppb.NatsRPCResponse{}
+		resp := &nppbnatsrpc.Response{}
 		if err := proto.Unmarshal(respMsg.Data, resp); err != nil {
-			return nil, nprotoErrorf(RPCResponseDecodeError, "unmarshal response error: %s", err.Error())
+			return nil, errorf(DecodeResponseError, "unmarshal response error %s", err.Error())
 		}
 
 		switch out := resp.Out.(type) {
-		case *nppb.NatsRPCResponse_Output:
-			if out.Output.EncoderName != client.encoder.EncoderName() {
-				return nil, nprotoErrorf(
-					RPCResponseDecodeError,
+		case *nppbnatsrpc.Response_Output:
+			if out.Output.EncoderName != encoder.EncoderName() {
+				return nil, errorf(
+					DecodeResponseError,
 					"expect output encoded by %s, but got %s",
-					client.encoder.EncoderName(),
+					encoder.EncoderName(),
 					out.Output.EncoderName,
 				)
 			}
 
 			output := spec.NewOutput()
-			if err := client.encoder.DecodeData(bytes.NewReader(out.Output.Bytes), output); err != nil {
-				return nil, nprotoErrorf(
-					RPCResponseDecodeError,
+			if err := encoder.DecodeData(out.Output.Bytes, output); err != nil {
+				return nil, errorf(
+					DecodeResponseError,
 					"decode output error: %s",
 					err.Error(),
 				)
@@ -150,11 +146,11 @@ func (client *Client) MakeHandler(spec *RPCSpec) RPCHandler {
 
 			return output, nil
 
-		case *nppb.NatsRPCResponse_Err:
-			return nil, out.Err.To()
+		case *nppbnatsrpc.Response_RpcErr:
+			return nil, out.RpcErr.To()
 
-		case *nppb.NatsRPCResponse_PlainErr:
-			return nil, errors.New(out.PlainErr)
+		case *nppbnatsrpc.Response_Err:
+			return nil, errors.New(out.Err)
 
 		default:
 			panic(fmt.Errorf("Unexpected branch"))

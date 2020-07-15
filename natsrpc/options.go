@@ -2,84 +2,71 @@ package natsrpc
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/huangjunwen/golibs/logr"
 	"github.com/huangjunwen/golibs/taskrunner"
-
-	"github.com/huangjunwen/nproto/v2/enc"
 )
 
-func ServerOptLogger(logger logr.Logger) ServerOption {
-	return func(server *Server) error {
-		server.logger = logger.WithValues("component", "nproto.natsrpc.Server")
+var (
+	// DefaultSubjectPrefix is the default value of SCOptSubjectPrefix/CCOptSubjectPrefix.
+	DefaultSubjectPrefix = "natsrpc"
+
+	// DefaultGroup is the default value of SCOptGroup.
+	DefaultGroup = "def"
+
+	// DefaultClientTimeout is the default value of CCOptTimeout.
+	DefaultClientTimeout time.Duration = 5 * time.Second
+)
+
+func SCOptLogger(logger logr.Logger) ServerConnOption {
+	return func(sc *ServerConn) error {
+		sc.logger = logger.WithValues("component", "nproto.natsrpc.ServerConn")
 		return nil
 	}
 }
 
-// ServerOptRunner sets runner for handlers. Note that the server
-// will call runner.Close() when closed.
-func ServerOptRunner(runner taskrunner.TaskRunner) ServerOption {
-	return func(server *Server) error {
+// SCOptRunner sets runner for handlers. Note that the runner will be closed in ServerConn.Close().
+func SCOptRunner(runner taskrunner.TaskRunner) ServerConnOption {
+	return func(sc *ServerConn) error {
 		// Close it before replacing.
-		server.runner.Close()
-		server.runner = runner
+		sc.runner.Close()
+		sc.runner = runner
 		return nil
 	}
 }
 
-func ServerOptSubjectPrefix(subjectPrefix string) ServerOption {
-	return func(server *Server) error {
-		server.subjectPrefix = subjectPrefix
+func SCOptSubjectPrefix(subjectPrefix string) ServerConnOption {
+	return func(sc *ServerConn) error {
+		sc.subjectPrefix = subjectPrefix
 		return nil
 	}
 }
 
-func ServerOptGroup(group string) ServerOption {
-	return func(server *Server) error {
-		server.group = group
+func SCOptGroup(group string) ServerConnOption {
+	return func(sc *ServerConn) error {
+		sc.group = group
 		return nil
 	}
 }
 
-func ServerOptEncoders(encoders ...enc.Encoder) ServerOption {
-	return func(server *Server) error {
-		if len(encoders) == 0 {
-			return fmt.Errorf("natsrpc.ServerOptEncoders no encoder?")
-		}
-		server.encoders = map[string]enc.Encoder{}
-		for _, encoder := range encoders {
-			server.encoders[encoder.EncoderName()] = encoder
-		}
+func SCOptContext(ctx context.Context) ServerConnOption {
+	return func(sc *ServerConn) error {
+		sc.ctx = ctx
 		return nil
 	}
 }
 
-func ServerOptContext(ctx context.Context) ServerOption {
-	return func(server *Server) error {
-		server.ctx = ctx
+func CCOptSubjectPrefix(subjectPrefix string) ClientConnOption {
+	return func(cc *ClientConn) error {
+		cc.subjectPrefix = subjectPrefix
 		return nil
 	}
 }
 
-func ClientOptSubjectPrefix(subjectPrefix string) ClientOption {
-	return func(client *Client) error {
-		client.subjectPrefix = subjectPrefix
-		return nil
-	}
-}
-
-func ClientOptEncoder(encoder enc.Encoder) ClientOption {
-	return func(client *Client) error {
-		client.encoder = encoder
-		return nil
-	}
-}
-
-func ClientOptTimeout(timeout time.Duration) ClientOption {
-	return func(client *Client) error {
-		client.timeout = timeout
+func CCOptTimeout(timeout time.Duration) ClientConnOption {
+	return func(cc *ClientConn) error {
+		cc.timeout = timeout
 		return nil
 	}
 }
