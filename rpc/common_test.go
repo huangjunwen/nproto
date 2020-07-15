@@ -215,7 +215,7 @@ func TestAssertInputType(t *testing.T) {
 		},
 	} {
 
-		err := testCase.Spec.AssertInputType(testCase.Input)
+		err := AssertInputType(testCase.Spec, testCase.Input)
 		if testCase.ExpectError {
 			assert.Error(err, "test case %d", i)
 		} else {
@@ -259,7 +259,7 @@ func TestAssertOutputType(t *testing.T) {
 		},
 	} {
 
-		err := testCase.Spec.AssertOutputType(testCase.Output)
+		err := AssertOutputType(testCase.Spec, testCase.Output)
 		if testCase.ExpectError {
 			assert.Error(err, "test case %d", i)
 		} else {

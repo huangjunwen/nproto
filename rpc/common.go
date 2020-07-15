@@ -32,13 +32,11 @@ type RPCSpec interface {
 	// NewOutput generates a new output parameter. Must be a pointer.
 	NewOutput() interface{}
 
-	// AssertInputType makes sure input's type conform to the spec:
-	// reflect.TypeOf(input) == reflect.TypeOf(NewInput())
-	AssertInputType(input interface{}) error
+	// InputType returns input's type.
+	InputType() reflect.Type
 
-	// AssertOutputType makes sure output's type conform to the spec:
-	// reflect.TypeOf(output) == reflect.TypeOf(NewOutput())
-	AssertOutputType(output interface{}) error
+	// OutputType returns output's type.
+	OutputType() reflect.Type
 }
 
 type rpcSpec struct {
@@ -158,20 +156,32 @@ func (spec *rpcSpec) NewOutput() interface{} {
 	return spec.newOutput()
 }
 
-func (spec *rpcSpec) AssertInputType(input interface{}) error {
-	if inputType := reflect.TypeOf(input); inputType != spec.inputType {
+func (spec *rpcSpec) InputType() reflect.Type {
+	return spec.inputType
+}
+
+func (spec *rpcSpec) OutputType() reflect.Type {
+	return spec.outputType
+}
+
+func (spec *rpcSpec) String() string {
+	return fmt.Sprintf("RPCSpec(%s::%s %s=>%s)", spec.svcName, spec.methodName, spec.inputType.String(), spec.outputType.String())
+}
+
+// AssertInputType makes sure input's type conform to the spec:
+// reflect.TypeOf(input) == spec.InputType()
+func AssertInputType(spec RPCSpec, input interface{}) error {
+	if inputType := reflect.TypeOf(input); inputType != spec.InputType() {
 		return fmt.Errorf("%s input got unexpect type %s", spec, inputType.String())
 	}
 	return nil
 }
 
-func (spec *rpcSpec) AssertOutputType(output interface{}) error {
-	if outputType := reflect.TypeOf(output); outputType != spec.outputType {
+// AssertOutputType makes sure output's type conform to the spec:
+// reflect.TypeOf(output) == spec.OutputType()
+func AssertOutputType(spec RPCSpec, output interface{}) error {
+	if outputType := reflect.TypeOf(output); outputType != spec.OutputType() {
 		return fmt.Errorf("%s output got unexpect type %s", spec, outputType.String())
 	}
 	return nil
-}
-
-func (spec *rpcSpec) String() string {
-	return fmt.Sprintf("RPCSpec(%s::%s %s=>%s)", spec.svcName, spec.methodName, spec.inputType.String(), spec.outputType.String())
 }
