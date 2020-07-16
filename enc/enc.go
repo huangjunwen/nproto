@@ -9,8 +9,7 @@ import (
 type Encoder interface {
 	// EncodeData encodes data to target.
 	//
-	// If target.Format is not empty, then the encoder must encode data in the specified format,
-	// or returns error if it can't.
+	// If target.Format is not empty, then the encoder must encode data in the specified format.
 	EncodeData(data interface{}, target *RawData) error
 }
 
@@ -37,7 +36,7 @@ type rawDataDecoder struct {
 	decoder Decoder
 }
 
-// NewEncoder wraps an encoder to add RawData awareness: If data is RawData/*RawData and
+// NewEncoder wraps an encoder to add RawData awareness: If data is *RawData and
 // its format satisfies target's format requirement, then it is copied directly to target
 // without encoding.
 //
@@ -55,33 +54,26 @@ func NewDecoder(decoder Decoder) Decoder {
 }
 
 func (e *rawDataEncoder) EncodeData(data interface{}, target *RawData) error {
-	var src *RawData
-	switch d := data.(type) {
-	case RawData:
-		src = &d
 
+	switch src := data.(type) {
 	case *RawData:
-		src = d
+		if target.Format != "" && src.Format != target.Format {
+			return fmt.Errorf("Target requires format %q but src RawData format is %q", target.Format, src.Format)
+		}
+		*target = *src
+		return nil
 
 	default:
-		goto NEXT
+		if e.encoder == nil {
+			return fmt.Errorf("No encoder to encode %+v", data)
+		}
+		return e.encoder.EncodeData(data, target)
 	}
 
-	if target.Format != "" && src.Format != target.Format {
-		return fmt.Errorf("Target requires format %q but src RawData format is %q", target.Format, src.Format)
-	}
-
-	*target = *src
-	return nil
-
-NEXT:
-	if e.encoder == nil {
-		return fmt.Errorf("No encoder to encode %+v", data)
-	}
-	return e.encoder.EncodeData(data, target)
 }
 
 func (e *rawDataDecoder) DecodeData(src *RawData, data interface{}) error {
+
 	switch target := data.(type) {
 	case *RawData:
 		*target = *src

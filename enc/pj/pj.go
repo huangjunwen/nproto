@@ -1,3 +1,4 @@
+// Package pj contains Encoder/Decoder using pb or json format.
 package pj
 
 import (
@@ -10,13 +11,6 @@ import (
 	. "github.com/huangjunwen/nproto/v2/enc"
 )
 
-const (
-	// JsonFormat: JavaScript Object Notation format.
-	JsonFormat = "json"
-	// PbFormat: Protocol Buffer format.
-	PbFormat = "pb"
-)
-
 var (
 	// DefaultJsonEncoder uses json as default encoding format.
 	DefaultJsonEncoder Encoder = NewEncoder(&PbJsonEncoder{Format: JsonFormat})
@@ -24,11 +18,11 @@ var (
 	// DefaultPbEncoder uses pb as default encoding format.
 	DefaultPbEncoder Encoder = NewEncoder(&PbJsonEncoder{Format: PbFormat})
 
-	// DefaultPbJsonEncoder uses json/pb as encoding format, format must be specified by target.
-	DefaultPbJsonEncoder Encoder = NewEncoder(&PbJsonEncoder{})
+	// DefaultPjEncoder uses pb or json as encoding format, format must be specified by target.
+	DefaultPjEncoder Encoder = NewEncoder(&PbJsonEncoder{})
 
-	// DefaultPbJsonDecoder uses json/pb as decoding format.
-	DefaultPbJsonDecoder Decoder = NewDecoder(&PbJsonDecoder{})
+	// DefaultPjDecoder uses pb or json as decoding format.
+	DefaultPjDecoder Decoder = NewDecoder(&PbJsonDecoder{})
 )
 
 // PbJsonEncoder uses json or protobuf to encode data.
