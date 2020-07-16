@@ -46,13 +46,13 @@ func NewClientConn(nc *nats.Conn, opts ...ClientConnOption) (*ClientConn, error)
 	return cc, nil
 }
 
-func (cc *ClientConn) Client(encoder npenc.Encoder) RPCClientFunc {
+func (cc *ClientConn) Client(encoder npenc.Encoder, decoder npenc.Decoder) RPCClientFunc {
 	return func(spec RPCSpec) RPCHandler {
-		return cc.makeHandler(spec, encoder)
+		return cc.makeHandler(spec, encoder, decoder)
 	}
 }
 
-func (cc *ClientConn) makeHandler(spec RPCSpec, encoder npenc.Encoder) RPCHandler {
+func (cc *ClientConn) makeHandler(spec RPCSpec, encoder npenc.Encoder, decoder npenc.Decoder) RPCHandler {
 
 	errorf := func(code RPCErrorCode, msg string, args ...interface{}) error {
 		a := make([]interface{}, 0, len(args)+2)
@@ -71,22 +71,17 @@ func (cc *ClientConn) makeHandler(spec RPCSpec, encoder npenc.Encoder) RPCHandle
 			return nil, errorf(EncodeRequestError, "assert input type error %s", err.Error())
 		}
 
-		w := []byte{}
-		if err := encoder.EncodeData(input, &w); err != nil {
+		req := &nppbnatsrpc.Request{}
+
+		inputRawData := &npenc.RawData{}
+		if err := encoder.EncodeData(input, inputRawData); err != nil {
 			return nil, errorf(EncodeRequestError, "encode input error %s", err.Error())
 		}
-
-		req := &nppbnatsrpc.Request{
-			MetaData: &nppbmd.MD{},
-			Input: &nppbenc.RawData{
-				EncoderName: encoder.EncoderName(),
-				Bytes:       w,
-			},
-		}
+		req.Input = nppbenc.NewRawData(inputRawData)
 
 		md := npmd.MDFromOutgoingContext(ctx)
 		if md != nil {
-			req.MetaData.From(md)
+			req.MetaData = nppbmd.NewMD(md)
 		}
 
 		dl, ok := ctx.Deadline()
@@ -126,17 +121,17 @@ func (cc *ClientConn) makeHandler(spec RPCSpec, encoder npenc.Encoder) RPCHandle
 
 		switch out := resp.Out.(type) {
 		case *nppbnatsrpc.Response_Output:
-			if out.Output.EncoderName != encoder.EncoderName() {
+			if out.Output.Format != inputRawData.Format {
 				return nil, errorf(
 					DecodeResponseError,
 					"expect output encoded by %s, but got %s",
-					encoder.EncoderName(),
-					out.Output.EncoderName,
+					inputRawData.Format,
+					out.Output.Format,
 				)
 			}
 
 			output := spec.NewOutput()
-			if err := encoder.DecodeData(out.Output.Bytes, output); err != nil {
+			if err := decoder.DecodeData(out.Output.To(), output); err != nil {
 				return nil, errorf(
 					DecodeResponseError,
 					"decode output error: %s",

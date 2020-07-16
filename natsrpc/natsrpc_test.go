@@ -21,8 +21,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	. "github.com/huangjunwen/nproto/v2/enc"
-	"github.com/huangjunwen/nproto/v2/enc/jsonenc"
-	"github.com/huangjunwen/nproto/v2/enc/pbenc"
+	"github.com/huangjunwen/nproto/v2/enc/pj"
 	npmd "github.com/huangjunwen/nproto/v2/md"
 	. "github.com/huangjunwen/nproto/v2/rpc"
 )
@@ -39,14 +38,11 @@ func assertEqual(assert *assert.Assertions, v1, v2 interface{}, args ...interfac
 }
 
 func pbencRawData(m proto.Message) *RawData {
-	w := []byte{}
-	if err := pbenc.Default.EncodeData(m, &w); err != nil {
+	ret := &RawData{}
+	if err := pj.DefaultPbEncoder.EncodeData(m, ret); err != nil {
 		panic(err)
 	}
-	return &RawData{
-		EncoderName: pbenc.Default.EncoderName(),
-		Bytes:       w,
-	}
+	return ret
 }
 
 func newString(s string) *string {
@@ -104,19 +100,6 @@ func TestRPC(t *testing.T) {
 		)
 		notFoundHandler = func(ctx context.Context, input interface{}) (interface{}, error) {
 			return input, nil
-		}
-	)
-
-	// Test encoder not support.
-	var (
-		jsonOnlySpec = MustRPCSpec(
-			svcName,
-			"jsonOnly",
-			func() interface{} { return &emptypb.Empty{} },
-			func() interface{} { return &emptypb.Empty{} },
-		)
-		jsonOnlyHandler = func(ctx context.Context, in interface{}) (interface{}, error) {
-			return &emptypb.Empty{}, nil
 		}
 	)
 
@@ -299,11 +282,7 @@ func TestRPC(t *testing.T) {
 		log.Printf("natsrpc.ServerConn created.\n")
 	}
 
-	// This server accepts protobuf specs.
-	pbServer := sc.Server(jsonenc.Default, pbenc.Default)
-
-	// This server accepts json marshalable specs.
-	jsonServer := sc.Server(jsonenc.Default)
+	server := sc.Server(pj.DefaultPbJsonDecoder, pj.DefaultPbJsonEncoder)
 
 	// Creates client conns.
 	var (
@@ -331,41 +310,36 @@ func TestRPC(t *testing.T) {
 		log.Printf("natsrpc.ClientConn 2 created.\n")
 	}
 
-	// This client accepts protobuf specs.
-	pbClient := cc1.Client(pbenc.Default)
+	pbClient := cc1.Client(pj.DefaultPbEncoder, pj.DefaultPbJsonDecoder)
 
-	// This client accepts json marshalable specs.
-	jsonClient := cc2.Client(jsonenc.Default)
+	jsonClient := cc2.Client(pj.DefaultJsonEncoder, pj.DefaultPbJsonDecoder)
 
 	// Regist handlers.
-	if err := pbServer.RegistHandler(sqrtSpec, sqrtHandler); err != nil {
+	if err := server.RegistHandler(sqrtSpec, sqrtHandler); err != nil {
 		log.Panic(err)
 	}
-	if err := jsonServer.RegistHandler(jsonOnlySpec, jsonOnlyHandler); err != nil {
+	if err := server.RegistHandler(assertTypeSpec, assertTypeHandler); err != nil {
 		log.Panic(err)
 	}
-	if err := pbServer.RegistHandler(assertTypeSpec, assertTypeHandler); err != nil {
+	if err := server.RegistHandler(encodeSpec, encodeHandler); err != nil {
 		log.Panic(err)
 	}
-	if err := jsonServer.RegistHandler(encodeSpec, encodeHandler); err != nil {
+	if err := server.RegistHandler(metaDataSpec, metaDataHandler); err != nil {
 		log.Panic(err)
 	}
-	if err := pbServer.RegistHandler(metaDataSpec, metaDataHandler); err != nil {
+	if err := server.RegistHandler(timeoutSpec, timeoutHandler); err != nil {
 		log.Panic(err)
 	}
-	if err := pbServer.RegistHandler(timeoutSpec, timeoutHandler); err != nil {
-		log.Panic(err)
-	}
-	if err := pbServer.RegistHandler(blockSpec, blockHandler); err != nil {
+	if err := server.RegistHandler(blockSpec, blockHandler); err != nil {
 		log.Panic(err)
 	}
 
 	{
 		// Regist and deregist
-		if err := pbServer.RegistHandler(notFoundSpec, notFoundHandler); err != nil {
+		if err := server.RegistHandler(notFoundSpec, notFoundHandler); err != nil {
 			log.Panic(err)
 		}
-		if err := pbServer.RegistHandler(notFoundSpec, nil); err != nil {
+		if err := server.RegistHandler(notFoundSpec, nil); err != nil {
 			log.Panic(err)
 		}
 	}
@@ -445,13 +419,13 @@ func TestRPC(t *testing.T) {
 			Spec:       sqrtRawDataSpec,
 			GenInput: func() (context.Context, interface{}) {
 				return context.Background(), &RawData{
-					EncoderName: jsonenc.Default.EncoderName(),
-					Bytes:       []byte("9"),
+					Format: pj.JsonFormat,
+					Bytes:  []byte("9"),
 				}
 			},
 			ExpectOutput: &RawData{
-				EncoderName: jsonenc.Default.EncoderName(),
-				Bytes:       []byte("3"),
+				Format: pj.JsonFormat,
+				Bytes:  []byte("3"),
 			},
 			ExpectError: false,
 		},
@@ -476,28 +450,6 @@ func TestRPC(t *testing.T) {
 			},
 			ExpectOutput: nil,
 			ExpectError:  true,
-		},
-		// call json method with pb client
-		{
-			Client:     pbClient,
-			ClientName: "pb",
-			Spec:       jsonOnlySpec,
-			GenInput: func() (context.Context, interface{}) {
-				return context.Background(), &emptypb.Empty{}
-			},
-			ExpectOutput: nil,
-			ExpectError:  true,
-		},
-		// call json method with json client
-		{
-			Client:     jsonClient,
-			ClientName: "json",
-			Spec:       jsonOnlySpec,
-			GenInput: func() (context.Context, interface{}) {
-				return context.Background(), &emptypb.Empty{}
-			},
-			ExpectOutput: &emptypb.Empty{},
-			ExpectError:  false,
 		},
 		// call with wrong input type
 		{

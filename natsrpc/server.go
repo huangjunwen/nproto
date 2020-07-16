@@ -47,9 +47,10 @@ type methodMap struct {
 }
 
 type methodInfo struct {
-	spec     RPCSpec
-	handler  RPCHandler
-	encoders map[string]npenc.Encoder // supported encoders for this method
+	spec    RPCSpec
+	handler RPCHandler
+	decoder npenc.Decoder
+	encoder npenc.Encoder
 }
 
 func NewServerConn(nc *nats.Conn, opts ...ServerConnOption) (sc *ServerConn, err error) {
@@ -86,13 +87,9 @@ func NewServerConn(nc *nats.Conn, opts ...ServerConnOption) (sc *ServerConn, err
 	return serverConn, nil
 }
 
-func (sc *ServerConn) Server(encoders ...npenc.Encoder) RPCServerFunc {
-	m := map[string]npenc.Encoder{}
-	for _, e := range encoders {
-		m[e.EncoderName()] = e
-	}
+func (sc *ServerConn) Server(decoder npenc.Decoder, encoder npenc.Encoder) RPCServerFunc {
 	return func(spec RPCSpec, handler RPCHandler) error {
-		return sc.registHandler(spec, handler, m)
+		return sc.registHandler(spec, handler, decoder, encoder)
 	}
 }
 
@@ -117,7 +114,7 @@ func (sc *ServerConn) Close() error {
 	return nil
 }
 
-func (sc *ServerConn) registHandler(spec RPCSpec, handler RPCHandler, encoders map[string]npenc.Encoder) error {
+func (sc *ServerConn) registHandler(spec RPCSpec, handler RPCHandler, decoder npenc.Decoder, encoder npenc.Encoder) error {
 
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
@@ -150,7 +147,7 @@ func (sc *ServerConn) registHandler(spec RPCSpec, handler RPCHandler, encoders m
 		sc.methodMaps[svcName] = mm
 	}
 
-	sc.methodMaps[svcName].Regist(spec, handler, encoders)
+	sc.methodMaps[svcName].Regist(spec, handler, decoder, encoder)
 	return nil
 
 }
@@ -208,11 +205,9 @@ func (sc *ServerConn) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 		replyError := func(err error) {
 			switch e := err.(type) {
 			case *RPCError:
-				rpcErr := &nppbrpc.RPCError{}
-				rpcErr.From(e)
 				reply(&nppbnatsrpc.Response{
 					Out: &nppbnatsrpc.Response_RpcErr{
-						RpcErr: rpcErr,
+						RpcErr: nppbrpc.NewRPCError(e),
 					},
 				})
 
@@ -239,15 +234,9 @@ func (sc *ServerConn) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 				return
 			}
 
-			encoderName := req.Input.EncoderName
-			encoder, ok := info.encoders[encoderName]
-			if !ok {
-				replyError(errorf(DecodeRequestError, "method does not support encoder %s", encoderName))
-				return
-			}
-
+			inputRawData := req.Input.To()
 			input := info.spec.NewInput()
-			if err := encoder.DecodeData(req.Input.Bytes, input); err != nil {
+			if err := info.decoder.DecodeData(inputRawData, input); err != nil {
 				replyError(errorf(DecodeRequestError, "decode input error %s", err.Error()))
 				return
 			}
@@ -275,8 +264,10 @@ func (sc *ServerConn) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 				return
 			}
 
-			w := []byte{}
-			if err := encoder.EncodeData(output, &w); err != nil {
+			outputRawData := &npenc.RawData{
+				Format: inputRawData.Format,
+			}
+			if err := info.encoder.EncodeData(output, outputRawData); err != nil {
 				logger().Error(err, "encode output error")
 				replyError(errorf(EncodeResponseError, "encode output error %s", err.Error()))
 				return
@@ -284,10 +275,7 @@ func (sc *ServerConn) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 
 			reply(&nppbnatsrpc.Response{
 				Out: &nppbnatsrpc.Response_Output{
-					Output: &nppbenc.RawData{
-						EncoderName: encoder.EncoderName(),
-						Bytes:       w,
-					},
+					Output: nppbenc.NewRawData(outputRawData),
 				},
 			})
 
@@ -315,7 +303,7 @@ func (mm *methodMap) Lookup(methodName string) *methodInfo {
 	return info
 }
 
-func (mm *methodMap) Regist(spec RPCSpec, handler RPCHandler, encoders map[string]npenc.Encoder) {
+func (mm *methodMap) Regist(spec RPCSpec, handler RPCHandler, decoder npenc.Decoder, encoder npenc.Encoder) {
 
 	if handler == nil {
 		mm.mu.Lock()
@@ -325,9 +313,10 @@ func (mm *methodMap) Regist(spec RPCSpec, handler RPCHandler, encoders map[strin
 	}
 
 	info := &methodInfo{
-		spec:     spec,
-		handler:  handler,
-		encoders: encoders,
+		spec:    spec,
+		handler: handler,
+		decoder: decoder,
+		encoder: encoder,
 	}
 	mm.mu.Lock()
 	mm.v[spec.MethodName()] = info
