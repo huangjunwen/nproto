@@ -4,7 +4,7 @@ import (
 	npenc "github.com/huangjunwen/nproto/v2/enc"
 )
 
-// To writes to *npenc.RawData.
+// To converts to *npenc.RawData.
 func (rawData *RawData) To() *npenc.RawData {
 	return &npenc.RawData{
 		Format: rawData.Format,
@@ -12,8 +12,10 @@ func (rawData *RawData) To() *npenc.RawData {
 	}
 }
 
-// From reads from src.
-func (rawData *RawData) From(src *npenc.RawData) {
-	rawData.Format = src.Format
-	rawData.Bytes = src.Bytes
+// NewRawData converts from *npenc.RawData.
+func NewRawData(src *npenc.RawData) *RawData {
+	return &RawData{
+		Format: src.Format,
+		Bytes:  src.Bytes,
+	}
 }
