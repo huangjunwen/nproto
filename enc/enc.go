@@ -5,70 +5,93 @@ import (
 	"fmt"
 )
 
-// Encoder is used to encode/decode data.
+// Encoder is used to encode data.
 type Encoder interface {
-	// EncoderName is used to match Encoder for encoding/decoding.
-	// Usually describes the format it used.
-	EncoderName() string
+	// EncodeData encodes data to target.
+	//
+	// If target.Format is not empty, then the encoder must encode data in the specified format,
+	// or returns error if it can't.
+	EncodeData(data interface{}, target *RawData) error
+}
 
-	// EncodeData encodes data to w.
-	EncodeData(data interface{}, w *[]byte) error
-
-	// DecodeData decodes data from r.
-	DecodeData(r []byte, data interface{}) error
+// Decoder is used to decode data.
+type Decoder interface {
+	// DecodeData decodes data from src.
+	DecodeData(src *RawData, data interface{}) error
 }
 
 // RawData is encoded data. Similar to json.RawMessage which bypasses encoding/decoding.
 type RawData struct {
-	// EncoderName is encoder's name which data is encoded by.
-	EncoderName string
+	// Format is the wire format of Bytes. (e.g. "json")
+	Format string
 
 	// Bytes is the encoded raw bytes.
 	Bytes []byte
 }
 
 type rawDataEncoder struct {
-	Encoder
+	encoder Encoder
 }
 
-// NewEncoder wraps an encoder to add RawData awareness:
-//   - EncodeData: If data is *RawData/RawData and EncoderName is the same as the encoder, then it is copied directly to w without encoding.
-//   - DecodeData: If data is *RawData, then it is copied directly from r without decoding.
+type rawDataDecoder struct {
+	decoder Decoder
+}
+
+// NewEncoder wraps an encoder to add RawData awareness: If data is RawData/*RawData and
+// its format satisfies target's format requirement, then it is copied directly to target
+// without encoding.
+//
+// Otherwise passthrough to encoder.EncodeData if it's not nil.
 func NewEncoder(encoder Encoder) Encoder {
 	return &rawDataEncoder{encoder}
 }
 
-func (e *rawDataEncoder) EncodeData(data interface{}, w *[]byte) error {
-
-	var rawData *RawData
-	switch d := data.(type) {
-	case *RawData:
-		rawData = d
-
-	case RawData:
-		rawData = &d
-
-	default:
-		return e.Encoder.EncodeData(d, w)
-	}
-
-	if rawData.EncoderName != e.EncoderName() {
-		return fmt.Errorf("Encoder<%s> can't encode RawData<%s>", e.EncoderName(), rawData.EncoderName)
-	}
-	*w = rawData.Bytes
-	return nil
-
+// NewDecoder wraps a decoder to add RawData awareness: If data is *RawData,
+// then it is copied directly from src without decoding.
+//
+// Otherwise passthrough to decoder.DecodeData if it's not nil.
+func NewDecoder(decoder Decoder) Decoder {
+	return &rawDataDecoder{decoder}
 }
 
-func (e *rawDataEncoder) DecodeData(r []byte, data interface{}) error {
-
+func (e *rawDataEncoder) EncodeData(data interface{}, target *RawData) error {
+	var src *RawData
 	switch d := data.(type) {
+	case RawData:
+		src = &d
+
 	case *RawData:
-		d.EncoderName = e.EncoderName()
-		d.Bytes = r
+		src = d
+
+	default:
+		goto NEXT
+	}
+
+	if target.Format != "" && src.Format != target.Format {
+		return fmt.Errorf("Target requires format %q but src RawData format is %q", target.Format, src.Format)
+	}
+
+	*target = *src
+	return nil
+
+NEXT:
+	if e.encoder == nil {
+		return fmt.Errorf("No encoder to encode %+v", data)
+	}
+	return e.encoder.EncodeData(data, target)
+}
+
+func (e *rawDataDecoder) DecodeData(src *RawData, data interface{}) error {
+	switch target := data.(type) {
+	case *RawData:
+		*target = *src
 		return nil
 
 	default:
-		return e.Encoder.DecodeData(r, d)
+		if e.decoder == nil {
+			return fmt.Errorf("No decoder to decode %+v", data)
+		}
+		return e.decoder.DecodeData(src, data)
 	}
+
 }
