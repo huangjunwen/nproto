@@ -282,7 +282,7 @@ func TestRPC(t *testing.T) {
 		log.Printf("natsrpc.ServerConn created.\n")
 	}
 
-	server := sc.Server(pj.DefaultPbJsonDecoder, pj.DefaultPbJsonEncoder)
+	server := sc.Server(pj.DefaultPjDecoder, pj.DefaultPjEncoder)
 
 	// Creates client conns.
 	var (
@@ -310,9 +310,9 @@ func TestRPC(t *testing.T) {
 		log.Printf("natsrpc.ClientConn 2 created.\n")
 	}
 
-	pbClient := cc1.Client(pj.DefaultPbEncoder, pj.DefaultPbJsonDecoder)
+	pbClient := cc1.Client(pj.DefaultPbEncoder, pj.DefaultPjDecoder)
 
-	jsonClient := cc2.Client(pj.DefaultJsonEncoder, pj.DefaultPbJsonDecoder)
+	jsonClient := cc2.Client(pj.DefaultJsonEncoder, pj.DefaultPjDecoder)
 
 	// Regist handlers.
 	if err := server.RegistHandler(sqrtSpec, sqrtHandler); err != nil {
@@ -419,12 +419,12 @@ func TestRPC(t *testing.T) {
 			Spec:       sqrtRawDataSpec,
 			GenInput: func() (context.Context, interface{}) {
 				return context.Background(), &RawData{
-					Format: pj.JsonFormat,
+					Format: JsonFormat,
 					Bytes:  []byte("9"),
 				}
 			},
 			ExpectOutput: &RawData{
-				Format: pj.JsonFormat,
+				Format: JsonFormat,
 				Bytes:  []byte("3"),
 			},
 			ExpectError: false,
