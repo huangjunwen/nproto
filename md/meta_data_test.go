@@ -10,7 +10,6 @@ func TestMetaData(t *testing.T) {
 	assert := assert.New(t)
 
 	{
-		assert.NoError(EmptyMD.Keys(func(_ string) error { return nil }))
 		assert.False(EmptyMD.HasKey("hello"))
 		assert.Nil(EmptyMD.Values("hello"))
 	}
@@ -21,10 +20,10 @@ func TestMetaData(t *testing.T) {
 		})
 
 		md := NewMetaDataPairs("1", "2")
-		assert.NoError(md.Keys(func(key string) error {
+		md.Keys(func(key string) bool {
 			assert.Equal("1", key)
-			return nil
-		}))
+			return true
+		})
 		assert.True(md.HasKey("1"))
 		assert.Equal([][]byte{[]byte("2")}, md.Values("1"))
 	}

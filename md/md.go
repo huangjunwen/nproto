@@ -10,8 +10,8 @@ import (
 // MD should be immutable once attached to context. Create a new one if you want to modify.
 // (just like context.WithValue).
 type MD interface {
-	// Keys iterates all keys in MD.
-	Keys(cb func(string) error) error
+	// Keys iterates all keys in MD. Returns false to stop iteration.
+	Keys(cb func(string) bool)
 
 	// HasKey returns true if MD contains the specified key.
 	HasKey(key string) bool

@@ -14,22 +14,11 @@ func (md *MD) To() npmd.MetaData {
 }
 
 // NewMD converts from npmd.MD.
-func NewMD(src npmd.MD) (*MD, error) {
+func NewMD(src npmd.MD) *MD {
 	md := &MD{KeyValues: make(map[string]*ValueList)}
-	if err := src.Keys(func(k string) error {
+	src.Keys(func(k string) bool {
 		md.KeyValues[k] = &ValueList{Values: src.Values(k)}
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	return md, nil
-}
-
-// MustMD is must version of NewMD.
-func MustMD(src npmd.MD) *MD {
-	md, err := NewMD(src)
-	if err != nil {
-		panic(err)
-	}
+		return true
+	})
 	return md
 }

@@ -25,25 +25,25 @@ func NewMetaDataFromMD(md MD) MetaData {
 		return (MetaData)(nil)
 	}
 	ret := MetaData{}
-	md.Keys(func(key string) error {
+	md.Keys(func(key string) bool {
 		// XXX: Copy?
 		ret[key] = md.Values(key)
-		return nil
+		return true
 	})
 	return ret
 }
 
 // Keys implements MD interface.
-func (md MetaData) Keys(cb func(string) error) error {
+func (md MetaData) Keys(cb func(string) bool) {
 	if len(md) == 0 {
-		return nil
+		return
 	}
 	for key, _ := range md {
-		if err := cb(key); err != nil {
-			return err
+		if ok := cb(key); !ok {
+			return
 		}
 	}
-	return nil
+	return
 }
 
 // HasKey implements MD interface.
