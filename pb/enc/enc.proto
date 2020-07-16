@@ -6,9 +6,9 @@ option go_package = "github.com/huangjunwen/nproto/v2/pb/enc;nppbenc";
 
 // RawData represents enc.RawData in protobuf.
 message RawData {
-	// EncoderName is the name of the encoder which data is encoded by.
-  string encoder_name = 1;
+	// Format is the wire format of Bytes. (e.g. "json")
+  string format = 1;
 
-	// Bytes is the encoded data raw bytes.
+	// Bytes is the encoded raw bytes.
   bytes bytes = 2;
 }
