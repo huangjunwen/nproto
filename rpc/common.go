@@ -11,11 +11,11 @@ import (
 )
 
 var (
-	// SvcNameRegexp is service name's format: alphanumeric '-'
-	SvcNameRegexp = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9-]*$`)
+	// SvcNameRegexp is service name's format.
+	SvcNameRegexp = regexp.MustCompile(`^[a-zA-Z0-9-_]+$`)
 
-	// MethodNameRegexp is method name's format: alphanumeric '-'
-	MethodNameRegexp = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9-]*$`)
+	// MethodNameRegexp is method name's format.
+	MethodNameRegexp = regexp.MustCompile(`^[a-zA-Z0-9-_]+$`)
 )
 
 // RPCSpec is the contract between rpc server and client.
@@ -172,7 +172,7 @@ func (spec *rpcSpec) String() string {
 // reflect.TypeOf(input) == spec.InputType()
 func AssertInputType(spec RPCSpec, input interface{}) error {
 	if inputType := reflect.TypeOf(input); inputType != spec.InputType() {
-		return fmt.Errorf("%s got unexpect input type %s", spec, inputType.String())
+		return fmt.Errorf("%s got unexpected input type %s", spec, inputType.String())
 	}
 	return nil
 }
@@ -181,7 +181,7 @@ func AssertInputType(spec RPCSpec, input interface{}) error {
 // reflect.TypeOf(output) == spec.OutputType()
 func AssertOutputType(spec RPCSpec, output interface{}) error {
 	if outputType := reflect.TypeOf(output); outputType != spec.OutputType() {
-		return fmt.Errorf("%s got unexpect output type %s", spec, outputType.String())
+		return fmt.Errorf("%s got unexpected output type %s", spec, outputType.String())
 	}
 	return nil
 }

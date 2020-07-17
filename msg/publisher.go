@@ -7,11 +7,11 @@ import (
 // MsgPublisher is used to publish messages reliably, e.g. at least once delivery.
 type MsgPublisher interface {
 	// Publish publishes a message to the given subject. It returns nil if success.
-	Publish(ctx context.Context, spec *MsgSpec, msg interface{}) error
+	Publish(ctx context.Context, spec MsgSpec, msg interface{}) error
 }
 
 // MsgPublisherFunc is an adapter to allow the use of ordinary functions as MsgPublisher.
-type MsgPublisherFunc func(context.Context, *MsgSpec, interface{}) error
+type MsgPublisherFunc func(context.Context, MsgSpec, interface{}) error
 
 // MsgPublisherMiddleware wraps MsgPublisher into another one.
 type MsgPublisherMiddleware func(MsgPublisherFunc) MsgPublisherFunc
@@ -21,7 +21,7 @@ var (
 )
 
 // Publish implements MsgPublisher interface.
-func (fn MsgPublisherFunc) Publish(ctx context.Context, spec *MsgSpec, msg interface{}) error {
+func (fn MsgPublisherFunc) Publish(ctx context.Context, spec MsgSpec, msg interface{}) error {
 	return fn(ctx, spec, msg)
 }
 

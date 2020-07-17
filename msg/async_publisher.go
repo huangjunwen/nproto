@@ -10,11 +10,11 @@ type MsgAsyncPublisher interface {
 	// PublishAsync publishes a message to the given subject asynchronously.
 	// The final result is returned by `cb` if PublishAsync returns nil.
 	// `cb` must be called exactly once in this case.
-	PublishAsync(ctx context.Context, spec *MsgSpec, msg interface{}, cb func(error)) error
+	PublishAsync(ctx context.Context, spec MsgSpec, msg interface{}, cb func(error)) error
 }
 
 // MsgAsyncPublisherFunc is an adapter to allow the use of ordinary functions as MsgAsyncPublisher.
-type MsgAsyncPublisherFunc func(context.Context, *MsgSpec, interface{}, func(error)) error
+type MsgAsyncPublisherFunc func(context.Context, MsgSpec, interface{}, func(error)) error
 
 // MsgAsyncPublisherMiddleware wraps MsgAsyncPublisher into another one.
 type MsgAsyncPublisherMiddleware func(MsgAsyncPublisherFunc) MsgAsyncPublisherFunc
@@ -25,7 +25,7 @@ var (
 )
 
 // Publish implements MsgAsyncPublisher interface.
-func (fn MsgAsyncPublisherFunc) Publish(ctx context.Context, spec *MsgSpec, msg interface{}) error {
+func (fn MsgAsyncPublisherFunc) Publish(ctx context.Context, spec MsgSpec, msg interface{}) error {
 	var (
 		err  error
 		errc = make(chan struct{})
@@ -46,7 +46,7 @@ func (fn MsgAsyncPublisherFunc) Publish(ctx context.Context, spec *MsgSpec, msg 
 }
 
 // PublishAsync implements MsgAsyncPublisher interface.
-func (fn MsgAsyncPublisherFunc) PublishAsync(ctx context.Context, spec *MsgSpec, msg interface{}, cb func(error)) error {
+func (fn MsgAsyncPublisherFunc) PublishAsync(ctx context.Context, spec MsgSpec, msg interface{}, cb func(error)) error {
 	return fn(ctx, spec, msg, cb)
 }
 

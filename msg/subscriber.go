@@ -11,7 +11,7 @@ type MsgSubscriber interface {
 	// one member of each queue.
 	//
 	// Order of messages is not guaranteed since redelivery.
-	Subscribe(spec *MsgSpec, queue string, handler MsgHandler, opts ...interface{}) error
+	Subscribe(spec MsgSpec, queue string, handler MsgHandler, opts ...interface{}) error
 }
 
 // MsgHandler handles messages. A message should be redelivered if the handler returns an error.
@@ -19,10 +19,10 @@ type MsgSubscriber interface {
 type MsgHandler func(context.Context, interface{}) error
 
 // MsgSubscriberFunc is an adapter to allow the use of ordinary functions as MsgSubscriber.
-type MsgSubscriberFunc func(*MsgSpec, string, MsgHandler, ...interface{}) error
+type MsgSubscriberFunc func(MsgSpec, string, MsgHandler, ...interface{}) error
 
 // MsgMiddleware wraps a MsgHandler into another one.
-type MsgMiddleware func(spec *MsgSpec, queue string, handler MsgHandler) MsgHandler
+type MsgMiddleware func(spec MsgSpec, queue string, handler MsgHandler) MsgHandler
 
 // MsgSubscriberWithMWs wraps a MsgSubscriber with middlewares.
 type MsgSubscriberWithMWs struct {
@@ -36,7 +36,7 @@ var (
 )
 
 // Subscribe implements MsgSubscriber interface.
-func (fn MsgSubscriberFunc) Subscribe(spec *MsgSpec, queue string, handler MsgHandler, opts ...interface{}) error {
+func (fn MsgSubscriberFunc) Subscribe(spec MsgSpec, queue string, handler MsgHandler, opts ...interface{}) error {
 	return fn(spec, queue, handler, opts...)
 }
 
@@ -49,7 +49,7 @@ func NewMsgSubscriberWithMWs(subscriber MsgSubscriber, mws ...MsgMiddleware) *Ms
 }
 
 // Subscribe implements MsgSubscriber interface.
-func (subscriber *MsgSubscriberWithMWs) Subscribe(spec *MsgSpec, queue string, handler MsgHandler, opts ...interface{}) error {
+func (subscriber *MsgSubscriberWithMWs) Subscribe(spec MsgSpec, queue string, handler MsgHandler, opts ...interface{}) error {
 	for i := len(subscriber.mws) - 1; i >= 0; i-- {
 		handler = subscriber.mws[i](spec, queue, handler)
 	}

@@ -6,73 +6,112 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 func TestMsgSpec(t *testing.T) {
 	assert := assert.New(t)
 
 	for i, testCase := range []*struct {
-		Spec                *MsgSpec
-		ExpectValidateError bool
+		SubjectName string
+		NewMsg      func() interface{}
+		ExpectError bool
 	}{
 		// Ok.
 		{
-			Spec: &MsgSpec{
-				SubjectName: "test",
-				NewMsg:      func() interface{} { return &emptypb.Empty{} },
-			},
-			ExpectValidateError: false,
+			SubjectName: "a-b.c-d.e",
+			NewMsg:      func() interface{} { return &emptypb.Empty{} },
+			ExpectError: false,
 		},
-		// SvcName empty.
+		// Empty subject.
 		{
-			Spec:                &MsgSpec{},
-			ExpectValidateError: true,
+			SubjectName: "",
+			NewMsg:      func() interface{} { return &emptypb.Empty{} },
+			ExpectError: true,
 		},
-		// NewMsg empty.
+		// Invalid subject.
 		{
-			Spec: &MsgSpec{
-				SubjectName: "test",
-			},
-			ExpectValidateError: true,
+			SubjectName: "a.b.",
+			NewMsg:      func() interface{} { return &emptypb.Empty{} },
+			ExpectError: true,
 		},
-		// NewMsg returns nil.
+		// Invalid subject.
 		{
-			Spec: &MsgSpec{
-				SubjectName: "test",
-				NewMsg:      func() interface{} { return nil },
-			},
-			ExpectValidateError: true,
+			SubjectName: ".a.b",
+			NewMsg:      func() interface{} { return &emptypb.Empty{} },
+			ExpectError: true,
 		},
-		// NewMsg returns non pointer.
+		// Nil NewMsg.
 		{
-			Spec: &MsgSpec{
-				SubjectName: "test",
-				NewMsg:      func() interface{} { return 0 },
-			},
-			ExpectValidateError: true,
+			SubjectName: "a.b",
+			NewMsg:      nil,
+			ExpectError: true,
+		},
+		// NewMsg() returns nil.
+		{
+			SubjectName: "a.b",
+			NewMsg:      func() interface{} { return nil },
+			ExpectError: true,
+		},
+		// NewMsg() returns non pointer.
+		{
+			SubjectName: "a.b",
+			NewMsg:      func() interface{} { return 3 },
+			ExpectError: true,
 		},
 	} {
-		err := testCase.Spec.Validate()
-		if testCase.ExpectValidateError {
+		spec, err := NewMsgSpec(
+			testCase.SubjectName,
+			testCase.NewMsg,
+		)
+		if testCase.ExpectError {
 			assert.Error(err, "test case %d", i)
-			assert.False(testCase.Spec.Validated(), "test case %d", i)
 		} else {
 			assert.NoError(err, "test case %d", i)
-			assert.True(testCase.Spec.Validated(), "test case %d", i)
 		}
 
-		log.Println(testCase.Spec, err)
+		log.Println(spec, err)
 
 	}
 
-	spec := &MsgSpec{
-		SubjectName: "test",
-		NewMsg:      func() interface{} { return &emptypb.Empty{} },
-	}
+}
 
-	assert.Error(spec.AssertMsgType(&emptypb.Empty{}))
-	spec.Validate()
-	assert.NoError(spec.AssertMsgType(&emptypb.Empty{}))
-	assert.Error(spec.AssertMsgType(3))
+func TestAssertMsgType(t *testing.T) {
+	assert := assert.New(t)
+
+	for i, testCase := range []*struct {
+		Spec        MsgSpec
+		Msg         interface{}
+		ExpectError bool
+	}{
+		// Ok.
+		{
+			Spec: MustMsgSpec(
+				"test",
+				func() interface{} { return wrapperspb.String("") },
+			),
+			Msg:         wrapperspb.String("123"),
+			ExpectError: false,
+		},
+		// Failed.
+		{
+			Spec: MustMsgSpec(
+				"test",
+				func() interface{} { return wrapperspb.String("") },
+			),
+			Msg:         "123",
+			ExpectError: true,
+		},
+	} {
+		err := AssertMsgType(testCase.Spec, testCase.Msg)
+		if testCase.ExpectError {
+			assert.Error(err, "test case %d", i)
+		} else {
+			assert.NoError(err, "test case %d", i)
+		}
+
+		log.Println(testCase.Spec, testCase.Msg, err)
+
+	}
 
 }

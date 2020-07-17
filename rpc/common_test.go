@@ -7,8 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-
-	"github.com/huangjunwen/nproto/v2/enc"
 )
 
 func TestNewRPCSpec(t *testing.T) {
@@ -192,14 +190,13 @@ func TestAssertInputType(t *testing.T) {
 	}{
 		// Ok.
 		{
-			Spec: MustRawDataRPCSpec(
+			Spec: MustRPCSpec(
 				"test",
 				"test",
+				func() interface{} { return wrapperspb.String("") },
+				func() interface{} { return wrapperspb.String("") },
 			),
-			Input: &enc.RawData{
-				EncoderName: "json",
-				Bytes:       []byte("{}"),
-			},
+			Input:       wrapperspb.String("123"),
 			ExpectError: false,
 		},
 		// Failed.
@@ -236,14 +233,13 @@ func TestAssertOutputType(t *testing.T) {
 	}{
 		// Ok.
 		{
-			Spec: MustRawDataRPCSpec(
+			Spec: MustRPCSpec(
 				"test",
 				"test",
+				func() interface{} { return wrapperspb.String("") },
+				func() interface{} { return wrapperspb.String("") },
 			),
-			Output: &enc.RawData{
-				EncoderName: "json",
-				Bytes:       []byte("{}"),
-			},
+			Output:      wrapperspb.String("123"),
 			ExpectError: false,
 		},
 		// Failed.
