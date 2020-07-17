@@ -6,8 +6,8 @@ import (
 
 var (
 	// ErrNCMaxReconnect is returned if nc has MaxReconnects >= 0.
-	ErrNCMaxReconnect = errors.New("natsrpc.Server nats.Conn should have MaxReconnects < 0")
+	ErrNCMaxReconnect = errors.New("natsrpc.ServerConn nats.Conn should have MaxReconnects < 0")
 
-	// ErrServerClosed is returned when the server is closed
-	ErrServerClosed = errors.New("natsrpc.Server closed")
+	// ErrClosed is returned when ServerConn is closed
+	ErrClosed = errors.New("natsrpc.ServerConn closed")
 )

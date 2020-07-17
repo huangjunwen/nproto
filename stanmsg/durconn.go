@@ -1,7 +1,6 @@
 package stanmsg
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sync"
@@ -9,33 +8,37 @@ import (
 
 	"github.com/huangjunwen/golibs/logr"
 	"github.com/huangjunwen/golibs/taskrunner"
+	"github.com/huangjunwen/golibs/taskrunner/limitedrunner"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/stan.go"
 	"github.com/rs/xid"
 	"google.golang.org/protobuf/proto"
 
-	. "github.com/huangjunwen/nproto/v2/enc"
+	npenc "github.com/huangjunwen/nproto/v2/enc"
 	npmd "github.com/huangjunwen/nproto/v2/md"
 	. "github.com/huangjunwen/nproto/v2/msg"
-	nppb "github.com/huangjunwen/nproto/v2/pb"
+	nppbenc "github.com/huangjunwen/nproto/v2/pb/enc"
+	nppbmd "github.com/huangjunwen/nproto/v2/pb/md"
+	nppbmsg "github.com/huangjunwen/nproto/v2/pb/msg"
 )
 
 type DurConn struct {
 	// Immutable fields.
-	nc            *nats.Conn
-	clusterID     string
-	ctx           context.Context
-	logger        logr.Logger
-	subjectPrefix string
-	reconnectWait time.Duration
-	stanOptions   []stan.Option
-	runner        taskrunner.TaskRunner // runner for handlers.
-	subEncoders   map[string]Encoder    // default subscriber encoders
-	subRetryWait  time.Duration
+	nc                  *nats.Conn
+	clusterID           string
+	ctx                 context.Context
+	subjectPrefix       string
+	runner              taskrunner.TaskRunner // runner for handlers.
+	logger              logr.Logger
+	reconnectWait       time.Duration
+	subRetryWait        time.Duration
+	stanOptPingInterval int
+	stanOptPingMaxOut   int
+	stanOptPubAckWait   time.Duration
 
-	connectMu sync.Mutex // at most on connect can be run at any time
+	connectMu sync.Mutex   // at most on connect can be run at any time
+	mu        sync.RWMutex // to protect mutable fields
 
-	mu sync.Mutex
 	// Mutable fields.
 	closed    bool
 	subs      map[[2]string]*subscription // (subject, queue) -> subscriptioin
@@ -44,11 +47,81 @@ type DurConn struct {
 }
 
 type subscription struct {
-	spec        *MsgSpec
+	spec        MsgSpec
 	queue       string
 	handler     MsgHandler
-	encoders    map[string]Encoder // supported encoders for this subscription
 	stanOptions []stan.SubscriptionOption
+	decoder     npenc.Decoder
+}
+
+type DurConnOption func(*DurConn) error
+
+type SubOption func(*subscription) error
+
+func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) (dc *DurConn, err error) {
+	if nc.Opts.MaxReconnect >= 0 {
+		return nil, ErrNCMaxReconnect
+	}
+
+	durConn := &DurConn{
+		nc:                  nc,
+		clusterID:           clusterID,
+		ctx:                 context.Background(),
+		subjectPrefix:       DefaultSubjectPrefix,
+		runner:              limitedrunner.Must(),
+		logger:              logr.Nop,
+		reconnectWait:       DefaultReconnectWait,
+		subRetryWait:        DefaultSubRetryWait,
+		stanOptPingInterval: DefaultStanPingInterval,
+		stanOptPingMaxOut:   DefaultStanPingMaxOut,
+		stanOptPubAckWait:   DefaultStanPubAckWait,
+		subs:                make(map[[2]string]*subscription),
+	}
+
+	defer func() {
+		if err != nil {
+			durConn.runner.Close()
+		}
+	}()
+
+	for _, opt := range opts {
+		if err = opt(durConn); err != nil {
+			return nil, err
+		}
+	}
+
+	go durConn.connect(false)
+	return durConn, nil
+}
+
+func (dc *DurConn) Publisher(encoder npenc.Encoder) MsgAsyncPublisherFunc {
+	return func(ctx context.Context, spec MsgSpec, msg interface{}, cb func(error)) error {
+		return dc.publishAsync(ctx, spec, msg, encoder, cb)
+	}
+}
+
+func (dc *DurConn) Subscriber(decoder npenc.Decoder) MsgSubscriberFunc {
+	return func(spec MsgSpec, queue string, handler MsgHandler, opts ...interface{}) error {
+		sub := &subscription{
+			spec:        spec,
+			queue:       queue,
+			handler:     handler,
+			stanOptions: []stan.SubscriptionOption{},
+			decoder:     decoder,
+		}
+
+		for _, opt := range opts {
+			option, ok := opt.(SubOption)
+			if !ok {
+				return fmt.Errorf("Expect SubOption but got %v", opt)
+			}
+			if err := option(sub); err != nil {
+				return err
+			}
+		}
+
+		return dc.subscribeOne(sub)
+	}
 }
 
 func (dc *DurConn) connect(wait bool) {
@@ -82,17 +155,19 @@ func (dc *DurConn) connect(wait bool) {
 	// Connect
 	var sc stan.Conn
 	{
-		opts := []stan.Option{}
-		opts = append(opts, dc.stanOptions...)
-		opts = append(opts, stan.NatsConn(dc.nc))
-		// NOTE: ConnectionLostHandler is used to be notified if the Streaming connection
-		// is closed due to unexpected errors.
-		// The callback will not be invoked on normal Conn.Close().
-		opts = append(opts, stan.SetConnectionLostHandler(func(sc stan.Conn, err error) {
-			dc.logger.Error(err, "connection lost")
-			// reconnect after a while
-			go dc.connect(true)
-		}))
+		opts := []stan.Option{
+			stan.Pings(dc.stanOptPingInterval, dc.stanOptPingMaxOut),
+			stan.PubAckWait(dc.stanOptPubAckWait),
+			stan.NatsConn(dc.nc),
+			// NOTE: ConnectionLostHandler is used to be notified if the Streaming connection
+			// is closed due to unexpected errors.
+			// The callback will not be invoked on normal Conn.Close().
+			stan.SetConnectionLostHandler(func(sc stan.Conn, err error) {
+				dc.logger.Error(err, "connection lost")
+				// reconnect after a while
+				go dc.connect(true)
+			}),
+		}
 
 		// NOTE: Use a UUID-like id as client id sine we only use durable queue subscription.
 		// See: https://groups.google.com/d/msg/natsio/SkWAdSU1AgU/tCX9f3ONBQAJ
@@ -131,13 +206,61 @@ func (dc *DurConn) connect(wait bool) {
 
 }
 
-func (dc *DurConn) subscribe(sub *subscription) error {
-	key := [2]string{sub.spec.SubjectName, sub.queue}
+func (dc *DurConn) publishAsync(ctx context.Context, spec MsgSpec, msg interface{}, encoder npenc.Encoder, cb func(error)) error {
+
+	if err := AssertMsgType(spec, msg); err != nil {
+		return err
+	}
+
+	m := &nppbmsg.MessageWithMD{}
+
+	msgRawData := &npenc.RawData{}
+	if err := encoder.EncodeData(msg, msgRawData); err != nil {
+		return err
+	}
+	m.Msg = nppbenc.NewRawData(msgRawData)
+
+	md := npmd.MDFromOutgoingContext(ctx)
+	if md != nil {
+		m.MetaData = nppbmd.NewMD(md)
+	}
+
+	mData, err := proto.Marshal(m)
+	if err != nil {
+		return err
+	}
+
+	dc.mu.RLock()
+	closed := dc.closed
+	sc := dc.sc
+	dc.mu.RUnlock()
+
+	if closed {
+		return ErrClosed
+	}
+	if sc == nil {
+		return ErrNotConnected
+	}
+
+	// Publish.
+	// TODO: sc.PublishAsync maybe block in some rare condition:
+	// see https://github.com/nats-io/stan.go/issues/210
+	_, err = sc.PublishAsync(
+		subjectFormat(dc.subjectPrefix, spec.SubjectName()),
+		mData,
+		func(_ string, err error) { cb(err) },
+	)
+	return err
+
+}
+
+func (dc *DurConn) subscribeOne(sub *subscription) error {
+	key := [2]string{sub.spec.SubjectName(), sub.queue}
 	dc.mu.Lock()
 	defer dc.mu.Unlock()
 
 	if dc.closed {
-		return ErrDurConnClosed
+		return ErrClosed
 	}
 
 	if _, ok := dc.subs[key]; ok {
@@ -146,7 +269,7 @@ func (dc *DurConn) subscribe(sub *subscription) error {
 
 	// subscribe if sc is not nil
 	if dc.sc != nil {
-		if err := dc.subscribeOne(sub, dc.sc); err != nil {
+		if err := dc.subscribe(sub, dc.sc); err != nil {
 			return err
 		}
 	}
@@ -166,7 +289,7 @@ func (dc *DurConn) subscribeAll(subs []*subscription, sc stan.Conn, scStaleCh ch
 				n++
 				continue
 			}
-			if err := dc.subscribeOne(sub, sc); err != nil {
+			if err := dc.subscribe(sub, sc); err != nil {
 				dc.logger.Error(err, "subscribe error", "subject", sub.spec.SubjectName, "queue", sub.queue)
 				continue
 			}
@@ -199,9 +322,9 @@ func (dc *DurConn) subscribeAll(subs []*subscription, sc stan.Conn, scStaleCh ch
 
 }
 
-func (dc *DurConn) subscribeOne(sub *subscription, sc stan.Conn) error {
+func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn) error {
 
-	fullSubject := fmt.Sprintf("%s.%s", dc.subjectPrefix, sub.spec.SubjectName)
+	fullSubject := subjectFormat(dc.subjectPrefix, sub.spec.SubjectName())
 	opts := []stan.SubscriptionOption{}
 	opts = append(opts, sub.stanOptions...)
 	opts = append(opts, stan.SetManualAckMode())     // Use manual ack mode.
@@ -215,31 +338,25 @@ func (dc *DurConn) msgHandler(sub *subscription) stan.MsgHandler {
 
 	logger := dc.logger.WithValues("subject", sub.spec.SubjectName, "queue", sub.queue)
 
-	return func(m *stan.Msg) {
+	return func(stanMsg *stan.Msg) {
 
 		if err := dc.runner.Submit(func() {
-			r := &nppb.RawDataWithMD{}
-			if err := proto.Unmarshal(m.Data, r); err != nil {
-				logger.Error(err, "unmarshal msg error", "data", m.Data)
-				return
-			}
 
-			encoderName := r.Data.EncoderName
-			encoder, ok := sub.encoders[encoderName]
-			if !ok {
-				logger.Error(nil, "encoder not supported", "encoder", encoderName)
+			m := &nppbmsg.MessageWithMD{}
+			if err := proto.Unmarshal(stanMsg.Data, m); err != nil {
+				logger.Error(err, "unmarshal msg error", "data", stanMsg.Data)
 				return
 			}
 
 			msg := sub.spec.NewMsg()
-			if err := encoder.DecodeData(bytes.NewReader(r.Data.Bytes), msg); err != nil {
+			if err := sub.decoder.DecodeData(m.Msg.To(), msg); err != nil {
 				logger.Error(err, "decode msg error")
 				return
 			}
 
 			ctx := dc.ctx
-			if len(r.MetaData.KeyValues) != 0 {
-				ctx = npmd.NewIncomingContextWithMD(ctx, r.MetaData.To())
+			if len(m.MetaData.KeyValues) != 0 {
+				ctx = npmd.NewIncomingContextWithMD(ctx, m.MetaData.To())
 			}
 
 			if err := sub.handler(ctx, msg); err != nil {
@@ -248,7 +365,7 @@ func (dc *DurConn) msgHandler(sub *subscription) stan.MsgHandler {
 			}
 
 			// Ack if no error.
-			m.Ack()
+			stanMsg.Ack()
 			return
 
 		}); err != nil {

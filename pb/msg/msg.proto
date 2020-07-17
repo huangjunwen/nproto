@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package nproto.pb.msg;
+
+import "md/md.proto";
+import "enc/enc.proto";
+
+option go_package = "github.com/huangjunwen/nproto/v2/pb/msg;nppbmsg";
+
+// MessageWithMD 
+message MessageWithMD {
+  // MetaData dict.
+  nproto.pb.md.MD meta_data = 1;
+
+  // Msg is encoded message raw bytes.
+  nproto.pb.enc.RawData msg = 2;
+}

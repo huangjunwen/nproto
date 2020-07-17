@@ -1,13 +1,9 @@
 package stanmsg
 
 import (
-	"errors"
+	"fmt"
 )
 
-var (
-	ErrNCMaxReconnect = errors.New("stanmsg.DurConn nats.Conn should have MaxReconnects < 0")
-
-	ErrDupSubscription = errors.New("stanmsg.DurConn duplicated subscription")
-
-	ErrDurConnClosed = errors.New("stanmsg.DurConn closed")
-)
+func subjectFormat(subjectPrefix, subject string) string {
+	return fmt.Sprintf("%s.%s", subjectPrefix, subject)
+}

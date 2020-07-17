@@ -99,7 +99,7 @@ func (sc *ServerConn) Close() error {
 	defer sc.mu.Unlock()
 
 	if sc.closed {
-		return ErrServerClosed
+		return ErrClosed
 	}
 
 	sc.closed = true
@@ -120,7 +120,7 @@ func (sc *ServerConn) registHandler(spec RPCSpec, handler RPCHandler, decoder np
 	defer sc.mu.Unlock()
 
 	if sc.closed {
-		return ErrServerClosed
+		return ErrClosed
 	}
 
 	svcName := spec.SvcName()
