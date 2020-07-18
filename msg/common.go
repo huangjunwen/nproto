@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+
+	"github.com/huangjunwen/nproto/v2/enc"
 )
 
 var (
@@ -29,6 +31,8 @@ type msgSpec struct {
 	newMsg      func() interface{}
 	msgType     reflect.Type
 }
+
+type rawDataMsgSpec string
 
 // MustMsgSpec is must-version of NewMsgSpec.
 func MustMsgSpec(subjectName string, newMsg func() interface{}) MsgSpec {
@@ -78,6 +82,41 @@ func (spec *msgSpec) MsgType() reflect.Type {
 
 func (spec *msgSpec) String() string {
 	return fmt.Sprintf("MsgSpec(%s %s)", spec.subjectName, spec.msgType.String())
+}
+
+func MustRawDataMsgSpec(subjectName string) MsgSpec {
+	spec, err := NewRawDataMsgSpec(subjectName)
+	if err != nil {
+		panic(err)
+	}
+	return spec
+}
+
+func NewRawDataMsgSpec(subjectName string) (MsgSpec, error) {
+	if !SubjectNameRegexp.MatchString(subjectName) {
+		return nil, fmt.Errorf("SubjectName format invalid")
+	}
+	return rawDataMsgSpec(subjectName), nil
+}
+
+func (spec rawDataMsgSpec) SubjectName() string {
+	return string(spec)
+}
+
+func (spec rawDataMsgSpec) NewMsg() interface{} {
+	return &enc.RawData{}
+}
+
+var (
+	rawDataType = reflect.TypeOf((*enc.RawData)(nil))
+)
+
+func (spec rawDataMsgSpec) MsgType() reflect.Type {
+	return rawDataType
+}
+
+func (spec rawDataMsgSpec) String() string {
+	return fmt.Sprintf("RawDataMsgSpec(%s)", string(spec))
 }
 
 // AssertMsgType makes sure msg's type conform to the spec:

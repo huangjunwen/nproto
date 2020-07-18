@@ -48,6 +48,11 @@ type rpcSpec struct {
 	outputType reflect.Type
 }
 
+type rawDataRPCSpec struct {
+	svcName    string
+	methodName string
+}
+
 // RPCHandler do the real job. RPCHandler can be client side or server side.
 // It must be able to transfer normal error and RPCError from server side
 // to client side.
@@ -108,38 +113,6 @@ func NewRPCSpec(svcName, methodName string, newInput, newOutput func() interface
 	}, nil
 }
 
-var (
-	rawDataType = reflect.TypeOf(&enc.RawData{})
-	newRawData  = func() interface{} { return &enc.RawData{} }
-)
-
-// MustRawDataRPCSpec is must-version of NewRawDataSpec.
-func MustRawDataRPCSpec(svcName, methodName string) RPCSpec {
-	spec, err := NewRawDataRPCSpec(svcName, methodName)
-	if err != nil {
-		panic(err)
-	}
-	return spec
-}
-
-// NewRawDataRPCSpec creates a validated RPCSpec which use *enc.RawData as input/output.
-func NewRawDataRPCSpec(svcName, methodName string) (RPCSpec, error) {
-	if !SvcNameRegexp.MatchString(svcName) {
-		return nil, fmt.Errorf("SvcName format invalid")
-	}
-	if !MethodNameRegexp.MatchString(methodName) {
-		return nil, fmt.Errorf("MethodName format invalid")
-	}
-	return &rpcSpec{
-		svcName:    svcName,
-		methodName: methodName,
-		newInput:   newRawData,
-		newOutput:  newRawData,
-		inputType:  rawDataType,
-		outputType: rawDataType,
-	}, nil
-}
-
 func (spec *rpcSpec) SvcName() string {
 	return spec.svcName
 }
@@ -166,6 +139,61 @@ func (spec *rpcSpec) OutputType() reflect.Type {
 
 func (spec *rpcSpec) String() string {
 	return fmt.Sprintf("RPCSpec(%s::%s %s=>%s)", spec.svcName, spec.methodName, spec.inputType.String(), spec.outputType.String())
+}
+
+// MustRawDataRPCSpec is must-version of NewRawDataSpec.
+func MustRawDataRPCSpec(svcName, methodName string) RPCSpec {
+	spec, err := NewRawDataRPCSpec(svcName, methodName)
+	if err != nil {
+		panic(err)
+	}
+	return spec
+}
+
+// NewRawDataRPCSpec validates and creates a RPCSpec which use *enc.RawData as input/output.
+func NewRawDataRPCSpec(svcName, methodName string) (RPCSpec, error) {
+	if !SvcNameRegexp.MatchString(svcName) {
+		return nil, fmt.Errorf("SvcName format invalid")
+	}
+	if !MethodNameRegexp.MatchString(methodName) {
+		return nil, fmt.Errorf("MethodName format invalid")
+	}
+	return &rawDataRPCSpec{
+		svcName:    svcName,
+		methodName: methodName,
+	}, nil
+}
+
+func (spec *rawDataRPCSpec) SvcName() string {
+	return spec.svcName
+}
+
+func (spec *rawDataRPCSpec) MethodName() string {
+	return spec.methodName
+}
+
+func (spec *rawDataRPCSpec) NewInput() interface{} {
+	return &enc.RawData{}
+}
+
+func (spec *rawDataRPCSpec) NewOutput() interface{} {
+	return &enc.RawData{}
+}
+
+var (
+	rawDataType = reflect.TypeOf((*enc.RawData)(nil))
+)
+
+func (spec *rawDataRPCSpec) InputType() reflect.Type {
+	return rawDataType
+}
+
+func (spec *rawDataRPCSpec) OutputType() reflect.Type {
+	return rawDataType
+}
+
+func (spec *rawDataRPCSpec) String() string {
+	return fmt.Sprintf("RawDataRPCSpec(%s::%s)", spec.svcName, spec.methodName)
 }
 
 // AssertInputType makes sure input's type conform to the spec:

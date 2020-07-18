@@ -5,11 +5,16 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
+
+	"github.com/huangjunwen/nproto/v2/enc"
 )
 
-func TestMsgSpec(t *testing.T) {
+func TestNewMsgSpec(t *testing.T) {
+	log.Printf("\n")
+	log.Printf(">>> TestNewMsgSpec.\n")
 	assert := assert.New(t)
 
 	for i, testCase := range []*struct {
@@ -74,44 +79,68 @@ func TestMsgSpec(t *testing.T) {
 
 	}
 
+	{
+		spec := MustMsgSpec(
+			"test",
+			func() interface{} { return wrapperspb.String("") },
+		)
+		assert.Equal("test", spec.SubjectName())
+		assert.True(proto.Equal(wrapperspb.String(""), spec.NewMsg().(proto.Message)))
+		assert.NoError(AssertMsgType(spec, wrapperspb.String("123")))
+		assert.Error(AssertMsgType(spec, wrapperspb.Bool(true)))
+	}
 }
 
-func TestAssertMsgType(t *testing.T) {
+func TestNewRawDataMsgSpec(t *testing.T) {
+	log.Printf("\n")
+	log.Printf(">>> TestNewRawDataMsgSpec.\n")
 	assert := assert.New(t)
 
 	for i, testCase := range []*struct {
-		Spec        MsgSpec
-		Msg         interface{}
+		SubjectName string
 		ExpectError bool
 	}{
 		// Ok.
 		{
-			Spec: MustMsgSpec(
-				"test",
-				func() interface{} { return wrapperspb.String("") },
-			),
-			Msg:         wrapperspb.String("123"),
+			SubjectName: "a-b.c-d.e",
 			ExpectError: false,
 		},
-		// Failed.
+		// Empty subject.
 		{
-			Spec: MustMsgSpec(
-				"test",
-				func() interface{} { return wrapperspb.String("") },
-			),
-			Msg:         "123",
+			SubjectName: "",
+			ExpectError: true,
+		},
+		// Invalid subject.
+		{
+			SubjectName: "a.b.",
+			ExpectError: true,
+		},
+		// Invalid subject.
+		{
+			SubjectName: ".a.b",
 			ExpectError: true,
 		},
 	} {
-		err := AssertMsgType(testCase.Spec, testCase.Msg)
+		spec, err := NewRawDataMsgSpec(
+			testCase.SubjectName,
+		)
 		if testCase.ExpectError {
 			assert.Error(err, "test case %d", i)
 		} else {
 			assert.NoError(err, "test case %d", i)
 		}
 
-		log.Println(testCase.Spec, testCase.Msg, err)
+		log.Println(spec, err)
 
 	}
 
+	{
+		spec := MustRawDataMsgSpec(
+			"test",
+		)
+		assert.Equal("test", spec.SubjectName())
+		assert.Equal(&enc.RawData{}, spec.NewMsg())
+		assert.NoError(AssertMsgType(spec, &enc.RawData{Format: "json"}))
+		assert.Error(AssertMsgType(spec, 3))
+	}
 }

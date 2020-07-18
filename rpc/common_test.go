@@ -5,11 +5,16 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
+
+	"github.com/huangjunwen/nproto/v2/enc"
 )
 
 func TestNewRPCSpec(t *testing.T) {
+	log.Printf("\n")
+	log.Printf(">>> TestNewRPCSpec.\n")
 	assert := assert.New(t)
 
 	for i, testCase := range []*struct {
@@ -124,9 +129,28 @@ func TestNewRPCSpec(t *testing.T) {
 		log.Println(spec, err)
 	}
 
+	{
+		spec := MustRPCSpec(
+			"test",
+			"test",
+			func() interface{} { return wrapperspb.String("") },
+			func() interface{} { return wrapperspb.String("") },
+		)
+		assert.Equal("test", spec.SvcName())
+		assert.Equal("test", spec.MethodName())
+		assert.True(proto.Equal(wrapperspb.String(""), spec.NewInput().(proto.Message)))
+		assert.True(proto.Equal(wrapperspb.String(""), spec.NewOutput().(proto.Message)))
+		assert.NoError(AssertInputType(spec, wrapperspb.String("123")))
+		assert.NoError(AssertOutputType(spec, wrapperspb.String("123")))
+		assert.Error(AssertInputType(spec, wrapperspb.Bool(true)))
+		assert.Error(AssertOutputType(spec, wrapperspb.Bool(true)))
+	}
+
 }
 
 func TestNewRawDataRPCSpec(t *testing.T) {
+	log.Printf("\n")
+	log.Printf(">>> TestNewRawDataRPCSpec.\n")
 	assert := assert.New(t)
 
 	for i, testCase := range []*struct {
@@ -178,90 +202,19 @@ func TestNewRawDataRPCSpec(t *testing.T) {
 
 		log.Println(spec, err)
 	}
-}
 
-func TestAssertInputType(t *testing.T) {
-	assert := assert.New(t)
-
-	for i, testCase := range []*struct {
-		Spec        RPCSpec
-		Input       interface{}
-		ExpectError bool
-	}{
-		// Ok.
-		{
-			Spec: MustRPCSpec(
-				"test",
-				"test",
-				func() interface{} { return wrapperspb.String("") },
-				func() interface{} { return wrapperspb.String("") },
-			),
-			Input:       wrapperspb.String("123"),
-			ExpectError: false,
-		},
-		// Failed.
-		{
-			Spec: MustRPCSpec(
-				"test",
-				"test",
-				func() interface{} { return wrapperspb.String("") },
-				func() interface{} { return wrapperspb.String("") },
-			),
-			Input:       "123",
-			ExpectError: true,
-		},
-	} {
-
-		err := AssertInputType(testCase.Spec, testCase.Input)
-		if testCase.ExpectError {
-			assert.Error(err, "test case %d", i)
-		} else {
-			assert.NoError(err, "test case %d", i)
-		}
-
-		log.Println(testCase.Spec, testCase.Input, err)
-	}
-}
-
-func TestAssertOutputType(t *testing.T) {
-	assert := assert.New(t)
-
-	for i, testCase := range []*struct {
-		Spec        RPCSpec
-		Output      interface{}
-		ExpectError bool
-	}{
-		// Ok.
-		{
-			Spec: MustRPCSpec(
-				"test",
-				"test",
-				func() interface{} { return wrapperspb.String("") },
-				func() interface{} { return wrapperspb.String("") },
-			),
-			Output:      wrapperspb.String("123"),
-			ExpectError: false,
-		},
-		// Failed.
-		{
-			Spec: MustRPCSpec(
-				"test",
-				"test",
-				func() interface{} { return wrapperspb.String("") },
-				func() interface{} { return wrapperspb.String("") },
-			),
-			Output:      "123",
-			ExpectError: true,
-		},
-	} {
-
-		err := AssertOutputType(testCase.Spec, testCase.Output)
-		if testCase.ExpectError {
-			assert.Error(err, "test case %d", i)
-		} else {
-			assert.NoError(err, "test case %d", i)
-		}
-
-		log.Println(testCase.Spec, testCase.Output, err)
+	{
+		spec := MustRawDataRPCSpec(
+			"test",
+			"test",
+		)
+		assert.Equal("test", spec.SvcName())
+		assert.Equal("test", spec.MethodName())
+		assert.Equal(&enc.RawData{}, spec.NewInput())
+		assert.Equal(&enc.RawData{}, spec.NewOutput())
+		assert.NoError(AssertInputType(spec, &enc.RawData{Format: "json"}))
+		assert.NoError(AssertOutputType(spec, &enc.RawData{Format: "json"}))
+		assert.Error(AssertInputType(spec, 3))
+		assert.Error(AssertOutputType(spec, 3))
 	}
 }
