@@ -47,13 +47,13 @@ type PbJsonDecoder struct {
 }
 
 // EncodeData encodes data, format can be PbFormat or JsonFormat,
-// specified by e.Format or target.Format (in order), an error is returned if both are empty.
-func (e *PbJsonEncoder) EncodeData(data interface{}, target *RawData) error {
+// specified by e.Format or targetFormat (in order), an error is returned if both are empty.
+func (e *PbJsonEncoder) EncodeData(data interface{}, targetFormat *string, targetBytes *[]byte) error {
 
 	// Decide target format.
 	format := e.Format
-	if target.Format != "" {
-		format = target.Format
+	if *targetFormat != "" {
+		format = *targetFormat
 	}
 
 	// PbFormat.
@@ -72,8 +72,8 @@ func (e *PbJsonEncoder) EncodeData(data interface{}, target *RawData) error {
 		if err != nil {
 			return err
 		}
-		target.Format = PbFormat
-		target.Bytes = b
+		*targetFormat = PbFormat
+		*targetBytes = b
 		return nil
 
 	case JsonFormat:
@@ -87,8 +87,8 @@ func (e *PbJsonEncoder) EncodeData(data interface{}, target *RawData) error {
 		if err != nil {
 			return err
 		}
-		target.Format = JsonFormat
-		target.Bytes = b
+		*targetFormat = JsonFormat
+		*targetBytes = b
 		return nil
 
 	default:
@@ -101,27 +101,27 @@ func (e *PbJsonEncoder) EncodeData(data interface{}, target *RawData) error {
 // DecodeData decodes data:
 //   - If src.Format == PbFormat, use protobuf.
 //   - If src.Format == JsonFormat, use json.
-func (e *PbJsonDecoder) DecodeData(src *RawData, data interface{}) error {
+func (e *PbJsonDecoder) DecodeData(srcFormat string, srcBytes []byte, data interface{}) error {
 
-	switch src.Format {
+	switch srcFormat {
 	case PbFormat:
 		d, ok := data.(proto.Message)
 		if !ok {
 			return fmt.Errorf("PbJsonDecoder can't decode %+v using pb format", data)
 		}
-		return e.PbUnmarshalOptions.Unmarshal(src.Bytes, d)
+		return e.PbUnmarshalOptions.Unmarshal(srcBytes, d)
 
 	case JsonFormat:
 		switch d := data.(type) {
 		case proto.Message:
-			return e.JsonUnmarshalOptions.Unmarshal(src.Bytes, d)
+			return e.JsonUnmarshalOptions.Unmarshal(srcBytes, d)
 
 		default:
-			return json.Unmarshal(src.Bytes, data)
+			return json.Unmarshal(srcBytes, data)
 		}
 
 	default:
-		return fmt.Errorf("PbJsonDecoder does not support format %q", src.Format)
+		return fmt.Errorf("PbJsonDecoder does not support format %q", srcFormat)
 	}
 
 }

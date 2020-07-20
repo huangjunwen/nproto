@@ -11,7 +11,6 @@ import (
 
 	npenc "github.com/huangjunwen/nproto/v2/enc"
 	npmd "github.com/huangjunwen/nproto/v2/md"
-	nppbenc "github.com/huangjunwen/nproto/v2/pb/enc"
 	nppbmd "github.com/huangjunwen/nproto/v2/pb/md"
 	nppbnatsrpc "github.com/huangjunwen/nproto/v2/pb/natsrpc"
 	. "github.com/huangjunwen/nproto/v2/rpc"
@@ -71,17 +70,12 @@ func (cc *ClientConn) makeHandler(spec RPCSpec, encoder npenc.Encoder, decoder n
 			return nil, errorf(EncodeRequestError, "assert input type error %s", err.Error())
 		}
 
-		req := &nppbnatsrpc.Request{}
-
-		inputRawData := &npenc.RawData{}
-		if err := encoder.EncodeData(input, inputRawData); err != nil {
-			return nil, errorf(EncodeRequestError, "encode input error %s", err.Error())
+		req := &nppbnatsrpc.Request{
+			MetaData: nppbmd.NewMetaData(npmd.MDFromOutgoingContext(ctx)),
 		}
-		req.Input = nppbenc.NewRawData(inputRawData)
 
-		md := npmd.MDFromOutgoingContext(ctx)
-		if md != nil {
-			req.MetaData = nppbmd.NewMD(md)
+		if err := encoder.EncodeData(input, &req.InputFormat, &req.InputBytes); err != nil {
+			return nil, errorf(EncodeRequestError, "encode input error %s", err.Error())
 		}
 
 		dl, ok := ctx.Deadline()
@@ -119,19 +113,19 @@ func (cc *ClientConn) makeHandler(spec RPCSpec, encoder npenc.Encoder, decoder n
 			return nil, errorf(DecodeResponseError, "unmarshal response error %s", err.Error())
 		}
 
-		switch out := resp.Out.(type) {
-		case *nppbnatsrpc.Response_Output:
-			if out.Output.Format != inputRawData.Format {
+		switch resp.Type {
+		case nppbnatsrpc.Response_Output:
+			if resp.OutputFormat != req.InputFormat {
 				return nil, errorf(
 					DecodeResponseError,
-					"expect output encoded by %s, but got %s",
-					inputRawData.Format,
-					out.Output.Format,
+					"expect output format %s, but got %s",
+					req.InputFormat,
+					resp.OutputFormat,
 				)
 			}
 
 			output := spec.NewOutput()
-			if err := decoder.DecodeData(out.Output.To(), output); err != nil {
+			if err := decoder.DecodeData(resp.OutputFormat, resp.OutputBytes, output); err != nil {
 				return nil, errorf(
 					DecodeResponseError,
 					"decode output error: %s",
@@ -141,11 +135,14 @@ func (cc *ClientConn) makeHandler(spec RPCSpec, encoder npenc.Encoder, decoder n
 
 			return output, nil
 
-		case *nppbnatsrpc.Response_RpcErr:
-			return nil, out.RpcErr.To()
+		case nppbnatsrpc.Response_RpcErr:
+			return nil, &RPCError{
+				Code:    RPCErrorCode(resp.ErrCode),
+				Message: resp.ErrMessage,
+			}
 
-		case *nppbnatsrpc.Response_Err:
-			return nil, errors.New(out.Err)
+		case nppbnatsrpc.Response_Err:
+			return nil, errors.New(resp.ErrMessage)
 
 		default:
 			panic(fmt.Errorf("Unexpected branch"))

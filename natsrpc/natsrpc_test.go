@@ -39,7 +39,7 @@ func assertEqual(assert *assert.Assertions, v1, v2 interface{}, args ...interfac
 
 func pbencRawData(m proto.Message) *RawData {
 	ret := &RawData{}
-	if err := pj.DefaultPbEncoder.EncodeData(m, ret); err != nil {
+	if err := pj.DefaultPbEncoder.EncodeData(m, &ret.Format, &ret.Bytes); err != nil {
 		panic(err)
 	}
 	return ret

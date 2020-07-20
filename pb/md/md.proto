@@ -4,11 +4,7 @@ package nproto.pb.md;
 
 option go_package = "github.com/huangjunwen/nproto/v2/pb/md;nppbmd";
 
-// MD represents md.MD in protobuf.
-message MD {
-  map<string, ValueList> key_values = 1;
-}
-
-message ValueList {
+// MetaDataValueList represents value list of a key in meta data.
+message MetaDataValueList {
   repeated bytes values = 1;
 }

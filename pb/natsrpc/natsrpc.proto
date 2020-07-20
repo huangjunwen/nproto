@@ -3,33 +3,43 @@ syntax = "proto3";
 package nproto.pb.natsrpc;
 
 import "md/md.proto";
-import "enc/enc.proto";
-import "rpc/rpc.proto";
 
 option go_package = "github.com/huangjunwen/nproto/v2/pb/natsrpc;nppbnatsrpc";
 
 // Request is natsrpc request wire format.
 message Request {
-  // MetaData dict.
-  nproto.pb.md.MD meta_data = 1;
+  // MetaData key/values.
+  map<string, nproto.pb.md.MetaDataValueList> meta_data = 1;
 
-  // Input parameter.
-  nproto.pb.enc.RawData input = 2;
+  // InputFormat is the wire format for InputData.
+  string input_format = 2;
 
-  // Timeout optional timeout in nanoseoncds.
-  uint64 timeout = 3;
+  // InputBytes is encoded input data raw bytes.
+  bytes input_bytes = 3;
+
+  // Timeout in nanoseconds.
+  uint64 timeout = 4;
 }
 
 // Response is natsrpc response wire format.
 message Response {
-  oneof out {
-    // Output parameter when no error.
-    nproto.pb.enc.RawData output = 1;
-
-    // RpcErr when rpc.RPCError returned.
-    nproto.pb.rpc.RPCError rpc_err = 2;
-
-    // Err when other plain error returned.
-    string err = 3;
+  // Response type.
+  enum ResponseType {
+    Output = 0;
+    RpcErr = 1;
+    Err = 2;
   }
+  ResponseType type = 1;
+
+  // OutputFormat is the wire format for OutputData, for Output.
+  string output_format = 2;
+
+  // OutputBytes is encoded output data raw bytes, for Output.
+  bytes output_bytes = 3;
+
+  // ErrCode is for RpcErr.
+  int32 err_code = 4;
+
+  // ErrMessage is for RpcErr or Err.
+  string err_message = 5;
 }

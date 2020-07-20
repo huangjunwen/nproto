@@ -14,9 +14,8 @@ import (
 
 	npenc "github.com/huangjunwen/nproto/v2/enc"
 	npmd "github.com/huangjunwen/nproto/v2/md"
-	nppbenc "github.com/huangjunwen/nproto/v2/pb/enc"
+	nppbmd "github.com/huangjunwen/nproto/v2/pb/md"
 	nppbnatsrpc "github.com/huangjunwen/nproto/v2/pb/natsrpc"
-	nppbrpc "github.com/huangjunwen/nproto/v2/pb/rpc"
 	. "github.com/huangjunwen/nproto/v2/rpc"
 )
 
@@ -206,16 +205,15 @@ func (sc *ServerConn) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 			switch e := err.(type) {
 			case *RPCError:
 				reply(&nppbnatsrpc.Response{
-					Out: &nppbnatsrpc.Response_RpcErr{
-						RpcErr: nppbrpc.NewRPCError(e),
-					},
+					Type:       nppbnatsrpc.Response_RpcErr,
+					ErrCode:    int32(e.Code),
+					ErrMessage: e.Message,
 				})
 
 			default:
 				reply(&nppbnatsrpc.Response{
-					Out: &nppbnatsrpc.Response_Err{
-						Err: err.Error(),
-					},
+					Type:       nppbnatsrpc.Response_Err,
+					ErrMessage: err.Error(),
 				})
 			}
 		}
@@ -234,17 +232,16 @@ func (sc *ServerConn) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 				return
 			}
 
-			inputRawData := req.Input.To()
 			input := info.spec.NewInput()
-			if err := info.decoder.DecodeData(inputRawData, input); err != nil {
+			if err := info.decoder.DecodeData(req.InputFormat, req.InputBytes, input); err != nil {
 				replyError(errorf(DecodeRequestError, "decode input error %s", err.Error()))
 				return
 			}
 
 			// Setup context.
 			ctx := sc.ctx
-			if req.MetaData != nil {
-				ctx = npmd.NewIncomingContextWithMD(ctx, req.MetaData.To())
+			if len(req.MetaData) != 0 {
+				ctx = npmd.NewIncomingContextWithMD(ctx, nppbmd.MetaData(req.MetaData))
 			}
 			if req.Timeout > 0 {
 				var cancel context.CancelFunc
@@ -264,20 +261,17 @@ func (sc *ServerConn) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 				return
 			}
 
-			outputRawData := &npenc.RawData{
-				Format: inputRawData.Format,
+			resp := &nppbnatsrpc.Response{
+				Type:         nppbnatsrpc.Response_Output,
+				OutputFormat: req.InputFormat,
 			}
-			if err := info.encoder.EncodeData(output, outputRawData); err != nil {
+			if err := info.encoder.EncodeData(output, &resp.OutputFormat, &resp.OutputBytes); err != nil {
 				logger().Error(err, "encode output error")
 				replyError(errorf(EncodeResponseError, "encode output error %s", err.Error()))
 				return
 			}
 
-			reply(&nppbnatsrpc.Response{
-				Out: &nppbnatsrpc.Response_Output{
-					Output: nppbenc.NewRawData(outputRawData),
-				},
-			})
+			reply(resp)
 
 		}); err != nil {
 

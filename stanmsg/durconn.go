@@ -17,7 +17,6 @@ import (
 	npenc "github.com/huangjunwen/nproto/v2/enc"
 	npmd "github.com/huangjunwen/nproto/v2/md"
 	. "github.com/huangjunwen/nproto/v2/msg"
-	nppbenc "github.com/huangjunwen/nproto/v2/pb/enc"
 	nppbmd "github.com/huangjunwen/nproto/v2/pb/md"
 	nppbmsg "github.com/huangjunwen/nproto/v2/pb/msg"
 )
@@ -212,17 +211,12 @@ func (dc *DurConn) publishAsync(ctx context.Context, spec MsgSpec, msg interface
 		return err
 	}
 
-	m := &nppbmsg.MessageWithMD{}
-
-	msgRawData := &npenc.RawData{}
-	if err := encoder.EncodeData(msg, msgRawData); err != nil {
-		return err
+	m := &nppbmsg.MessageWithMD{
+		MetaData: nppbmd.NewMetaData(npmd.MDFromOutgoingContext(ctx)),
 	}
-	m.Msg = nppbenc.NewRawData(msgRawData)
 
-	md := npmd.MDFromOutgoingContext(ctx)
-	if md != nil {
-		m.MetaData = nppbmd.NewMD(md)
+	if err := encoder.EncodeData(msg, &m.MsgFormat, &m.MsgBytes); err != nil {
+		return err
 	}
 
 	mData, err := proto.Marshal(m)
@@ -349,14 +343,14 @@ func (dc *DurConn) msgHandler(sub *subscription) stan.MsgHandler {
 			}
 
 			msg := sub.spec.NewMsg()
-			if err := sub.decoder.DecodeData(m.Msg.To(), msg); err != nil {
+			if err := sub.decoder.DecodeData(m.MsgFormat, m.MsgBytes, msg); err != nil {
 				logger.Error(err, "decode msg error")
 				return
 			}
 
 			ctx := dc.ctx
-			if len(m.MetaData.KeyValues) != 0 {
-				ctx = npmd.NewIncomingContextWithMD(ctx, m.MetaData.To())
+			if len(m.MetaData) != 0 {
+				ctx = npmd.NewIncomingContextWithMD(ctx, nppbmd.MetaData(m.MetaData))
 			}
 
 			if err := sub.handler(ctx, msg); err != nil {

@@ -16,6 +16,7 @@ import (
 	npenc "github.com/huangjunwen/nproto/v2/enc"
 	npmd "github.com/huangjunwen/nproto/v2/md"
 	. "github.com/huangjunwen/nproto/v2/msg"
+	nppbmd "github.com/huangjunwen/nproto/v2/pb/md"
 	nppbmsg "github.com/huangjunwen/nproto/v2/pb/msg"
 )
 
@@ -239,11 +240,14 @@ func (pipe *BinlogMsgPipe) flushMsgEntry(ctx context.Context, entry msgEntry, cb
 		panic(err)
 	}
 
-	if len(msg.MetaData.KeyValues) != 0 {
-		ctx = npmd.NewOutgoingContextWithMD(ctx, msg.MetaData.To())
+	if len(msg.MetaData) != 0 {
+		ctx = npmd.NewOutgoingContextWithMD(ctx, nppbmd.MetaData(msg.MetaData))
 	}
 
-	data := msg.Msg.To()
+	data := &npenc.RawData{
+		Format: msg.MsgFormat,
+		Bytes:  msg.MsgBytes,
+	}
 
 	// Use PublishAsync if downstream is MsgAsyncPublisher for higher throughput.
 	switch downstream := pipe.downstream.(type) {
