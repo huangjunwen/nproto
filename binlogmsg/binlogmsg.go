@@ -264,3 +264,33 @@ func (pipe *BinlogMsgPipe) flushMsgEntry(ctx context.Context, entry msgEntry, cb
 	}
 
 }
+
+func NewBinlogMsgPublisher(schema, table string, q sqlh.Queryer, encoder npenc.Encoder) *BinlogMsgPublisher {
+	return &BinlogMsgPublisher{
+		schema:  schema,
+		table:   table,
+		q:       q,
+		encoder: encoder,
+	}
+}
+
+func (p *BinlogMsgPublisher) Publish(ctx context.Context, spec MsgSpec, msg interface{}) error {
+
+	if err := AssertMsgType(spec, msg); err != nil {
+		return err
+	}
+
+	m := &nppbmsg.MessageWithMD{
+		MetaData: nppbmd.NewMetaData(npmd.MDFromOutgoingContext(ctx)),
+	}
+	if err := p.encoder.EncodeData(msg, &m.MsgFormat, &m.MsgBytes); err != nil {
+		return err
+	}
+
+	data, err := proto.Marshal(m)
+	if err != nil {
+		return err
+	}
+
+	return addMsg(ctx, p.q, p.schema, p.table, spec.SubjectName(), data)
+}
