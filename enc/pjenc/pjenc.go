@@ -18,7 +18,7 @@ var (
 	// DefaultPbEncoder uses pb as default encoding format.
 	DefaultPbEncoder npenc.Encoder = &PbJsonEncoder{Format: npenc.PbFormat}
 
-	// DefaultPjEncoder uses pb or json as encoding format, format must be specified by target.
+	// DefaultPjEncoder uses pb or json as encoding format, format must be specified by caller.
 	DefaultPjEncoder npenc.Encoder = &PbJsonEncoder{}
 
 	// DefaultPjDecoder uses pb or json as decoding format.
@@ -47,7 +47,7 @@ type PbJsonDecoder struct {
 }
 
 // EncodeData encodes data, format can be PbFormat or JsonFormat,
-// specified by e.Format or targetFormat (in order), an error is returned if both are empty.
+// specified by e.Format or *targetFormat (in order), an error is returned if both are empty.
 func (e *PbJsonEncoder) EncodeData(data interface{}, targetFormat *string, targetBytes *[]byte) error {
 
 	// Decide target format.
@@ -99,8 +99,8 @@ func (e *PbJsonEncoder) EncodeData(data interface{}, targetFormat *string, targe
 }
 
 // DecodeData decodes data:
-//   - If src.Format == PbFormat, use protobuf.
-//   - If src.Format == JsonFormat, use json.
+//   - If srcFormat == PbFormat, use protobuf.
+//   - If srcFormat == JsonFormat, use json.
 func (e *PbJsonDecoder) DecodeData(srcFormat string, srcBytes []byte, data interface{}) error {
 
 	switch srcFormat {
