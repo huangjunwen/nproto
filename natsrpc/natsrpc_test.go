@@ -50,17 +50,131 @@ func newString(s string) *string {
 	return &s
 }
 
-func TestRPC(t *testing.T) {
+func TestNatsRPC(t *testing.T) {
 	log.Printf("\n")
-	log.Printf(">>> TestRPC.\n")
+	log.Printf(">>> TestNatsRPC.\n")
 	var err error
 	assert := assert.New(t)
 
+	// Starts test nats server.
+	var res *tstnats.Resource
+	{
+		res, err = tstnats.Run(nil)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer res.Close()
+		log.Printf("Test nats server started: %+q\n", res.NatsURL())
+	}
+
+	// Creates two connections.
+	var nc1, nc2 *nats.Conn
+	{
+		nc1, err = res.NatsClient(
+			nats.MaxReconnects(-1),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer nc1.Close()
+		log.Printf("Connection 1 connected.\n")
+
+		nc2, err = res.NatsClient(
+			nats.MaxReconnects(-1),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer nc2.Close()
+		log.Printf("Connection 2 connected.\n")
+
+		if true {
+			// Display raw nats messages flow.
+			nc2.Subscribe(">", func(msg *nats.Msg) {
+				log.Printf("***** subject=%s reply=%s data=(hex)%x len=%d\n", msg.Subject, msg.Reply, msg.Data, len(msg.Data))
+			})
+		}
+	}
+
 	var (
-		svcName                = "test"
+		subjectPrefix          = "natsrpc2"
+		group                  = "group2"
 		baseCtx, baseCtxCancel = context.WithCancel(context.Background())
 	)
 	defer baseCtxCancel()
+
+	// Creates server conn.
+	var (
+		sc *ServerConn
+	)
+
+	{
+		runner, err := limitedrunner.New(
+			limitedrunner.MinWorkers(1),
+			limitedrunner.MaxWorkers(1),
+			limitedrunner.QueueSize(1),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		out := zerolog.NewConsoleWriter()
+		out.Out = os.Stderr
+		lg := zerolog.New(&out).With().Timestamp().Logger()
+		logger := (*zerologr.Logger)(&lg)
+
+		sc, err = NewServerConn(
+			nc1,
+			SCOptSubjectPrefix(subjectPrefix),
+			SCOptGroup(group),
+			SCOptRunner(runner),
+			SCOptLogger(logger),
+			SCOptContext(baseCtx),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer sc.Close()
+		log.Printf("natsrpc.ServerConn created.\n")
+	}
+
+	server := sc.Server(pjenc.DefaultPjDecoder, pjenc.DefaultPjEncoder)
+
+	// Creates client conns.
+	var (
+		cc1, cc2 *ClientConn
+	)
+	{
+		cc1, err = NewClientConn(
+			nc1,
+			CCOptSubjectPrefix(subjectPrefix),
+			CCOptTimeout(time.Second),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		log.Printf("natsrpc.ClientConn 1 created.\n")
+
+		cc2, err = NewClientConn(
+			nc2,
+			CCOptSubjectPrefix(subjectPrefix),
+			CCOptTimeout(time.Second),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		log.Printf("natsrpc.ClientConn 2 created.\n")
+	}
+
+	pbClient := cc1.Client(pjenc.DefaultPbEncoder, pjenc.DefaultPjDecoder)
+
+	jsonClient := cc2.Client(pjenc.DefaultJsonEncoder, pjenc.DefaultPjDecoder)
+
+	rawClient := cc2.Client(rawenc.DefaultRawEncoder, rawenc.DefaultRawDecoder)
+
+	var (
+		svcName = "test"
+	)
 
 	// Test normal/error.
 	var (
@@ -209,120 +323,6 @@ func TestRPC(t *testing.T) {
 			return &emptypb.Empty{}, nil
 		}
 	)
-
-	// Starts test nats server.
-	var res *tstnats.Resource
-	{
-		res, err = tstnats.Run(nil)
-		if err != nil {
-			log.Panic(err)
-		}
-		defer res.Close()
-		log.Printf("Test nats server started: %+q\n", res.NatsURL())
-	}
-
-	// Creates two connections.
-	var nc1, nc2 *nats.Conn
-	{
-		nc1, err = res.NatsClient(
-			nats.MaxReconnects(-1),
-		)
-		if err != nil {
-			log.Panic(err)
-		}
-		defer nc1.Close()
-		log.Printf("Connection 1 connected.\n")
-
-		nc2, err = res.NatsClient(
-			nats.MaxReconnects(-1),
-		)
-		if err != nil {
-			log.Panic(err)
-		}
-		defer nc2.Close()
-		log.Printf("Connection 2 connected.\n")
-
-		if true {
-			// Display raw nats messages flow.
-			nc2.Subscribe(">", func(msg *nats.Msg) {
-				log.Printf("***** subject=%s reply=%s data=(hex)%x len=%d\n", msg.Subject, msg.Reply, msg.Data, len(msg.Data))
-			})
-		}
-	}
-
-	var (
-		subjectPrefix = "natsrpc2"
-		group         = "group2"
-	)
-
-	// Creates server conn.
-	var (
-		sc *ServerConn
-	)
-
-	{
-		runner, err := limitedrunner.New(
-			limitedrunner.MinWorkers(1),
-			limitedrunner.MaxWorkers(1),
-			limitedrunner.QueueSize(1),
-		)
-		if err != nil {
-			log.Panic(err)
-		}
-
-		out := zerolog.NewConsoleWriter()
-		out.Out = os.Stderr
-		lg := zerolog.New(&out).With().Timestamp().Logger()
-		logger := (*zerologr.Logger)(&lg)
-
-		sc, err = NewServerConn(
-			nc1,
-			SCOptSubjectPrefix(subjectPrefix),
-			SCOptGroup(group),
-			SCOptRunner(runner),
-			SCOptLogger(logger),
-			SCOptContext(baseCtx),
-		)
-		if err != nil {
-			log.Panic(err)
-		}
-		defer sc.Close()
-		log.Printf("natsrpc.ServerConn created.\n")
-	}
-
-	server := sc.Server(pjenc.DefaultPjDecoder, pjenc.DefaultPjEncoder)
-
-	// Creates client conns.
-	var (
-		cc1, cc2 *ClientConn
-	)
-	{
-		cc1, err = NewClientConn(
-			nc1,
-			CCOptSubjectPrefix(subjectPrefix),
-			CCOptTimeout(time.Second),
-		)
-		if err != nil {
-			log.Panic(err)
-		}
-		log.Printf("natsrpc.ClientConn 1 created.\n")
-
-		cc2, err = NewClientConn(
-			nc2,
-			CCOptSubjectPrefix(subjectPrefix),
-			CCOptTimeout(time.Second),
-		)
-		if err != nil {
-			log.Panic(err)
-		}
-		log.Printf("natsrpc.ClientConn 2 created.\n")
-	}
-
-	pbClient := cc1.Client(pjenc.DefaultPbEncoder, pjenc.DefaultPjDecoder)
-
-	jsonClient := cc2.Client(pjenc.DefaultJsonEncoder, pjenc.DefaultPjDecoder)
-
-	rawClient := cc2.Client(rawenc.DefaultRawEncoder, rawenc.DefaultRawDecoder)
 
 	// Regist handlers.
 	if err := server.RegistHandler(sqrtSpec, sqrtHandler); err != nil {
@@ -665,4 +665,130 @@ func TestRPC(t *testing.T) {
 			i, testCase.Spec, testCase.ClientName, dur.String(), ctx, input, input, output, output, err)
 	}
 
+}
+
+func TestNatsRPCFanout(t *testing.T) {
+	log.Printf("\n")
+	log.Printf(">>> TestNatsRPCFanout.\n")
+	var err error
+	assert := assert.New(t)
+
+	// Starts test nats server.
+	var res *tstnats.Resource
+	{
+		res, err = tstnats.Run(nil)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer res.Close()
+		log.Printf("Test nats server started: %+q\n", res.NatsURL())
+	}
+
+	// Creates two connections.
+	var nc1, nc2 *nats.Conn
+	{
+		nc1, err = res.NatsClient(
+			nats.MaxReconnects(-1),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer nc1.Close()
+		log.Printf("Connection 1 connected.\n")
+
+		nc2, err = res.NatsClient(
+			nats.MaxReconnects(-1),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer nc2.Close()
+		log.Printf("Connection 2 connected.\n")
+
+		if true {
+			// Display raw nats messages flow.
+			nc2.Subscribe(">", func(msg *nats.Msg) {
+				log.Printf("***** subject=%s reply=%s data=(hex)%x len=%d\n", msg.Subject, msg.Reply, msg.Data, len(msg.Data))
+			})
+		}
+	}
+
+	var (
+		sc1, sc2 *ServerConn
+	)
+
+	{
+		sc1, err = NewServerConn(nc1)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer sc1.Close()
+		log.Printf("natsrpc.ServerConn 1 created.\n")
+
+		sc2, err = NewServerConn(nc2)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer sc2.Close()
+		log.Printf("natsrpc.ServerConn 2 created.\n")
+	}
+
+	server1 := sc1.Server(pjenc.DefaultPjDecoder, pjenc.DefaultPjEncoder)
+	server2 := sc2.Server(pjenc.DefaultPjDecoder, pjenc.DefaultPjEncoder)
+
+	var (
+		cc *ClientConn
+	)
+	{
+		cc, err = NewClientConn(nc1)
+		if err != nil {
+			log.Panic(err)
+		}
+		log.Printf("natsrpc.ClientConn created.\n")
+
+	}
+
+	jsonClient := cc.Client(pjenc.DefaultJsonEncoder, pjenc.DefaultPjDecoder)
+
+	var (
+		spec = MustRPCSpec(
+			"test",
+			"ping",
+			func() interface{} { return &emptypb.Empty{} },
+			func() interface{} { return wrapperspb.Int32(0) },
+		)
+		genHandler = func(i int32) func(context.Context, interface{}) (interface{}, error) {
+			return func(_ context.Context, _ interface{}) (interface{}, error) {
+				return wrapperspb.Int32(i), nil
+			}
+		}
+	)
+
+	if err := server1.RegistHandler(spec, genHandler(1)); err != nil {
+		log.Panic(err)
+	}
+	if err := server2.RegistHandler(spec, genHandler(2)); err != nil {
+		log.Panic(err)
+	}
+
+	handler := jsonClient.MakeHandler(spec)
+	server1Called := false
+	server2Called := false
+	for i := 0; ; i++ {
+		output, err := handler(context.Background(), &emptypb.Empty{})
+		assert.NoError(err, "loop %d", i)
+
+		switch output.(*wrapperspb.Int32Value).Value {
+		case 1:
+			server1Called = true
+		case 2:
+			server2Called = true
+		default:
+			log.Panic("Impossible branch")
+		}
+
+		if server1Called && server2Called {
+			break
+		}
+	}
 }
