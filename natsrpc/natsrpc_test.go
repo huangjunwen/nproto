@@ -240,6 +240,13 @@ func TestRPC(t *testing.T) {
 		}
 		defer nc2.Close()
 		log.Printf("Connection 2 connected.\n")
+
+		if true {
+			// Display raw nats messages flow.
+			nc2.Subscribe(">", func(msg *nats.Msg) {
+				log.Printf("***** subject=%s reply=%s data=(hex)%x len=%d\n", msg.Subject, msg.Reply, msg.Data, len(msg.Data))
+			})
+		}
 	}
 
 	var (
