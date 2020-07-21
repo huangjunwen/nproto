@@ -2,6 +2,7 @@ package natsrpc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
 	"math"
@@ -48,6 +49,11 @@ func pbencRawData(m proto.Message) *rawenc.RawData {
 
 func newString(s string) *string {
 	return &s
+}
+
+func newRawMessage(s string) *json.RawMessage {
+	r := json.RawMessage(s)
+	return &r
 }
 
 func TestNatsRPC(t *testing.T) {
@@ -667,9 +673,9 @@ func TestNatsRPC(t *testing.T) {
 
 }
 
-func TestNatsRPCFanout(t *testing.T) {
+func TestPbJsonAndFanout(t *testing.T) {
 	log.Printf("\n")
-	log.Printf(">>> TestNatsRPCFanout.\n")
+	log.Printf(">>> TestPbJsonAndFanout.\n")
 	var err error
 	assert := assert.New(t)
 
@@ -733,8 +739,8 @@ func TestNatsRPCFanout(t *testing.T) {
 		log.Printf("natsrpc.ServerConn 2 created.\n")
 	}
 
-	server1 := sc1.Server(pjenc.DefaultPjDecoder, pjenc.DefaultPjEncoder)
-	server2 := sc2.Server(pjenc.DefaultPjDecoder, pjenc.DefaultPjEncoder)
+	server1 := PbJsonServer(sc1)
+	server2 := PbJsonServer(sc2)
 
 	var (
 		cc *ClientConn
@@ -748,13 +754,19 @@ func TestNatsRPCFanout(t *testing.T) {
 
 	}
 
-	jsonClient := cc.Client(pjenc.DefaultJsonEncoder, pjenc.DefaultPjDecoder)
+	client := PbJsonClient(cc)
 
 	var (
 		spec = MustRPCSpec(
 			"test",
 			"ping",
 			func() interface{} { return &emptypb.Empty{} },
+			func() interface{} { return wrapperspb.Int32(0) },
+		)
+		spec2 = MustRPCSpec(
+			"test",
+			"ping",
+			func() interface{} { return &json.RawMessage{} },
 			func() interface{} { return wrapperspb.Int32(0) },
 		)
 		genHandler = func(i int32) func(context.Context, interface{}) (interface{}, error) {
@@ -771,24 +783,41 @@ func TestNatsRPCFanout(t *testing.T) {
 		log.Panic(err)
 	}
 
-	handler := jsonClient.MakeHandler(spec)
-	server1Called := false
-	server2Called := false
-	for i := 0; ; i++ {
-		output, err := handler(context.Background(), &emptypb.Empty{})
-		assert.NoError(err, "loop %d", i)
+	for _, testCase := range []struct {
+		Spec  RPCSpec
+		Input interface{}
+	}{
+		{
+			Spec:  spec,
+			Input: &emptypb.Empty{},
+		},
+		{
+			Spec:  spec2,
+			Input: newRawMessage("{}"),
+		},
+	} {
+		handler := client.MakeHandler(testCase.Spec)
+		server1Called := false
+		server2Called := false
+		for i := 0; ; i++ {
+			start := time.Now()
+			output, err := handler(context.Background(), testCase.Input)
+			dur := time.Since(start)
+			log.Printf("[%d] dur=%s", i, dur.String())
+			assert.NoError(err, "loop %d", i)
 
-		switch output.(*wrapperspb.Int32Value).Value {
-		case 1:
-			server1Called = true
-		case 2:
-			server2Called = true
-		default:
-			log.Panic("Impossible branch")
-		}
+			switch output.(*wrapperspb.Int32Value).Value {
+			case 1:
+				server1Called = true
+			case 2:
+				server2Called = true
+			default:
+				log.Panic("Impossible branch")
+			}
 
-		if server1Called && server2Called {
-			break
+			if server1Called && server2Called {
+				break
+			}
 		}
 	}
 }
