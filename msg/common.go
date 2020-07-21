@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"regexp"
 
-	"github.com/huangjunwen/nproto/v2/enc"
+	"github.com/huangjunwen/nproto/v2/enc/rawenc"
 )
 
 var (
@@ -104,11 +104,11 @@ func (spec rawDataMsgSpec) SubjectName() string {
 }
 
 func (spec rawDataMsgSpec) NewMsg() interface{} {
-	return &enc.RawData{}
+	return &rawenc.RawData{}
 }
 
 var (
-	rawDataType = reflect.TypeOf((*enc.RawData)(nil))
+	rawDataType = reflect.TypeOf((*rawenc.RawData)(nil))
 )
 
 func (spec rawDataMsgSpec) MsgType() reflect.Type {

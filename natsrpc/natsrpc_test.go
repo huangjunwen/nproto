@@ -21,7 +21,8 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	. "github.com/huangjunwen/nproto/v2/enc"
-	"github.com/huangjunwen/nproto/v2/enc/pj"
+	"github.com/huangjunwen/nproto/v2/enc/pjenc"
+	"github.com/huangjunwen/nproto/v2/enc/rawenc"
 	npmd "github.com/huangjunwen/nproto/v2/md"
 	. "github.com/huangjunwen/nproto/v2/rpc"
 )
@@ -37,9 +38,9 @@ func assertEqual(assert *assert.Assertions, v1, v2 interface{}, args ...interfac
 	assert.Equal(v1, v2, args...)
 }
 
-func pbencRawData(m proto.Message) *RawData {
-	ret := &RawData{}
-	if err := pj.DefaultPbEncoder.EncodeData(m, &ret.Format, &ret.Bytes); err != nil {
+func pbencRawData(m proto.Message) *rawenc.RawData {
+	ret := &rawenc.RawData{}
+	if err := pjenc.DefaultPbEncoder.EncodeData(m, &ret.Format, &ret.Bytes); err != nil {
 		panic(err)
 	}
 	return ret
@@ -289,7 +290,7 @@ func TestRPC(t *testing.T) {
 		log.Printf("natsrpc.ServerConn created.\n")
 	}
 
-	server := sc.Server(pj.DefaultPjDecoder, pj.DefaultPjEncoder)
+	server := sc.Server(pjenc.DefaultPjDecoder, pjenc.DefaultPjEncoder)
 
 	// Creates client conns.
 	var (
@@ -317,9 +318,11 @@ func TestRPC(t *testing.T) {
 		log.Printf("natsrpc.ClientConn 2 created.\n")
 	}
 
-	pbClient := cc1.Client(pj.DefaultPbEncoder, pj.DefaultPjDecoder)
+	pbClient := cc1.Client(pjenc.DefaultPbEncoder, pjenc.DefaultPjDecoder)
 
-	jsonClient := cc2.Client(pj.DefaultJsonEncoder, pj.DefaultPjDecoder)
+	jsonClient := cc2.Client(pjenc.DefaultJsonEncoder, pjenc.DefaultPjDecoder)
+
+	rawClient := cc2.Client(rawenc.DefaultRawEncoder, rawenc.DefaultRawDecoder)
 
 	// Regist handlers.
 	if err := server.RegistHandler(sqrtSpec, sqrtHandler); err != nil {
@@ -364,7 +367,7 @@ func TestRPC(t *testing.T) {
 		ExpectOutput interface{}
 		ExpectError  bool
 	}{
-		// normal case, encoder is pb
+		// normal case, pb client, pb format
 		{
 			Client:     pbClient,
 			ClientName: "pb",
@@ -375,7 +378,18 @@ func TestRPC(t *testing.T) {
 			ExpectOutput: wrapperspb.Double(3),
 			ExpectError:  false,
 		},
-		// normal case, encoder is json
+		// error case, pb client, pb format
+		{
+			Client:     pbClient,
+			ClientName: "pb",
+			Spec:       sqrtSpec,
+			GenInput: func() (context.Context, interface{}) {
+				return context.Background(), wrapperspb.Double(-9)
+			},
+			ExpectOutput: nil,
+			ExpectError:  true,
+		},
+		// normal case, json client, json format
 		{
 			Client:     jsonClient,
 			ClientName: "json",
@@ -386,18 +400,7 @@ func TestRPC(t *testing.T) {
 			ExpectOutput: wrapperspb.Double(3),
 			ExpectError:  false,
 		},
-		// handler return error, encoder is pb
-		{
-			Client:     pbClient,
-			ClientName: "pb",
-			Spec:       sqrtSpec,
-			GenInput: func() (context.Context, interface{}) {
-				return context.Background(), wrapperspb.Double(-9)
-			},
-			ExpectOutput: nil,
-			ExpectError:  true,
-		},
-		// handler return error, encoder is json
+		// error case, json client, json format
 		{
 			Client:     jsonClient,
 			ClientName: "json",
@@ -408,10 +411,10 @@ func TestRPC(t *testing.T) {
 			ExpectOutput: nil,
 			ExpectError:  true,
 		},
-		// use RawData, encoder is pb
+		// normal case, raw client, pb format
 		{
-			Client:     pbClient,
-			ClientName: "pb",
+			Client:     rawClient,
+			ClientName: "raw",
 			Spec:       sqrtRawDataSpec,
 			GenInput: func() (context.Context, interface{}) {
 				return context.Background(), pbencRawData(wrapperspb.Double(9))
@@ -419,22 +422,47 @@ func TestRPC(t *testing.T) {
 			ExpectOutput: pbencRawData(wrapperspb.Double(3)),
 			ExpectError:  false,
 		},
-		// use RawData, encoder is json
+		// error case, raw client, pb format
 		{
-			Client:     jsonClient,
-			ClientName: "json",
+			Client:     rawClient,
+			ClientName: "raw",
 			Spec:       sqrtRawDataSpec,
 			GenInput: func() (context.Context, interface{}) {
-				return context.Background(), &RawData{
+				return context.Background(), pbencRawData(wrapperspb.Double(-9))
+			},
+			ExpectOutput: nil,
+			ExpectError:  true,
+		},
+		// normal case, raw client, json format
+		{
+			Client:     rawClient,
+			ClientName: "raw",
+			Spec:       sqrtRawDataSpec,
+			GenInput: func() (context.Context, interface{}) {
+				return context.Background(), &rawenc.RawData{
 					Format: JsonFormat,
 					Bytes:  []byte("9"),
 				}
 			},
-			ExpectOutput: &RawData{
+			ExpectOutput: &rawenc.RawData{
 				Format: JsonFormat,
 				Bytes:  []byte("3"),
 			},
 			ExpectError: false,
+		},
+		// error case, raw client, json format
+		{
+			Client:     rawClient,
+			ClientName: "raw",
+			Spec:       sqrtRawDataSpec,
+			GenInput: func() (context.Context, interface{}) {
+				return context.Background(), &rawenc.RawData{
+					Format: JsonFormat,
+					Bytes:  []byte("-9"),
+				}
+			},
+			ExpectOutput: nil,
+			ExpectError:  true,
 		},
 		// svc not found
 		{

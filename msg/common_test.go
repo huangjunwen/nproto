@@ -9,7 +9,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"github.com/huangjunwen/nproto/v2/enc"
+	"github.com/huangjunwen/nproto/v2/enc/rawenc"
 )
 
 func TestNewMsgSpec(t *testing.T) {
@@ -139,8 +139,8 @@ func TestNewRawDataMsgSpec(t *testing.T) {
 			"test",
 		)
 		assert.Equal("test", spec.SubjectName())
-		assert.Equal(&enc.RawData{}, spec.NewMsg())
-		assert.NoError(AssertMsgType(spec, &enc.RawData{Format: "json"}))
+		assert.Equal(&rawenc.RawData{}, spec.NewMsg())
+		assert.NoError(AssertMsgType(spec, &rawenc.RawData{Format: "json"}))
 		assert.Error(AssertMsgType(spec, 3))
 	}
 }

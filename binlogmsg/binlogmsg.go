@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	npenc "github.com/huangjunwen/nproto/v2/enc"
+	"github.com/huangjunwen/nproto/v2/enc/rawenc"
 	npmd "github.com/huangjunwen/nproto/v2/md"
 	. "github.com/huangjunwen/nproto/v2/msg"
 	nppbmd "github.com/huangjunwen/nproto/v2/pb/md"
@@ -244,7 +245,7 @@ func (pipe *BinlogMsgPipe) flushMsgEntry(ctx context.Context, entry msgEntry, cb
 		ctx = npmd.NewOutgoingContextWithMD(ctx, nppbmd.MetaData(msg.MetaData))
 	}
 
-	data := &npenc.RawData{
+	data := &rawenc.RawData{
 		Format: msg.MsgFormat,
 		Bytes:  msg.MsgBytes,
 	}

@@ -9,7 +9,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"github.com/huangjunwen/nproto/v2/enc"
+	"github.com/huangjunwen/nproto/v2/enc/rawenc"
 )
 
 func TestNewRPCSpec(t *testing.T) {
@@ -210,10 +210,10 @@ func TestNewRawDataRPCSpec(t *testing.T) {
 		)
 		assert.Equal("test", spec.SvcName())
 		assert.Equal("test", spec.MethodName())
-		assert.Equal(&enc.RawData{}, spec.NewInput())
-		assert.Equal(&enc.RawData{}, spec.NewOutput())
-		assert.NoError(AssertInputType(spec, &enc.RawData{Format: "json"}))
-		assert.NoError(AssertOutputType(spec, &enc.RawData{Format: "json"}))
+		assert.Equal(&rawenc.RawData{}, spec.NewInput())
+		assert.Equal(&rawenc.RawData{}, spec.NewOutput())
+		assert.NoError(AssertInputType(spec, &rawenc.RawData{Format: "json"}))
+		assert.NoError(AssertOutputType(spec, &rawenc.RawData{Format: "json"}))
 		assert.Error(AssertInputType(spec, 3))
 		assert.Error(AssertOutputType(spec, 3))
 	}

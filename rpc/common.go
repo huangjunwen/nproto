@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"regexp"
 
-	"github.com/huangjunwen/nproto/v2/enc"
+	"github.com/huangjunwen/nproto/v2/enc/rawenc"
 )
 
 var (
@@ -150,7 +150,7 @@ func MustRawDataRPCSpec(svcName, methodName string) RPCSpec {
 	return spec
 }
 
-// NewRawDataRPCSpec validates and creates a RPCSpec which use *enc.RawData as input/output.
+// NewRawDataRPCSpec validates and creates a RPCSpec which use *rawenc.RawData as input/output.
 func NewRawDataRPCSpec(svcName, methodName string) (RPCSpec, error) {
 	if !SvcNameRegexp.MatchString(svcName) {
 		return nil, fmt.Errorf("SvcName format invalid")
@@ -173,15 +173,15 @@ func (spec *rawDataRPCSpec) MethodName() string {
 }
 
 func (spec *rawDataRPCSpec) NewInput() interface{} {
-	return &enc.RawData{}
+	return &rawenc.RawData{}
 }
 
 func (spec *rawDataRPCSpec) NewOutput() interface{} {
-	return &enc.RawData{}
+	return &rawenc.RawData{}
 }
 
 var (
-	rawDataType = reflect.TypeOf((*enc.RawData)(nil))
+	rawDataType = reflect.TypeOf((*rawenc.RawData)(nil))
 )
 
 func (spec *rawDataRPCSpec) InputType() reflect.Type {

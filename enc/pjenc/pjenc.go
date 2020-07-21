@@ -1,5 +1,5 @@
-// Package pj contains Encoder/Decoder using pb or json format.
-package pj
+// Package pjenc contains Encoder/Decoder using pb or json format.
+package pjenc
 
 import (
 	"encoding/json"
@@ -8,21 +8,21 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 
-	. "github.com/huangjunwen/nproto/v2/enc"
+	npenc "github.com/huangjunwen/nproto/v2/enc"
 )
 
 var (
 	// DefaultJsonEncoder uses json as default encoding format.
-	DefaultJsonEncoder Encoder = NewEncoder(&PbJsonEncoder{Format: JsonFormat})
+	DefaultJsonEncoder npenc.Encoder = &PbJsonEncoder{Format: npenc.JsonFormat}
 
 	// DefaultPbEncoder uses pb as default encoding format.
-	DefaultPbEncoder Encoder = NewEncoder(&PbJsonEncoder{Format: PbFormat})
+	DefaultPbEncoder npenc.Encoder = &PbJsonEncoder{Format: npenc.PbFormat}
 
 	// DefaultPjEncoder uses pb or json as encoding format, format must be specified by target.
-	DefaultPjEncoder Encoder = NewEncoder(&PbJsonEncoder{})
+	DefaultPjEncoder npenc.Encoder = &PbJsonEncoder{}
 
 	// DefaultPjDecoder uses pb or json as decoding format.
-	DefaultPjDecoder Decoder = NewDecoder(&PbJsonDecoder{})
+	DefaultPjDecoder npenc.Decoder = &PbJsonDecoder{}
 )
 
 // PbJsonEncoder uses json or protobuf to encode data.
@@ -63,7 +63,7 @@ func (e *PbJsonEncoder) EncodeData(data interface{}, targetFormat *string, targe
 	)
 
 	switch format {
-	case PbFormat:
+	case npenc.PbFormat:
 		d, ok := data.(proto.Message)
 		if !ok {
 			return fmt.Errorf("PbJsonEncoder can't encode %+v using pb format", data)
@@ -72,11 +72,11 @@ func (e *PbJsonEncoder) EncodeData(data interface{}, targetFormat *string, targe
 		if err != nil {
 			return err
 		}
-		*targetFormat = PbFormat
+		*targetFormat = npenc.PbFormat
 		*targetBytes = b
 		return nil
 
-	case JsonFormat:
+	case npenc.JsonFormat:
 		switch d := data.(type) {
 		case proto.Message:
 			b, err = e.JsonMarshalOptions.Marshal(d)
@@ -87,7 +87,7 @@ func (e *PbJsonEncoder) EncodeData(data interface{}, targetFormat *string, targe
 		if err != nil {
 			return err
 		}
-		*targetFormat = JsonFormat
+		*targetFormat = npenc.JsonFormat
 		*targetBytes = b
 		return nil
 
@@ -104,14 +104,14 @@ func (e *PbJsonEncoder) EncodeData(data interface{}, targetFormat *string, targe
 func (e *PbJsonDecoder) DecodeData(srcFormat string, srcBytes []byte, data interface{}) error {
 
 	switch srcFormat {
-	case PbFormat:
+	case npenc.PbFormat:
 		d, ok := data.(proto.Message)
 		if !ok {
 			return fmt.Errorf("PbJsonDecoder can't decode %+v using pb format", data)
 		}
 		return e.PbUnmarshalOptions.Unmarshal(srcBytes, d)
 
-	case JsonFormat:
+	case npenc.JsonFormat:
 		switch d := data.(type) {
 		case proto.Message:
 			return e.JsonUnmarshalOptions.Unmarshal(srcBytes, d)
