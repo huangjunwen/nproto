@@ -615,7 +615,9 @@ func TestRPC(t *testing.T) {
 			testCase.Before(handler)
 		}
 		ctx, input := testCase.GenInput()
+		start := time.Now()
 		output, err := handler(ctx, input)
+		dur := time.Since(start)
 		if testCase.After != nil {
 			testCase.After()
 		}
@@ -631,8 +633,8 @@ func TestRPC(t *testing.T) {
 			}
 		}
 
-		log.Printf("[%d] spec=%+v client=%s\n\tctx=%+v\n\tinput=%T(%+v)\n\toutput=%T(%+v)\n\terr=%+v\n\n",
-			i, testCase.Spec, testCase.ClientName, ctx, input, input, output, output, err)
+		log.Printf("[%d] spec=%+v client=%s dur=%s\n\tctx=%+v\n\tinput=%T(%+v)\n\toutput=%T(%+v)\n\terr=%+v\n\n",
+			i, testCase.Spec, testCase.ClientName, dur.String(), ctx, input, input, output, output, err)
 	}
 
 }
