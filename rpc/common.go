@@ -32,20 +32,33 @@ type RPCSpec interface {
 	// NewOutput generates a new output parameter. Must be a pointer.
 	NewOutput() interface{}
 
+	/*
+		The followings are derived from NewInput/NewOutput, mainly for convenience of type assertions
+		and type checks.
+	*/
+
 	// InputType returns input's type.
 	InputType() reflect.Type
 
 	// OutputType returns output's type.
 	OutputType() reflect.Type
+
+	// InputValue returns a sample input value, don't modify its content.
+	InputValue() interface{}
+
+	// OutputValue returns a sample output value, don't modify its content.
+	OutputValue() interface{}
 }
 
 type rpcSpec struct {
-	svcName    string
-	methodName string
-	newInput   func() interface{}
-	newOutput  func() interface{}
-	inputType  reflect.Type
-	outputType reflect.Type
+	svcName     string
+	methodName  string
+	newInput    func() interface{}
+	newOutput   func() interface{}
+	inputType   reflect.Type
+	outputType  reflect.Type
+	inputValue  interface{}
+	outputValue interface{}
 }
 
 type rawDataRPCSpec struct {
@@ -82,11 +95,11 @@ func NewRPCSpec(svcName, methodName string, newInput, newOutput func() interface
 	if newInput == nil {
 		return nil, fmt.Errorf("NewInput is empty")
 	}
-	input := newInput()
-	if input == nil {
+	inputValue := newInput()
+	if inputValue == nil {
 		return nil, fmt.Errorf("NewInput() returns nil")
 	}
-	inputType := reflect.TypeOf(input)
+	inputType := reflect.TypeOf(inputValue)
 	if inputType.Kind() != reflect.Ptr {
 		return nil, fmt.Errorf("NewInput() returns %s which is not a pointer", inputType.String())
 	}
@@ -94,22 +107,24 @@ func NewRPCSpec(svcName, methodName string, newInput, newOutput func() interface
 	if newOutput == nil {
 		return nil, fmt.Errorf("NewOutput is empty")
 	}
-	output := newOutput()
-	if output == nil {
+	outputValue := newOutput()
+	if outputValue == nil {
 		return nil, fmt.Errorf("NewOutput() returns nil")
 	}
-	outputType := reflect.TypeOf(output)
+	outputType := reflect.TypeOf(outputValue)
 	if outputType.Kind() != reflect.Ptr {
 		return nil, fmt.Errorf("NewOutput() returns %s which is not a pointer", outputType.String())
 	}
 
 	return &rpcSpec{
-		svcName:    svcName,
-		methodName: methodName,
-		newInput:   newInput,
-		newOutput:  newOutput,
-		inputType:  inputType,
-		outputType: outputType,
+		svcName:     svcName,
+		methodName:  methodName,
+		newInput:    newInput,
+		newOutput:   newOutput,
+		inputType:   inputType,
+		outputType:  outputType,
+		inputValue:  inputValue,
+		outputValue: outputValue,
 	}, nil
 }
 
@@ -135,6 +150,14 @@ func (spec *rpcSpec) InputType() reflect.Type {
 
 func (spec *rpcSpec) OutputType() reflect.Type {
 	return spec.outputType
+}
+
+func (spec *rpcSpec) InputValue() interface{} {
+	return spec.inputValue
+}
+
+func (spec *rpcSpec) OutputValue() interface{} {
+	return spec.outputValue
 }
 
 func (spec *rpcSpec) String() string {
@@ -181,7 +204,8 @@ func (spec *rawDataRPCSpec) NewOutput() interface{} {
 }
 
 var (
-	rawDataType = reflect.TypeOf((*rawenc.RawData)(nil))
+	rawDataType  = reflect.TypeOf((*rawenc.RawData)(nil))
+	rawDataValue = &rawenc.RawData{}
 )
 
 func (spec *rawDataRPCSpec) InputType() reflect.Type {
@@ -190,6 +214,14 @@ func (spec *rawDataRPCSpec) InputType() reflect.Type {
 
 func (spec *rawDataRPCSpec) OutputType() reflect.Type {
 	return rawDataType
+}
+
+func (spec *rawDataRPCSpec) InputValue() interface{} {
+	return rawDataValue
+}
+
+func (spec *rawDataRPCSpec) OutputValue() interface{} {
+	return rawDataValue
 }
 
 func (spec *rawDataRPCSpec) String() string {

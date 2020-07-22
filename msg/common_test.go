@@ -86,6 +86,10 @@ func TestNewMsgSpec(t *testing.T) {
 		)
 		assert.Equal("test", spec.SubjectName())
 		assert.True(proto.Equal(wrapperspb.String(""), spec.NewMsg().(proto.Message)))
+		{
+			_, ok := spec.MsgValue().(*wrapperspb.StringValue)
+			assert.True(ok)
+		}
 		assert.NoError(AssertMsgType(spec, wrapperspb.String("123")))
 		assert.Error(AssertMsgType(spec, wrapperspb.Bool(true)))
 	}
@@ -140,6 +144,10 @@ func TestNewRawDataMsgSpec(t *testing.T) {
 		)
 		assert.Equal("test", spec.SubjectName())
 		assert.Equal(&rawenc.RawData{}, spec.NewMsg())
+		{
+			_, ok := spec.MsgValue().(*rawenc.RawData)
+			assert.True(ok)
+		}
 		assert.NoError(AssertMsgType(spec, &rawenc.RawData{Format: "json"}))
 		assert.Error(AssertMsgType(spec, 3))
 	}

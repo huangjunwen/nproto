@@ -2,16 +2,11 @@ package stanmsg
 
 import (
 	"context"
-	"reflect"
 
 	"google.golang.org/protobuf/proto"
 
 	"github.com/huangjunwen/nproto/v2/enc/pjenc"
 	. "github.com/huangjunwen/nproto/v2/msg"
-)
-
-var (
-	protoMessageType = reflect.TypeOf((*proto.Message)(nil)).Elem()
 )
 
 func PbJsonPublisher(dc *DurConn) MsgAsyncPublisherFunc {
@@ -21,7 +16,7 @@ func PbJsonPublisher(dc *DurConn) MsgAsyncPublisherFunc {
 
 	return func(ctx context.Context, spec MsgSpec, msg interface{}, cb func(error)) error {
 		// If msg is proto.Message, then use pbPublisher, otherwise jsonPublisher.
-		if spec.MsgType().Implements(protoMessageType) {
+		if _, ok := spec.MsgValue().(proto.Message); ok {
 			return pbPublisher(ctx, spec, msg, cb)
 		}
 		return jsonPublisher(ctx, spec, msg, cb)

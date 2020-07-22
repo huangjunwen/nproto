@@ -134,16 +134,24 @@ func TestNewRPCSpec(t *testing.T) {
 			"test",
 			"test",
 			func() interface{} { return wrapperspb.String("") },
-			func() interface{} { return wrapperspb.String("") },
+			func() interface{} { return wrapperspb.Bool(false) },
 		)
 		assert.Equal("test", spec.SvcName())
 		assert.Equal("test", spec.MethodName())
 		assert.True(proto.Equal(wrapperspb.String(""), spec.NewInput().(proto.Message)))
-		assert.True(proto.Equal(wrapperspb.String(""), spec.NewOutput().(proto.Message)))
+		assert.True(proto.Equal(wrapperspb.Bool(false), spec.NewOutput().(proto.Message)))
+		{
+			_, ok := spec.InputValue().(*wrapperspb.StringValue)
+			assert.True(ok)
+		}
+		{
+			_, ok := spec.OutputValue().(*wrapperspb.BoolValue)
+			assert.True(ok)
+		}
 		assert.NoError(AssertInputType(spec, wrapperspb.String("123")))
-		assert.NoError(AssertOutputType(spec, wrapperspb.String("123")))
+		assert.NoError(AssertOutputType(spec, wrapperspb.Bool(true)))
 		assert.Error(AssertInputType(spec, wrapperspb.Bool(true)))
-		assert.Error(AssertOutputType(spec, wrapperspb.Bool(true)))
+		assert.Error(AssertOutputType(spec, wrapperspb.String("123")))
 	}
 
 }
@@ -212,6 +220,14 @@ func TestNewRawDataRPCSpec(t *testing.T) {
 		assert.Equal("test", spec.MethodName())
 		assert.Equal(&rawenc.RawData{}, spec.NewInput())
 		assert.Equal(&rawenc.RawData{}, spec.NewOutput())
+		{
+			_, ok := spec.InputValue().(*rawenc.RawData)
+			assert.True(ok)
+		}
+		{
+			_, ok := spec.OutputValue().(*rawenc.RawData)
+			assert.True(ok)
+		}
 		assert.NoError(AssertInputType(spec, &rawenc.RawData{Format: "json"}))
 		assert.NoError(AssertOutputType(spec, &rawenc.RawData{Format: "json"}))
 		assert.Error(AssertInputType(spec, 3))

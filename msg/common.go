@@ -22,14 +22,23 @@ type MsgSpec interface {
 	// NewMsg generate a new message. Must be a pointer.
 	NewMsg() interface{}
 
+	/*
+		The followings are derived from NewMsg, mainly for convenience of type assertions
+		and type checks.
+	*/
+
 	// MsgType returns msg's type.
 	MsgType() reflect.Type
+
+	// MsgValue returns a sample msg value, don't modify its content.
+	MsgValue() interface{}
 }
 
 type msgSpec struct {
 	subjectName string
 	newMsg      func() interface{}
 	msgType     reflect.Type
+	msgValue    interface{}
 }
 
 type rawDataMsgSpec string
@@ -52,11 +61,11 @@ func NewMsgSpec(subjectName string, newMsg func() interface{}) (MsgSpec, error) 
 	if newMsg == nil {
 		return nil, fmt.Errorf("NewMsg is empty")
 	}
-	msg := newMsg()
-	if msg == nil {
+	msgValue := newMsg()
+	if msgValue == nil {
 		return nil, fmt.Errorf("NewMsg() returns nil")
 	}
-	msgType := reflect.TypeOf(msg)
+	msgType := reflect.TypeOf(msgValue)
 	if msgType.Kind() != reflect.Ptr {
 		return nil, fmt.Errorf("NewMsg() returns %s which is not a pointer", msgType.String())
 	}
@@ -65,6 +74,7 @@ func NewMsgSpec(subjectName string, newMsg func() interface{}) (MsgSpec, error) 
 		subjectName: subjectName,
 		newMsg:      newMsg,
 		msgType:     msgType,
+		msgValue:    msgValue,
 	}, nil
 }
 
@@ -78,6 +88,10 @@ func (spec *msgSpec) NewMsg() interface{} {
 
 func (spec *msgSpec) MsgType() reflect.Type {
 	return spec.msgType
+}
+
+func (spec *msgSpec) MsgValue() interface{} {
+	return spec.msgValue
 }
 
 func (spec *msgSpec) String() string {
@@ -108,11 +122,16 @@ func (spec rawDataMsgSpec) NewMsg() interface{} {
 }
 
 var (
-	rawDataType = reflect.TypeOf((*rawenc.RawData)(nil))
+	rawDataType  = reflect.TypeOf((*rawenc.RawData)(nil))
+	rawDataValue = &rawenc.RawData{}
 )
 
 func (spec rawDataMsgSpec) MsgType() reflect.Type {
 	return rawDataType
+}
+
+func (spec rawDataMsgSpec) MsgValue() interface{} {
+	return rawDataValue
 }
 
 func (spec rawDataMsgSpec) String() string {
