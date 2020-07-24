@@ -96,6 +96,20 @@ func DCOptStanPubAckWait(t time.Duration) DurConnOption {
 	}
 }
 
+func DCOptConnectCb(cb func(stan.Conn)) DurConnOption {
+	return func(dc *DurConn) error {
+		dc.connectCb = cb
+		return nil
+	}
+}
+
+func DCOptDisconnectCb(cb func(stan.Conn)) DurConnOption {
+	return func(dc *DurConn) error {
+		dc.disconnectCb = cb
+		return nil
+	}
+}
+
 func SubOptStanAckWait(t time.Duration) SubOption {
 	return func(sub *subscription) error {
 		sub.stanOptions = append(sub.stanOptions, stan.AckWait(t))

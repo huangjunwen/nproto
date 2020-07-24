@@ -34,6 +34,8 @@ type DurConn struct {
 	stanOptPingInterval int
 	stanOptPingMaxOut   int
 	stanOptPubAckWait   time.Duration
+	connectCb           func(stan.Conn)
+	disconnectCb        func(stan.Conn)
 
 	connectMu sync.Mutex   // at most on connect can be run at any time
 	mu        sync.RWMutex // to protect mutable fields
@@ -74,6 +76,8 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) (dc *Dur
 		stanOptPingInterval: DefaultStanPingInterval,
 		stanOptPingMaxOut:   DefaultStanPingMaxOut,
 		stanOptPubAckWait:   DefaultStanPubAckWait,
+		connectCb:           func(_ stan.Conn) {},
+		disconnectCb:        func(_ stan.Conn) {},
 		subs:                make(map[[2]string]*subscription),
 	}
 
@@ -162,6 +166,7 @@ func (dc *DurConn) connect(wait bool) {
 			// is closed due to unexpected errors.
 			// The callback will not be invoked on normal Conn.Close().
 			stan.SetConnectionLostHandler(func(sc stan.Conn, err error) {
+				dc.disconnectCb(sc)
 				dc.logger.Error(err, "connection lost")
 				// reconnect after a while
 				go dc.connect(true)
@@ -178,6 +183,7 @@ func (dc *DurConn) connect(wait bool) {
 			go dc.connect(true)
 			return
 		}
+		dc.connectCb(sc)
 	}
 
 	// Update new connection
@@ -272,6 +278,7 @@ func (dc *DurConn) subscribeOne(sub *subscription) error {
 	return nil
 }
 
+// NOTE: subscribe until all success or scStaleCh closed.
 func (dc *DurConn) subscribeAll(subs []*subscription, sc stan.Conn, scStaleCh chan struct{}) {
 
 	success := make([]bool, len(subs))

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/huangjunwen/golibs/logr"
 	"github.com/huangjunwen/golibs/logr/zerologr"
 	"github.com/huangjunwen/golibs/taskrunner/limitedrunner"
 	tstnats "github.com/huangjunwen/tstsvc/nats"
@@ -27,6 +28,14 @@ import (
 	npmd "github.com/huangjunwen/nproto/v2/md"
 	. "github.com/huangjunwen/nproto/v2/rpc"
 )
+
+func newLogger() logr.Logger {
+	out := zerolog.NewConsoleWriter()
+	out.TimeFormat = time.RFC3339
+	out.Out = os.Stderr
+	lg := zerolog.New(&out).With().Timestamp().Logger()
+	return (*zerologr.Logger)(&lg)
+}
 
 // XXX: assert.Equal(proto.Message, proto.Message) directly may case infinite loop....
 func assertEqual(assert *assert.Assertions, v1, v2 interface{}, args ...interface{}) {
@@ -94,8 +103,8 @@ func TestNatsRPC(t *testing.T) {
 		defer nc2.Close()
 		log.Printf("Connection 2 connected.\n")
 
-		if true {
-			// Display raw nats messages flow.
+		// Set to true if want to display raw nats messages flow.
+		if false {
 			nc2.Subscribe(">", func(msg *nats.Msg) {
 				log.Printf("***** subject=%s reply=%s data=(hex)%x len=%d\n", msg.Subject, msg.Reply, msg.Data, len(msg.Data))
 			})
@@ -124,17 +133,12 @@ func TestNatsRPC(t *testing.T) {
 			log.Panic(err)
 		}
 
-		out := zerolog.NewConsoleWriter()
-		out.Out = os.Stderr
-		lg := zerolog.New(&out).With().Timestamp().Logger()
-		logger := (*zerologr.Logger)(&lg)
-
 		sc, err = NewServerConn(
 			nc1,
 			SCOptSubjectPrefix(subjectPrefix),
 			SCOptGroup(group),
 			SCOptRunner(runner),
-			SCOptLogger(logger),
+			SCOptLogger(newLogger()),
 			SCOptContext(baseCtx),
 		)
 		if err != nil {
@@ -711,8 +715,8 @@ func TestPbJsonAndFanout(t *testing.T) {
 		defer nc2.Close()
 		log.Printf("Connection 2 connected.\n")
 
-		if true {
-			// Display raw nats messages flow.
+		// Set to true if want to display raw nats messages flow.
+		if false {
 			nc2.Subscribe(">", func(msg *nats.Msg) {
 				log.Printf("***** subject=%s reply=%s data=(hex)%x len=%d\n", msg.Subject, msg.Reply, msg.Data, len(msg.Data))
 			})
@@ -803,7 +807,7 @@ func TestPbJsonAndFanout(t *testing.T) {
 			start := time.Now()
 			output, err := handler(context.Background(), testCase.Input)
 			dur := time.Since(start)
-			log.Printf("[%d] dur=%s", i, dur.String())
+			log.Printf("[%d] dur=%s output=%v", i, dur.String(), output)
 			assert.NoError(err, "loop %d", i)
 
 			switch output.(*wrapperspb.Int32Value).Value {
