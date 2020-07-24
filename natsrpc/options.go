@@ -2,6 +2,8 @@ package natsrpc
 
 import (
 	"context"
+	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/huangjunwen/golibs/logr"
@@ -19,8 +21,15 @@ var (
 	DefaultClientTimeout time.Duration = 5 * time.Second
 )
 
+var (
+	subjectPrefixRegexp = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
+)
+
 func SCOptLogger(logger logr.Logger) ServerConnOption {
 	return func(sc *ServerConn) error {
+		if logger == nil {
+			logger = logr.Nop
+		}
 		sc.logger = logger.WithValues("component", "nproto.natsrpc.ServerConn")
 		return nil
 	}
@@ -29,6 +38,9 @@ func SCOptLogger(logger logr.Logger) ServerConnOption {
 // SCOptRunner sets runner for handlers. Note that the runner will be closed in ServerConn.Close().
 func SCOptRunner(runner taskrunner.TaskRunner) ServerConnOption {
 	return func(sc *ServerConn) error {
+		if runner == nil {
+			return fmt.Errorf("SCOptRunner got nil taskrunner.TaskRunner")
+		}
 		// Close it before replacing.
 		sc.runner.Close()
 		sc.runner = runner
@@ -38,6 +50,9 @@ func SCOptRunner(runner taskrunner.TaskRunner) ServerConnOption {
 
 func SCOptSubjectPrefix(subjectPrefix string) ServerConnOption {
 	return func(sc *ServerConn) error {
+		if !subjectPrefixRegexp.MatchString(subjectPrefix) {
+			return fmt.Errorf("SCOptSubjectPrefix got invalid subject prefix %q", subjectPrefix)
+		}
 		sc.subjectPrefix = subjectPrefix
 		return nil
 	}
@@ -45,6 +60,9 @@ func SCOptSubjectPrefix(subjectPrefix string) ServerConnOption {
 
 func SCOptGroup(group string) ServerConnOption {
 	return func(sc *ServerConn) error {
+		if group == "" {
+			return fmt.Errorf("SCOptGroup got empty group")
+		}
 		sc.group = group
 		return nil
 	}
@@ -52,6 +70,9 @@ func SCOptGroup(group string) ServerConnOption {
 
 func SCOptContext(ctx context.Context) ServerConnOption {
 	return func(sc *ServerConn) error {
+		if ctx == nil {
+			return fmt.Errorf("SCOptContext got nil context.Context")
+		}
 		sc.ctx = ctx
 		return nil
 	}
@@ -59,14 +80,26 @@ func SCOptContext(ctx context.Context) ServerConnOption {
 
 func CCOptSubjectPrefix(subjectPrefix string) ClientConnOption {
 	return func(cc *ClientConn) error {
+		if !subjectPrefixRegexp.MatchString(subjectPrefix) {
+			return fmt.Errorf("CCOptSubjectPrefix got invalid subject prefix %q", subjectPrefix)
+		}
 		cc.subjectPrefix = subjectPrefix
 		return nil
 	}
 }
 
-func CCOptTimeout(timeout time.Duration) ClientConnOption {
+func CCOptTimeout(t time.Duration) ClientConnOption {
 	return func(cc *ClientConn) error {
-		cc.timeout = timeout
+		if t <= 0 {
+			return fmt.Errorf("CCOptTimeout got non-positive duration %s", t.String())
+		}
+		cc.timeout = t
 		return nil
+	}
+}
+
+func init() {
+	if !subjectPrefixRegexp.MatchString(DefaultSubjectPrefix) {
+		panic(fmt.Errorf("DefaultSubjectPrefix %q invalid", DefaultSubjectPrefix))
 	}
 }

@@ -36,6 +36,7 @@ type DurConn struct {
 	stanOptPubAckWait   time.Duration
 	connectCb           func(stan.Conn)
 	disconnectCb        func(stan.Conn)
+	subscribeCb         func(sc stan.Conn, spec MsgSpec)
 
 	connectMu sync.Mutex   // at most on connect can be run at any time
 	mu        sync.RWMutex // to protect mutable fields
@@ -78,6 +79,7 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) (dc *Dur
 		stanOptPubAckWait:   DefaultStanPubAckWait,
 		connectCb:           func(_ stan.Conn) {},
 		disconnectCb:        func(_ stan.Conn) {},
+		subscribeCb:         func(_ stan.Conn, _ MsgSpec) {},
 		subs:                make(map[[2]string]*subscription),
 	}
 
@@ -331,6 +333,9 @@ func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn) error {
 	opts = append(opts, stan.SetManualAckMode())     // Use manual ack mode.
 	opts = append(opts, stan.DurableName(sub.queue)) // Queue as durable name.
 	_, err := sc.QueueSubscribe(fullSubject, sub.queue, dc.msgHandler(sub), opts...)
+	if err == nil {
+		dc.subscribeCb(sc, sub.spec)
+	}
 	return err
 
 }
