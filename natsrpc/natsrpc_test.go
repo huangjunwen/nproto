@@ -124,20 +124,15 @@ func TestNatsRPC(t *testing.T) {
 	)
 
 	{
-		runner, err := limitedrunner.New(
-			limitedrunner.MinWorkers(1),
-			limitedrunner.MaxWorkers(1),
-			limitedrunner.QueueSize(1),
-		)
-		if err != nil {
-			log.Panic(err)
-		}
-
 		sc, err = NewServerConn(
 			nc1,
 			SCOptSubjectPrefix(subjectPrefix),
 			SCOptGroup(group),
-			SCOptRunner(runner),
+			SCOptRunner(limitedrunner.Must( // minimal worker and queue to test busy case
+				limitedrunner.MinWorkers(1),
+				limitedrunner.MaxWorkers(1),
+				limitedrunner.QueueSize(1),
+			)),
 			SCOptLogger(newLogger()),
 			SCOptContext(baseCtx),
 		)
@@ -631,7 +626,7 @@ func TestNatsRPC(t *testing.T) {
 				return context.Background(), &emptypb.Empty{}
 			},
 			Before: func(handler RPCHandler) {
-				// One for worker and one for queue. Then then next request will be unable to handle.
+				// One for worker and one for queue. Then the next request will be unable to handle.
 				go handler(context.Background(), &emptypb.Empty{})
 				time.Sleep(500 * time.Millisecond)
 				go handler(context.Background(), &emptypb.Empty{})

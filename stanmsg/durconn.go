@@ -177,8 +177,8 @@ func (dc *DurConn) connect(wait bool) {
 			// is closed due to unexpected errors.
 			// The callback will not be invoked on normal Conn.Close().
 			stan.SetConnectionLostHandler(func(sc stan.Conn, err error) {
-				dc.disconnectCb(sc)
 				dc.logger.Error(err, "connection lost")
+				dc.disconnectCb(sc)
 				// reconnect after a while
 				dc.goConnect(true)
 			}),
@@ -194,6 +194,7 @@ func (dc *DurConn) connect(wait bool) {
 			dc.goConnect(true)
 			return
 		}
+		dc.logger.Info("connect successfully")
 		dc.connectCb(sc)
 	}
 
@@ -310,10 +311,8 @@ func (dc *DurConn) subscribeAll(subs []*subscription, sc stan.Conn, scStaleCh ch
 				continue
 			}
 			if err := dc.subscribe(sub, sc); err != nil {
-				dc.logger.Error(err, "subscribe error", "subject", sub.spec.SubjectName, "queue", sub.queue)
 				continue
 			}
-			dc.logger.Info("subscribe successfully", "subject", sub.spec.SubjectName, "queue", sub.queue)
 			success[i] = true
 			n++
 
@@ -350,10 +349,13 @@ func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn) error {
 	opts = append(opts, stan.SetManualAckMode())     // Use manual ack mode.
 	opts = append(opts, stan.DurableName(sub.queue)) // Queue as durable name.
 	_, err := sc.QueueSubscribe(fullSubject, sub.queue, dc.msgHandler(sub), opts...)
-	if err == nil {
-		dc.subscribeCb(sc, sub.spec)
+	if err != nil {
+		dc.logger.Error(err, "subscribe error", "subject", sub.spec.SubjectName(), "queue", sub.queue)
+		return err
 	}
-	return err
+	dc.logger.Info("subscribe successfully", "subject", sub.spec.SubjectName(), "queue", sub.queue)
+	dc.subscribeCb(sc, sub.spec)
+	return nil
 
 }
 
