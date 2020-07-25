@@ -38,8 +38,9 @@ type DurConn struct {
 	disconnectCb        func(stan.Conn)
 	subscribeCb         func(sc stan.Conn, spec MsgSpec)
 
-	connectMu sync.Mutex   // at most on connect can be run at any time
-	mu        sync.RWMutex // to protect mutable fields
+	wg        sync.WaitGroup // wait for go routines
+	connectMu sync.Mutex     // at most on connect can be run at any time
+	mu        sync.RWMutex   // to protect mutable fields
 
 	// Mutable fields.
 	closed    bool
@@ -60,12 +61,12 @@ type DurConnOption func(*DurConn) error
 
 type SubOption func(*subscription) error
 
-func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) (dc *DurConn, err error) {
+func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) (durConn *DurConn, err error) {
 	if nc.Opts.MaxReconnect >= 0 {
 		return nil, ErrNCMaxReconnect
 	}
 
-	durConn := &DurConn{
+	dc := &DurConn{
 		nc:                  nc,
 		clusterID:           clusterID,
 		ctx:                 context.Background(),
@@ -85,18 +86,18 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) (dc *Dur
 
 	defer func() {
 		if err != nil {
-			durConn.runner.Close()
+			dc.runner.Close()
 		}
 	}()
 
 	for _, opt := range opts {
-		if err = opt(durConn); err != nil {
+		if err = opt(dc); err != nil {
 			return nil, err
 		}
 	}
 
-	go durConn.connect(false)
-	return durConn, nil
+	dc.goConnect(false)
+	return dc, nil
 }
 
 func (dc *DurConn) Publisher(encoder npenc.Encoder) MsgAsyncPublisherFunc {
@@ -127,6 +128,14 @@ func (dc *DurConn) Subscriber(decoder npenc.Decoder) MsgSubscriberFunc {
 
 		return dc.subscribeOne(sub)
 	}
+}
+
+func (dc *DurConn) goConnect(wait bool) {
+	dc.wg.Add(1)
+	go func() {
+		defer dc.wg.Done()
+		dc.connect(wait)
+	}()
 }
 
 func (dc *DurConn) connect(wait bool) {
@@ -171,7 +180,7 @@ func (dc *DurConn) connect(wait bool) {
 				dc.disconnectCb(sc)
 				dc.logger.Error(err, "connection lost")
 				// reconnect after a while
-				go dc.connect(true)
+				dc.goConnect(true)
 			}),
 		}
 
@@ -182,7 +191,7 @@ func (dc *DurConn) connect(wait bool) {
 		if err != nil {
 			// reconnect immediately.
 			dc.logger.Error(err, "connect failed")
-			go dc.connect(true)
+			dc.goConnect(true)
 			return
 		}
 		dc.connectCb(sc)
@@ -209,7 +218,7 @@ func (dc *DurConn) connect(wait bool) {
 	}
 
 	// Re-subscribe
-	go dc.subscribeAll(subs, sc, scStaleCh)
+	dc.goSubscribeAll(subs, sc, scStaleCh)
 
 }
 
@@ -278,6 +287,14 @@ func (dc *DurConn) subscribeOne(sub *subscription) error {
 
 	dc.subs[key] = sub
 	return nil
+}
+
+func (dc *DurConn) goSubscribeAll(subs []*subscription, sc stan.Conn, scStaleCh chan struct{}) {
+	dc.wg.Add(1)
+	go func() {
+		defer dc.wg.Done()
+		dc.subscribeAll(subs, sc, scStaleCh)
+	}()
 }
 
 // NOTE: subscribe until all success or scStaleCh closed.
@@ -403,5 +420,6 @@ func (dc *DurConn) Close() {
 	}
 
 	dc.runner.Close()
+	dc.wg.Wait()
 
 }
