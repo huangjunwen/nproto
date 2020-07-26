@@ -219,6 +219,15 @@ func (sc *ServerConn) msgHandler(svcName string, mm *methodMap) nats.MsgHandler 
 		}
 
 		if err := sc.runner.Submit(func() {
+			defer func() {
+				if e := recover(); e != nil {
+					err, ok := e.(error)
+					if !ok {
+						err = fmt.Errorf("%+v", e)
+					}
+					logger().Error(err, "handler panic")
+				}
+			}()
 
 			info := mm.Lookup(methodName)
 			if info == nil {

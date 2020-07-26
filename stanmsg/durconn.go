@@ -361,11 +361,20 @@ func (dc *DurConn) subscribe(sub *subscription, sc stan.Conn) error {
 
 func (dc *DurConn) msgHandler(sub *subscription) stan.MsgHandler {
 
-	logger := dc.logger.WithValues("subject", sub.spec.SubjectName, "queue", sub.queue)
+	logger := dc.logger.WithValues("subject", sub.spec.SubjectName(), "queue", sub.queue)
 
 	return func(stanMsg *stan.Msg) {
 
 		if err := dc.runner.Submit(func() {
+			defer func() {
+				if e := recover(); e != nil {
+					err, ok := e.(error)
+					if !ok {
+						err = fmt.Errorf("%+v", e)
+					}
+					logger.Error(err, "handler panic")
+				}
+			}()
 
 			m := &nppbmsg.MessageWithMD{}
 			if err := proto.Unmarshal(stanMsg.Data, m); err != nil {

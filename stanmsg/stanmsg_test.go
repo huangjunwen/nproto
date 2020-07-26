@@ -3,9 +3,11 @@ package stanmsg
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -32,9 +34,9 @@ func newLogger() logr.Logger {
 	return (*zerologr.Logger)(&lg)
 }
 
-func TestDurConnConnect(t *testing.T) {
+func TestConnect(t *testing.T) {
 	log.Printf("\n")
-	log.Printf(">>> TestDurConnConnect.\n")
+	log.Printf(">>> TestConnect.\n")
 	var err error
 
 	opts := &tststan.Options{
@@ -122,9 +124,9 @@ func TestDurConnConnect(t *testing.T) {
 	log.Printf("DurConn reconnect %p.\n", <-connectC)
 }
 
-func TestDurConnPubSub(t *testing.T) {
+func TestPubSub(t *testing.T) {
 	log.Printf("\n")
-	log.Printf(">>> TestDurConnPubSub.\n")
+	log.Printf(">>> TestPubSub.\n")
 	var err error
 	assert := assert.New(t)
 
@@ -187,6 +189,14 @@ func TestDurConnPubSub(t *testing.T) {
 	spec := MustMsgSpec(
 		"app.topic",
 		func() interface{} { return wrapperspb.String("") },
+	)
+	spec2 := MustMsgSpec(
+		"app.topic",
+		func() interface{} { return new(string) },
+	)
+	specWrongType := MustMsgSpec(
+		"app.topic",
+		func() interface{} { return &map[string]interface{}{} },
 	)
 	queue := "default"
 
@@ -258,12 +268,14 @@ func TestDurConnPubSub(t *testing.T) {
 					return errors.New("bad data")
 
 				default:
-					panic(errors.New("Impossible branch"))
+					panic(fmt.Errorf("Unexpect value %s", v))
 				}
 			},
 			SubOptStanAckWait(time.Second), // Short ack wait results in fast redelivery.
 		)
-		assert.NoError(err)
+		if err != nil {
+			log.Panic(err)
+		}
 
 		log.Printf("Subscribed: %s\n", <-subC)
 	}
@@ -272,18 +284,46 @@ func TestDurConnPubSub(t *testing.T) {
 	{
 		ctx := npmd.NewOutgoingContextWithMD(context.Background(), npmd.NewMetaDataPairs(mdKey, mdVal))
 
-		// Publish good msg data.
+		// Publish good msg data using pb format.
 		{
 			err = publisher.Publish(ctx, spec, wrapperspb.String(goodData))
 			assert.NoError(err)
 			log.Printf("Publish and handler got good data: %v.\n", <-goodC)
 		}
 
-		// Publish bad msg data.
+		// Publish bad msg data using json format and cause redelivery.
 		{
-			err = publisher.Publish(ctx, spec, wrapperspb.String(badData))
+			err = publisher.Publish(ctx, spec2, &badData)
 			assert.NoError(err)
 			log.Printf("Publish and handler got bad data: %v.\n", <-badC)
+		}
+
+		// Publish wrong type.
+		{
+			err = publisher.Publish(ctx, spec, 1)
+			assert.Error(err)
+		}
+
+		// Publish encode type.
+		{
+			err = publisher.Publish(ctx, specWrongType, &map[string]interface{}{
+				"a": func() {},
+			})
+			assert.Error(err)
+		}
+
+		// Subscribe decode error and cause redelivery.
+		{
+			err = publisher.Publish(ctx, specWrongType, &map[string]interface{}{
+				"a": "b",
+			})
+			assert.NoError(err)
+		}
+
+		// Publish other data to panic and cause redelivery.
+		{
+			err = publisher.Publish(ctx, spec, wrapperspb.String("panic"))
+			assert.NoError(err)
 		}
 	}
 
@@ -314,5 +354,171 @@ func TestDurConnPubSub(t *testing.T) {
 	// Now we should see some redelivery.
 	for i := 0; i < 3; i++ {
 		log.Printf("Bad data redelivery: %v.\n", <-badC)
+	}
+}
+
+func TestFanout(t *testing.T) {
+	log.Printf("\n")
+	log.Printf(">>> TestFanout.\n")
+	var err error
+
+	// Starts the test server.
+	var res *tststan.Resource
+	{
+		res, err = tststan.Run(nil)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer res.Close()
+		log.Printf("Test stan server started: %+q\n", res.NatsURL())
+	}
+
+	// Common vars.
+	spec := MustMsgSpec(
+		"test",
+		func() interface{} { return wrapperspb.String("") },
+	)
+	queue := "default"
+
+	{
+		// Creates nats connection (with infinite reconnection).
+		var nc1 *nats.Conn
+		{
+			nc1, err = res.NatsClient(
+				nats.MaxReconnects(-1),
+			)
+			if err != nil {
+				log.Panic(err)
+			}
+			defer nc1.Close()
+			log.Printf("Connection 1 connected.\n")
+
+			if false {
+				// Display raw nats messages flow.
+				nc1.Subscribe(">", func(msg *nats.Msg) {
+					log.Printf("***** subject=%s reply=%s data=(hex)%x len=%d\n", msg.Subject, msg.Reply, msg.Data, len(msg.Data))
+				})
+			}
+		}
+
+		// Creates the first DurConn.
+		var dc1 *DurConn
+		subC1 := make(chan MsgSpec, 1)
+		{
+			dc1, err = NewDurConn(
+				nc1,
+				res.Options.ClusterId,
+				DCOptLogger(newLogger()),
+				DCOptSubscribeCb(func(_ stan.Conn, spec MsgSpec) { subC1 <- spec }),
+			)
+			if err != nil {
+				log.Panic(err)
+			}
+			defer dc1.Close()
+			log.Printf("DurConn 1 created.\n")
+		}
+		publisher1 := PbJsonPublisher(dc1)
+		subscriber1 := PbJsonSubscriber(dc1)
+
+		// The first subscribe always returns error cause redelivery.
+		sub1Handled := make(chan struct{})
+		sub1HandledOnce := sync.Once{}
+		{
+			err = subscriber1.Subscribe(
+				spec,
+				queue,
+				func(ctx context.Context, msg interface{}) error {
+					sub1HandledOnce.Do(func() {
+						close(sub1Handled)
+					})
+					return errors.New("err")
+				},
+				SubOptStanAckWait(time.Second), // Short ack wait results in fast redelivery.
+			)
+			if err != nil {
+				log.Panic(err)
+			}
+
+			log.Printf("Subscribed 1: %s\n", <-subC1)
+		}
+
+		// Publish.
+		{
+			err = publisher1.Publish(context.Background(), spec, wrapperspb.String("123"))
+			if err != nil {
+				log.Panic(err)
+			}
+			log.Printf("Published 1\n")
+		}
+
+		// Handler 1 handled.
+		{
+			<-sub1Handled
+			log.Printf("Handler 1 handled\n")
+		}
+
+		// Close dc1.
+		dc1.Close()
+	}
+
+	{
+		// Creates nats connection (with infinite reconnection).
+		var nc2 *nats.Conn
+		{
+			nc2, err = res.NatsClient(
+				nats.MaxReconnects(-1),
+			)
+			if err != nil {
+				log.Panic(err)
+			}
+			defer nc2.Close()
+			log.Printf("Connection 2 connected.\n")
+
+		}
+		// Creates the second DurConn.
+		var dc2 *DurConn
+		subC2 := make(chan MsgSpec, 1)
+		{
+			dc2, err = NewDurConn(
+				nc2,
+				res.Options.ClusterId,
+				DCOptLogger(newLogger()),
+				DCOptSubscribeCb(func(_ stan.Conn, spec MsgSpec) { subC2 <- spec }),
+			)
+			if err != nil {
+				log.Panic(err)
+			}
+			defer dc2.Close()
+			log.Printf("DurConn 2 created.\n")
+		}
+		subscriber2 := PbJsonSubscriber(dc2)
+
+		// The second subscribe returns nil.
+		sub2Handled := make(chan struct{})
+		sub2HandledOnce := sync.Once{}
+		{
+			err = subscriber2.Subscribe(
+				spec,
+				queue,
+				func(ctx context.Context, msg interface{}) error {
+					sub2HandledOnce.Do(func() {
+						close(sub2Handled)
+					})
+					return nil
+				},
+			)
+			if err != nil {
+				log.Panic(err)
+			}
+
+			log.Printf("Subscribed 2: %s\n", <-subC2)
+		}
+
+		// Handler 2 handled.
+		{
+			<-sub2Handled
+			log.Printf("Handler 2 handled\n")
+		}
+
 	}
 }

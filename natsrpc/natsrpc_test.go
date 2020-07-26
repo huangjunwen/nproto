@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"math"
 	"os"
@@ -65,9 +66,9 @@ func newRawMessage(s string) *json.RawMessage {
 	return &r
 }
 
-func TestNatsRPC(t *testing.T) {
+func TestCall(t *testing.T) {
 	log.Printf("\n")
-	log.Printf(">>> TestNatsRPC.\n")
+	log.Printf(">>> TestCall.\n")
 	var err error
 	assert := assert.New(t)
 
@@ -329,6 +330,18 @@ func TestNatsRPC(t *testing.T) {
 		}
 	)
 
+	var (
+		panicSpec = MustRPCSpec(
+			svcName,
+			"panic",
+			func() interface{} { return &emptypb.Empty{} },
+			func() interface{} { return &emptypb.Empty{} },
+		)
+		panicHandler = func(ctx context.Context, in interface{}) (interface{}, error) {
+			panic(fmt.Errorf("Something goes wrong"))
+		}
+	)
+
 	// Regist handlers.
 	if err := server.RegistHandler(sqrtSpec, sqrtHandler); err != nil {
 		log.Panic(err)
@@ -346,6 +359,9 @@ func TestNatsRPC(t *testing.T) {
 		log.Panic(err)
 	}
 	if err := server.RegistHandler(blockSpec, blockHandler); err != nil {
+		log.Panic(err)
+	}
+	if err := server.RegistHandler(panicSpec, panicHandler); err != nil {
 		log.Panic(err)
 	}
 
@@ -617,7 +633,7 @@ func TestNatsRPC(t *testing.T) {
 			ExpectOutput: nil,
 			ExpectError:  true,
 		},
-		// block handlers.
+		// block to test handler busy.
 		{
 			Client:     jsonClient,
 			ClientName: "json",
@@ -635,6 +651,17 @@ func TestNatsRPC(t *testing.T) {
 			After: func() {
 				blockCh <- struct{}{}
 				blockCh <- struct{}{}
+			},
+			ExpectOutput: nil,
+			ExpectError:  true,
+		},
+		// handler panic.
+		{
+			Client:     pbClient,
+			ClientName: "pb",
+			Spec:       panicSpec,
+			GenInput: func() (context.Context, interface{}) {
+				return context.Background(), &emptypb.Empty{}
 			},
 			ExpectOutput: nil,
 			ExpectError:  true,
@@ -672,9 +699,9 @@ func TestNatsRPC(t *testing.T) {
 
 }
 
-func TestPbJsonAndFanout(t *testing.T) {
+func TestFanout(t *testing.T) {
 	log.Printf("\n")
-	log.Printf(">>> TestPbJsonAndFanout.\n")
+	log.Printf(">>> TestFanout.\n")
 	var err error
 	assert := assert.New(t)
 
