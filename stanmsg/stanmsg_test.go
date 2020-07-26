@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -34,94 +35,31 @@ func newLogger() logr.Logger {
 	return (*zerologr.Logger)(&lg)
 }
 
-func TestConnect(t *testing.T) {
-	log.Printf("\n")
-	log.Printf(">>> TestConnect.\n")
-	var err error
+type InvalidSpec struct{}
 
-	opts := &tststan.Options{
-		HostPort: tstsvc.FreePort(),
-	}
+var (
+	_ MsgSpec = InvalidSpec{}
+)
 
-	// Starts the first server.
-	var res1 *tststan.Resource
-	{
-		res1, err = tststan.Run(opts)
-		if err != nil {
-			log.Panic(err)
-		}
-		defer res1.Close()
-		log.Printf("Test stan server 1 started: %+q\n", res1.NatsURL())
-	}
+func (spec InvalidSpec) SubjectName() string {
+	// XXX: nats-streaming-server does not support wildcard
+	return "invalid.topic.*"
+}
 
-	// Creates nats connection (with infinite reconnection).
-	var nc *nats.Conn
-	{
-		nc, err = res1.NatsClient(
-			nats.MaxReconnects(-1),
-		)
-		if err != nil {
-			log.Panic(err)
-		}
-		defer nc.Close()
-		log.Printf("Connection connected.\n")
+func (spec InvalidSpec) NewMsg() interface{} {
+	return wrapperspb.String("")
+}
 
-		if false {
-			// Display raw nats messages flow.
-			nc.Subscribe(">", func(msg *nats.Msg) {
-				log.Printf("***** subject=%s reply=%s data=(hex)%x len=%d\n", msg.Subject, msg.Reply, msg.Data, len(msg.Data))
-			})
-		}
-	}
+func (spec InvalidSpec) MsgType() reflect.Type {
+	return reflect.TypeOf((*wrapperspb.StringValue)(nil))
+}
 
-	// Creates DurConn.
-	var dc *DurConn
-	connectC := make(chan stan.Conn, 1)
-	disconnectC := make(chan stan.Conn, 1)
-	{
-		dc, err = NewDurConn(
-			nc,
-			res1.Options.ClusterId,
-			DCOptLogger(newLogger()),
-			DCOptReconnectWait(time.Second), // short reconnect wait.
-			DCOptStanPingInterval(1),        // min ping interval.
-			DCOptStanPingMaxOut(2),          // min ping max out.
-			DCOptConnectCb(func(sc stan.Conn) { connectC <- sc }),
-			DCOptDisconnectCb(func(sc stan.Conn) { disconnectC <- sc }),
-		)
-		if err != nil {
-			log.Panic(err)
-		}
-		defer dc.Close()
-		log.Printf("DurConn created.\n")
-	}
+var (
+	invalidSpecMsgValue = wrapperspb.String("")
+)
 
-	// Wait connect.
-	log.Printf("DurConn connected %p.\n", <-connectC)
-
-	// First server gone.
-	res1.Close()
-	log.Printf("Test stan server 1 closed\n")
-
-	// Wait disconnect.
-	log.Printf("DurConn disconnected %p.\n", <-disconnectC)
-
-	// Wait a while to see reconnect loop.
-	time.Sleep(3 * time.Second)
-
-	// Starts the second server using same options.
-	var res2 *tststan.Resource
-	{
-		res2, err = tststan.Run(opts)
-		if err != nil {
-			log.Panic(err)
-		}
-		defer res2.Close()
-		log.Printf("Test stan server 2 started: %+q\n", res2.NatsURL())
-	}
-
-	// Wait reconnect.
-	log.Printf("DurConn reconnect %p.\n", <-connectC)
+func (spec InvalidSpec) MsgValue() interface{} {
+	return invalidSpecMsgValue
 }
 
 func TestPubSub(t *testing.T) {
@@ -129,6 +67,31 @@ func TestPubSub(t *testing.T) {
 	log.Printf(">>> TestPubSub.\n")
 	var err error
 	assert := assert.New(t)
+
+	// Params.
+	type CtxKey struct{}
+	ctxVal := "123"
+	ctx := context.WithValue(context.Background(), CtxKey{}, ctxVal)
+
+	mdKey := "mdKey"
+	mdVal := "mdVal"
+
+	spec := MustMsgSpec(
+		"app.topic",
+		func() interface{} { return wrapperspb.String("") },
+	)
+	spec2 := MustMsgSpec(
+		"app.topic",
+		func() interface{} { return new(string) },
+	)
+	specWrongType := MustMsgSpec(
+		"app.topic",
+		func() interface{} { return &map[string]interface{}{} },
+	)
+	queue := "default"
+
+	goodData := "good"
+	badData := "bad"
 
 	// Use a tmp directory as data dir.
 	var datadir string
@@ -178,31 +141,6 @@ func TestPubSub(t *testing.T) {
 		}
 	}
 
-	// Values for checks.
-	type CtxKey struct{}
-	ctxVal := "123"
-	ctx := context.WithValue(context.Background(), CtxKey{}, ctxVal)
-
-	mdKey := "mdKey"
-	mdVal := "mdVal"
-
-	spec := MustMsgSpec(
-		"app.topic",
-		func() interface{} { return wrapperspb.String("") },
-	)
-	spec2 := MustMsgSpec(
-		"app.topic",
-		func() interface{} { return new(string) },
-	)
-	specWrongType := MustMsgSpec(
-		"app.topic",
-		func() interface{} { return &map[string]interface{}{} },
-	)
-	queue := "default"
-
-	goodData := "good"
-	badData := "bad"
-
 	// Creates DurConn.
 	var dc *DurConn
 	connectC := make(chan stan.Conn, 1)
@@ -222,6 +160,7 @@ func TestPubSub(t *testing.T) {
 			DCOptConnectCb(func(sc stan.Conn) { connectC <- sc }),
 			DCOptDisconnectCb(func(sc stan.Conn) { disconnectC <- sc }),
 			DCOptSubscribeCb(func(_ stan.Conn, spec MsgSpec) { subC <- spec }),
+			DCOptStanPubAckWait(time.Second),
 		)
 		if err != nil {
 			log.Panic(err)
@@ -357,10 +296,112 @@ func TestPubSub(t *testing.T) {
 	}
 }
 
-func TestFanout(t *testing.T) {
+func TestReconnect(t *testing.T) {
 	log.Printf("\n")
-	log.Printf(">>> TestFanout.\n")
+	log.Printf(">>> TestReconnect.\n")
 	var err error
+
+	opts := &tststan.Options{
+		HostPort: tstsvc.FreePort(),
+	}
+
+	// Starts the first server.
+	var res1 *tststan.Resource
+	{
+		res1, err = tststan.Run(opts)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer res1.Close()
+		log.Printf("Test stan server 1 started: %+q\n", res1.NatsURL())
+	}
+
+	// Creates nats connection (with infinite reconnection).
+	var nc *nats.Conn
+	{
+		nc, err = res1.NatsClient(
+			nats.MaxReconnects(-1),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer nc.Close()
+		log.Printf("Connection connected.\n")
+
+		if false {
+			// Display raw nats messages flow.
+			nc.Subscribe(">", func(msg *nats.Msg) {
+				log.Printf("***** subject=%s reply=%s data=(hex)%x len=%d\n", msg.Subject, msg.Reply, msg.Data, len(msg.Data))
+			})
+		}
+	}
+
+	// Creates DurConn.
+	var dc *DurConn
+	connectC := make(chan stan.Conn, 1)
+	disconnectC := make(chan stan.Conn, 1)
+	{
+		dc, err = NewDurConn(
+			nc,
+			res1.Options.ClusterId,
+			DCOptLogger(newLogger()),
+			DCOptReconnectWait(time.Second), // short reconnect wait.
+			DCOptStanPingInterval(1),        // min ping interval.
+			DCOptStanPingMaxOut(2),          // min ping max out.
+			DCOptConnectCb(func(sc stan.Conn) { connectC <- sc }),
+			DCOptDisconnectCb(func(sc stan.Conn) { disconnectC <- sc }),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer dc.Close()
+		log.Printf("DurConn created.\n")
+	}
+
+	// Wait connect.
+	log.Printf("DurConn connected %p.\n", <-connectC)
+
+	// First server gone.
+	res1.Close()
+	log.Printf("Test stan server 1 closed\n")
+
+	// Wait disconnect.
+	log.Printf("DurConn disconnected %p.\n", <-disconnectC)
+
+	// Wait a while to see reconnect loop.
+	time.Sleep(3 * time.Second)
+
+	// Starts the second server using same options.
+	var res2 *tststan.Resource
+	{
+		res2, err = tststan.Run(opts)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer res2.Close()
+		log.Printf("Test stan server 2 started: %+q\n", res2.NatsURL())
+	}
+
+	// Wait reconnect.
+	log.Printf("DurConn reconnect %p.\n", <-connectC)
+}
+
+func TestResubscribe(t *testing.T) {
+	log.Printf("\n")
+	log.Printf(">>> TestResubscribe.\n")
+	var err error
+	assert := assert.New(t)
+
+	// Params.
+	validSpec := MustMsgSpec(
+		"valid.topic",
+		func() interface{} { return wrapperspb.String("") },
+	)
+	invalidSpec := InvalidSpec{}
+	queue := "default"
+	handler := func(ctx context.Context, msg interface{}) error {
+		return nil
+	}
 
 	// Starts the test server.
 	var res *tststan.Resource
@@ -373,12 +414,87 @@ func TestFanout(t *testing.T) {
 		log.Printf("Test stan server started: %+q\n", res.NatsURL())
 	}
 
-	// Common vars.
+	// Creates nats connection (with infinite reconnection).
+	var nc *nats.Conn
+	{
+		nc, err = res.NatsClient(
+			nats.MaxReconnects(-1),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer nc.Close()
+		log.Printf("Connection connected.\n")
+
+		if false {
+			// Display raw nats messages flow.
+			nc.Subscribe(">", func(msg *nats.Msg) {
+				log.Printf("***** subject=%s reply=%s data=(hex)%x len=%d\n", msg.Subject, msg.Reply, msg.Data, len(msg.Data))
+			})
+		}
+	}
+
+	// Creates the DurConn.
+	var dc *DurConn
+	connectC := make(chan stan.Conn)
+	onConnect := func(do func(stan.Conn)) {
+		sc := <-connectC
+		do(sc)
+		<-connectC
+	}
+	{
+		dc, err = NewDurConn(
+			nc,
+			res.Options.ClusterId,
+			DCOptLogger(newLogger()),
+			DCOptSubRetryWait(time.Second),
+			DCOptConnectCb(func(sc stan.Conn) {
+				connectC <- sc
+				connectC <- sc
+			}),
+		)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer dc.Close()
+		log.Printf("DurConn created.\n")
+	}
+	subscriber := PbJsonSubscriber(dc)
+
+	onConnect(func(sc stan.Conn) {
+		err = subscriber.Subscribe(validSpec, queue, handler)
+		assert.NoError(err)
+
+		err = subscriber.Subscribe(invalidSpec, queue, handler)
+		assert.NoError(err)
+	})
+
+	time.Sleep(3 * time.Second)
+
+}
+
+func TestGroupRedelivery(t *testing.T) {
+	log.Printf("\n")
+	log.Printf(">>> TestGroupRedelivery.\n")
+	var err error
+
+	// Params.
 	spec := MustMsgSpec(
 		"test",
 		func() interface{} { return wrapperspb.String("") },
 	)
 	queue := "default"
+
+	// Starts the test server.
+	var res *tststan.Resource
+	{
+		res, err = tststan.Run(nil)
+		if err != nil {
+			log.Panic(err)
+		}
+		defer res.Close()
+		log.Printf("Test stan server started: %+q\n", res.NatsURL())
+	}
 
 	{
 		// Creates nats connection (with infinite reconnection).
@@ -475,6 +591,7 @@ func TestFanout(t *testing.T) {
 			log.Printf("Connection 2 connected.\n")
 
 		}
+
 		// Creates the second DurConn.
 		var dc2 *DurConn
 		subC2 := make(chan MsgSpec, 1)

@@ -699,9 +699,9 @@ func TestCall(t *testing.T) {
 
 }
 
-func TestFanout(t *testing.T) {
+func TestLoadBalance(t *testing.T) {
 	log.Printf("\n")
-	log.Printf(">>> TestFanout.\n")
+	log.Printf(">>> TestLoadBalance.\n")
 	var err error
 	assert := assert.New(t)
 

@@ -71,8 +71,6 @@ func NewServerConn(nc *nats.Conn, opts ...ServerConnOption) (sc *ServerConn, err
 
 	defer func() {
 		if err != nil {
-			// XXX: server.runner maybe not the initial runner since ServerOption
-			// can change it.
 			serverConn.runner.Close()
 		}
 	}()
