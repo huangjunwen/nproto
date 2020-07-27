@@ -21,29 +21,57 @@ import (
 	nppbmsg "github.com/huangjunwen/nproto/v2/pb/msg"
 )
 
-type BinlogMsgPipe struct {
+type MsgPipe struct {
 	// Immutable fields.
+	downstream  interface{} // msg.MsgPublisher or msg.MsgAsyncPublisher
 	masterCfg   *mycanal.FullDumpConfig
 	slaveCfg    *mycanal.IncrDumpConfig
 	tableFilter MsgTableFilter
-	downstream  interface{} // msg.MsgPublisher or msg.MsgAsyncPublisher
 	lockName    string
 	logger      logr.Logger
 	maxInflight int
 	retryWait   time.Duration
 }
 
-type BinlogMsgPublisher struct {
-	schema  string
-	table   string
-	q       sqlh.Queryer
-	encoder npenc.Encoder
-}
-
 // MsgTableFilter returns true if a given table is a msg table.
 type MsgTableFilter func(schema, table string) bool
 
-func (pipe *BinlogMsgPipe) Run(ctx context.Context) (err error) {
+type MsgPipeOption func(*MsgPipe) error
+
+func NewMsgPipe(
+	downstream interface{},
+	masterCfg *mycanal.FullDumpConfig,
+	slaveCfg *mycanal.IncrDumpConfig,
+	tableFilter MsgTableFilter,
+	opts ...MsgPipeOption,
+) (*MsgPipe, error) {
+
+	switch downstream.(type) {
+	case MsgPublisher:
+	case MsgAsyncPublisher:
+	default:
+		return nil, fmt.Errorf("binlogmsg.NewMsgPipe downstream expect either MsgPublisher or MsgAsyncPublisher, but got %T", downstream)
+	}
+
+	pipe := &MsgPipe{
+		downstream:  downstream,
+		masterCfg:   masterCfg,
+		slaveCfg:    slaveCfg,
+		tableFilter: tableFilter,
+		lockName:    DefaultLockName,
+		logger:      logr.Nop,
+		maxInflight: DefaultMaxInflight,
+		retryWait:   DefaultRetryWait,
+	}
+	for _, opt := range opts {
+		if err := opt(pipe); err != nil {
+			return nil, err
+		}
+	}
+	return pipe, nil
+}
+
+func (pipe *MsgPipe) Run(ctx context.Context) (err error) {
 	for {
 		pipe.run(ctx)
 		select {
@@ -54,7 +82,7 @@ func (pipe *BinlogMsgPipe) Run(ctx context.Context) (err error) {
 	}
 }
 
-func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
+func (pipe *MsgPipe) run(ctx context.Context) (err error) {
 
 	logger := pipe.logger
 	db, err := pipe.masterCfg.Client()
@@ -111,18 +139,17 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 
 		// Loop until end.
 		for entry := range entryCh {
-			// NOTE: Cancel ctx if error, but don't break the loop until q is closed.
 			err := entry.GetPublishErr()
+			if err == nil {
+				err = delMsg(context.Background(), conn, entry.SchemaName(), entry.TableName(), entry.Id())
+			}
+
+			// NOTE: Cancel ctx if any error, but don't break the loop until entryCh  is closed.
 			if err != nil {
 				cancel()
 				logger.Error(err, "publish failed", "msgId", entry.Id(), "msgSubj", entry.Subject())
-			} else {
-				err = delMsg(context.Background(), conn, entry.SchemaName(), entry.TableName(), entry.Id())
-				if err != nil {
-					cancel()
-					logger.Error(err, "del msg error", "msgId", entry.Id(), "msgSubj", entry.Subject())
-				}
 			}
+
 			// Put back quota.
 			<-ctrlCh
 		}
@@ -142,7 +169,8 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 			select {
 			case entryCh <- entry:
 			default:
-				// XXX: len(c) == len(q), so q <- entry should never block.
+				// XXX: since entryCh and ctrlCh have same buffer size (len(entryCh) == len(ctrlCh))
+				// and ctrlCh <- struct{}{} has succeeded above, so entryCh <- entry should never block here.
 				panic(fmt.Errorf("Unexpected branch"))
 			}
 			pubCbWg.Done()
@@ -232,7 +260,7 @@ func (pipe *BinlogMsgPipe) run(ctx context.Context) (err error) {
 	return err
 }
 
-func (pipe *BinlogMsgPipe) flushMsgEntry(ctx context.Context, entry msgEntry, cb func(error)) {
+func (pipe *MsgPipe) flushMsgEntry(ctx context.Context, entry msgEntry, cb func(error)) {
 	spec := MustRawDataMsgSpec(entry.Subject())
 
 	msg := &nppbmsg.MessageWithMD{}
@@ -266,32 +294,25 @@ func (pipe *BinlogMsgPipe) flushMsgEntry(ctx context.Context, entry msgEntry, cb
 
 }
 
-func NewBinlogMsgPublisher(schema, table string, q sqlh.Queryer, encoder npenc.Encoder) *BinlogMsgPublisher {
-	return &BinlogMsgPublisher{
-		schema:  schema,
-		table:   table,
-		q:       q,
-		encoder: encoder,
-	}
-}
+func NewMsgPublisher(encoder npenc.Encoder, q sqlh.Queryer, schema, table string) MsgPublisherFunc {
+	return func(ctx context.Context, spec MsgSpec, msg interface{}) error {
+		if err := AssertMsgType(spec, msg); err != nil {
+			return err
+		}
 
-func (p *BinlogMsgPublisher) Publish(ctx context.Context, spec MsgSpec, msg interface{}) error {
+		m := &nppbmsg.MessageWithMD{
+			MetaData: nppbmd.NewMetaData(npmd.MDFromOutgoingContext(ctx)),
+		}
+		if err := encoder.EncodeData(msg, &m.MsgFormat, &m.MsgBytes); err != nil {
+			return err
+		}
 
-	if err := AssertMsgType(spec, msg); err != nil {
-		return err
-	}
+		data, err := proto.Marshal(m)
+		if err != nil {
+			return err
+		}
 
-	m := &nppbmsg.MessageWithMD{
-		MetaData: nppbmd.NewMetaData(npmd.MDFromOutgoingContext(ctx)),
-	}
-	if err := p.encoder.EncodeData(msg, &m.MsgFormat, &m.MsgBytes); err != nil {
-		return err
-	}
+		return addMsg(ctx, q, schema, table, spec.SubjectName(), data)
 
-	data, err := proto.Marshal(m)
-	if err != nil {
-		return err
 	}
-
-	return addMsg(ctx, p.q, p.schema, p.table, spec.SubjectName(), data)
 }
