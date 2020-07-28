@@ -27,8 +27,8 @@ type MsgPipe struct {
 	masterCfg   *mycanal.FullDumpConfig
 	slaveCfg    *mycanal.IncrDumpConfig
 	tableFilter MsgTableFilter
-	lockName    string
 	logger      logr.Logger
+	lockName    string
 	maxInflight int
 	retryWait   time.Duration
 }
@@ -128,7 +128,7 @@ func (pipe *MsgPipe) run(ctx context.Context) (err error) {
 	go func() {
 		defer wg.Done()
 		defer cancel()
-		logger.Info("post process go routine ended")
+		defer logger.Info("post process go routine ended")
 
 		conn, err := db.Conn(context.Background())
 		if err != nil {
@@ -225,9 +225,13 @@ func (pipe *MsgPipe) run(ctx context.Context) (err error) {
 		logger.Error(err, "full dump ended with error")
 		return err
 	}
-	logger.Info("full dump ended")
+	logger.Info("full dump ended", "gtid", gtidSet)
 
 	// Now start incr dump to capture changes.
+	var (
+		curTrxContext *incrdump.TrxContext
+		curTrxEnded   = true
+	)
 	err = incrdump.IncrDump(ctx, pipe.slaveCfg, gtidSet, func(ctx context.Context, e interface{}) error {
 
 		switch ev := e.(type) {
@@ -242,6 +246,14 @@ func (pipe *MsgPipe) run(ctx context.Context) (err error) {
 			if err := flush(entry); err != nil {
 				return err
 			}
+
+		case *incrdump.TrxBeginning:
+			curTrxContext = (*incrdump.TrxContext)(ev)
+			curTrxEnded = false
+
+		case *incrdump.TrxEnding:
+			curTrxContext = (*incrdump.TrxContext)(ev)
+			curTrxEnded = true
 		}
 
 		return nil
@@ -251,10 +263,14 @@ func (pipe *MsgPipe) run(ctx context.Context) (err error) {
 	// Note that Post process maybe not finished yet.
 	pubCbWg.Wait()
 
+	gtid := ""
+	if curTrxContext != nil {
+		gtid = curTrxContext.GTID()
+	}
 	if err != nil {
-		logger.Error(err, "incr dump ended with error")
+		logger.Error(err, "incr dump ended with error", "gtid", gtid, "trxEnded", curTrxEnded)
 	} else {
-		logger.Info("Incr dump ended")
+		logger.Info("Incr dump ended", "gtid", gtid, "trxEnded", curTrxEnded)
 	}
 
 	return err

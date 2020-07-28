@@ -3,6 +3,8 @@ package binlogmsg
 import (
 	"fmt"
 	"time"
+
+	"github.com/huangjunwen/golibs/logr"
 )
 
 var (
@@ -12,6 +14,16 @@ var (
 
 	DefaultRetryWait = 5 * time.Second
 )
+
+func PipeOptLogger(logger logr.Logger) MsgPipeOption {
+	return func(pipe *MsgPipe) error {
+		if logger == nil {
+			logger = logr.Nop
+		}
+		pipe.logger = logger.WithValues("component", "nproto.binlogmsg.MsgPipe")
+		return nil
+	}
+}
 
 func PipeOptLockName(lockName string) MsgPipeOption {
 	return func(pipe *MsgPipe) error {
