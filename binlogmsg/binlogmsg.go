@@ -225,7 +225,7 @@ func (pipe *MsgPipe) run(ctx context.Context) (err error) {
 		logger.Error(err, "full dump ended with error")
 		return err
 	}
-	logger.Info("full dump ended", "gtid", gtidSet)
+	logger.Info("full dump ended", "gtidSet", gtidSet)
 
 	// Now start incr dump to capture changes.
 	var (
@@ -263,14 +263,13 @@ func (pipe *MsgPipe) run(ctx context.Context) (err error) {
 	// Note that Post process maybe not finished yet.
 	pubCbWg.Wait()
 
-	gtid := ""
 	if curTrxContext != nil {
-		gtid = curTrxContext.GTID()
+		gtidSet = curTrxContext.AfterGTIDSet().String()
 	}
 	if err != nil {
-		logger.Error(err, "incr dump ended with error", "gtid", gtid, "trxEnded", curTrxEnded)
+		logger.Error(err, "incr dump ended with error", "gtidSet", gtidSet, "trxEnded", curTrxEnded)
 	} else {
-		logger.Info("Incr dump ended", "gtid", gtid, "trxEnded", curTrxEnded)
+		logger.Info("Incr dump ended", "gtidSet", gtidSet, "trxEnded", curTrxEnded)
 	}
 
 	return err
