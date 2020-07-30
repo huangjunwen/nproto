@@ -8,13 +8,17 @@ import (
 )
 
 var (
+	// DefaultLockName is the default value of PipeOptLockName.
 	DefaultLockName = "nproto.binlogmsg"
 
+	// DefaultMaxInflight is the default value of PipeOptMaxInflight.
 	DefaultMaxInflight = 4096
 
+	// DefaultRetryWait is the default value of PipeOptRetryWait.
 	DefaultRetryWait = 5 * time.Second
 )
 
+// PipeOptLogger sets logger for MsgPipe.
 func PipeOptLogger(logger logr.Logger) MsgPipeOption {
 	return func(pipe *MsgPipe) error {
 		if logger == nil {
@@ -25,6 +29,8 @@ func PipeOptLogger(logger logr.Logger) MsgPipeOption {
 	}
 }
 
+// PipeOptLockName sets the lock name using in MySQL get lock ("SELECT GET_LOCK"):
+// only one instance of pipes can run for the same lock name.
 func PipeOptLockName(lockName string) MsgPipeOption {
 	return func(pipe *MsgPipe) error {
 		if lockName == "" {
@@ -35,6 +41,7 @@ func PipeOptLockName(lockName string) MsgPipeOption {
 	}
 }
 
+// PipeOptMaxInflight sets the max number of messages inflight (publishing).
 func PipeOptMaxInflight(maxInflight int) MsgPipeOption {
 	return func(pipe *MsgPipe) error {
 		if maxInflight < 1 {
@@ -45,6 +52,7 @@ func PipeOptMaxInflight(maxInflight int) MsgPipeOption {
 	}
 }
 
+// PipeOptRetryWait sets the interval between retries due to all kinds of errors.
 func PipeOptRetryWait(t time.Duration) MsgPipeOption {
 	return func(pipe *MsgPipe) error {
 		if t <= 0 {

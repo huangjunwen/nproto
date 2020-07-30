@@ -19,6 +19,7 @@ import (
 	. "github.com/huangjunwen/nproto/v2/rpc"
 )
 
+// ServerConn wraps nats.Conn into 'server side rpc connection'.
 type ServerConn struct {
 	// Immutable fields.
 	nc            *nats.Conn
@@ -36,6 +37,7 @@ type ServerConn struct {
 	methodMaps map[string]*methodMap         // svcName -> *methodMap
 }
 
+// ServerConnOption is option in creating ClientConn.
 type ServerConnOption func(*ServerConn) error
 
 // methodMap stores method info for a service.
@@ -52,6 +54,8 @@ type methodInfo struct {
 	encoder npenc.Encoder
 }
 
+// NewServerConn creates a new ServerConn. `nc` must have MaxReconnect < 0
+// (e.g. never give up trying to reconnect).
 func NewServerConn(nc *nats.Conn, opts ...ServerConnOption) (sc *ServerConn, err error) {
 
 	if nc.Opts.MaxReconnect >= 0 {
@@ -84,12 +88,14 @@ func NewServerConn(nc *nats.Conn, opts ...ServerConnOption) (sc *ServerConn, err
 	return serverConn, nil
 }
 
+// Server creates an rpc server using specified decoder and encoder.
 func (sc *ServerConn) Server(decoder npenc.Decoder, encoder npenc.Encoder) RPCServerFunc {
 	return func(spec RPCSpec, handler RPCHandler) error {
 		return sc.registHandler(spec, handler, decoder, encoder)
 	}
 }
 
+// Close shutdowns the ServerConn: closes handler runner and unsubscribe from nats.
 func (sc *ServerConn) Close() error {
 
 	sc.mu.Lock()

@@ -16,6 +16,7 @@ import (
 	. "github.com/huangjunwen/nproto/v2/rpc"
 )
 
+// ClientConn wraps nats.Conn into 'client side rpc connection'.
 type ClientConn struct {
 	// Immutable fields.
 	subjectPrefix string
@@ -23,8 +24,11 @@ type ClientConn struct {
 	nc            *nats.Conn
 }
 
+// ClientConnOption is option in creating ClientConn.
 type ClientConnOption func(*ClientConn) error
 
+// NewClientConn creates a new ClientConn. `nc` must have MaxReconnect < 0
+// (e.g. never give up trying to reconnect).
 func NewClientConn(nc *nats.Conn, opts ...ClientConnOption) (*ClientConn, error) {
 
 	if nc.Opts.MaxReconnect >= 0 {
@@ -45,6 +49,7 @@ func NewClientConn(nc *nats.Conn, opts ...ClientConnOption) (*ClientConn, error)
 	return cc, nil
 }
 
+// Client creates an rpc client using specified encoder and decoder.
 func (cc *ClientConn) Client(encoder npenc.Encoder, decoder npenc.Decoder) RPCClientFunc {
 	return func(spec RPCSpec) RPCHandler {
 		return cc.makeHandler(spec, encoder, decoder)

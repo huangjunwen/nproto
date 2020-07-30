@@ -9,6 +9,9 @@ import (
 	. "github.com/huangjunwen/nproto/v2/msg"
 )
 
+// PbJsonPublisher creates a msg publisher using protobuf or json for encoding:
+//   - If msg is proto.Message, then use protobuf.
+//   - Otherwise use json.
 func PbJsonPublisher(dc *DurConn) MsgAsyncPublisherFunc {
 
 	pbPublisher := dc.Publisher(pjenc.DefaultPbEncoder)
@@ -24,6 +27,7 @@ func PbJsonPublisher(dc *DurConn) MsgAsyncPublisherFunc {
 
 }
 
+// PbJsonSubscriber creates a msg subscriber using protobuf or json for decoding.
 func PbJsonSubscriber(dc *DurConn) MsgSubscriberFunc {
 	return dc.Subscriber(pjenc.DefaultPjDecoder)
 }

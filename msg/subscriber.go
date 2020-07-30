@@ -14,8 +14,9 @@ type MsgSubscriber interface {
 	Subscribe(spec MsgSpec, queue string, handler MsgHandler, opts ...interface{}) error
 }
 
-// MsgHandler handles messages. A message should be redelivered if the handler returns an error.
-// Except that the error's type is nproto.Error and error.Retryable() is false.
+// MsgHandler handles messages. For 'at least once delivery' implementations, a message
+// should be redelivered if the handler returns an error. Otherwise it may or may not
+// be redelivered.
 type MsgHandler func(context.Context, interface{}) error
 
 // MsgSubscriberFunc is an adapter to allow the use of ordinary functions as MsgSubscriber.

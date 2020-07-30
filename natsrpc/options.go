@@ -25,6 +25,7 @@ var (
 	subjectPrefixRegexp = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 )
 
+// SCOptLogger sets logger for ServerConn.
 func SCOptLogger(logger logr.Logger) ServerConnOption {
 	return func(sc *ServerConn) error {
 		if logger == nil {
@@ -48,6 +49,7 @@ func SCOptRunner(runner taskrunner.TaskRunner) ServerConnOption {
 	}
 }
 
+// SCOptSubjectPrefix sets subject prefix in nats namespace.
 func SCOptSubjectPrefix(subjectPrefix string) ServerConnOption {
 	return func(sc *ServerConn) error {
 		if !subjectPrefixRegexp.MatchString(subjectPrefix) {
@@ -58,6 +60,7 @@ func SCOptSubjectPrefix(subjectPrefix string) ServerConnOption {
 	}
 }
 
+// SCOptGroup sets nats subscription group name.
 func SCOptGroup(group string) ServerConnOption {
 	return func(sc *ServerConn) error {
 		if group == "" {
@@ -68,6 +71,7 @@ func SCOptGroup(group string) ServerConnOption {
 	}
 }
 
+// SCOptContext sets base context used in handlers.
 func SCOptContext(ctx context.Context) ServerConnOption {
 	return func(sc *ServerConn) error {
 		if ctx == nil {
@@ -78,6 +82,7 @@ func SCOptContext(ctx context.Context) ServerConnOption {
 	}
 }
 
+// CCOptSubjectPrefix sets subject prefix in nats namespace.
 func CCOptSubjectPrefix(subjectPrefix string) ClientConnOption {
 	return func(cc *ClientConn) error {
 		if !subjectPrefixRegexp.MatchString(subjectPrefix) {
@@ -88,6 +93,7 @@ func CCOptSubjectPrefix(subjectPrefix string) ClientConnOption {
 	}
 }
 
+// CCOptTimeout sets the default timeout when invoking rpc if there is no timeout set in context.
 func CCOptTimeout(t time.Duration) ClientConnOption {
 	return func(cc *ClientConn) error {
 		if t <= 0 {

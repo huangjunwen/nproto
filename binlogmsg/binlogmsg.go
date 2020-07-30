@@ -21,6 +21,9 @@ import (
 	nppbmsg "github.com/huangjunwen/nproto/v2/pb/msg"
 )
 
+// MsgPipe pipes messages from MySQL (>=8.0.2) msg tables to downstream.
+// Messages from MsgPipe have type *rawenc.RawData. So downstream must be able
+// to handle this type of messages.
 type MsgPipe struct {
 	// Immutable fields.
 	downstream  interface{} // msg.MsgPublisher or msg.MsgAsyncPublisher
@@ -36,8 +39,14 @@ type MsgPipe struct {
 // MsgTableFilter returns true if a given table is a msg table.
 type MsgTableFilter func(schema, table string) bool
 
+// MsgPipeOption is option in creating MsgPipe.
 type MsgPipeOption func(*MsgPipe) error
 
+// NewMsgPipe creates a new msg pipe:
+//   - downstream: must be MsgPublisher or MsgAsyncPublisher.
+//   - masterCfg: master connection to read (full dump) and write (delete published messages).
+//   - slaveCfg: slave config for binlog subscription.
+//   - tableFilter: determine whether a table is used to store messages.
 func NewMsgPipe(
 	downstream interface{},
 	masterCfg *mycanal.FullDumpConfig,
@@ -71,6 +80,7 @@ func NewMsgPipe(
 	return pipe, nil
 }
 
+// Run the main loop (flush messages to downstream) until context.Done().
 func (pipe *MsgPipe) Run(ctx context.Context) (err error) {
 	for {
 		pipe.run(ctx)
@@ -309,6 +319,11 @@ func (pipe *MsgPipe) flushMsgEntry(ctx context.Context, entry msgEntry, cb func(
 
 }
 
+// NewMsgPublisher creates a publisher to publish (store) message to MySQL msg tables:
+//   - encoder: encoder for messages.
+//   - q: *sql.DB/*sql.Tx/*sql.Conn/...
+//   - schema: database name.
+//   - table: msg table name, the table must be created by CreateMsgTable.
 func NewMsgPublisher(encoder npenc.Encoder, q sqlh.Queryer, schema, table string) MsgPublisherFunc {
 	return func(ctx context.Context, spec MsgSpec, msg interface{}) error {
 		if err := AssertMsgType(spec, msg); err != nil {

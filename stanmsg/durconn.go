@@ -21,6 +21,7 @@ import (
 	nppbmsg "github.com/huangjunwen/nproto/v2/pb/msg"
 )
 
+// DurConn is 'durable connection' to nats-streaming-server which handles reconnect and resubscription automatically.
 type DurConn struct {
 	// Immutable fields.
 	nc                  *nats.Conn
@@ -57,10 +58,15 @@ type subscription struct {
 	decoder     npenc.Decoder
 }
 
+// DurConnOption is option in creating DurConn.
 type DurConnOption func(*DurConn) error
 
+// SubOption is option in subscription.
 type SubOption func(*subscription) error
 
+// NewDurConn creates a new DurConn. `nc` must have MaxReconnect < 0
+// (e.g. never give up trying to reconnect).
+// `clusterID` is the nats-streaming-server's cluster id.
 func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) (durConn *DurConn, err error) {
 	if nc.Opts.MaxReconnect >= 0 {
 		return nil, ErrNCMaxReconnect
@@ -100,12 +106,14 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) (durConn
 	return dc, nil
 }
 
+// Publisher creates a publisher using specified encoder.
 func (dc *DurConn) Publisher(encoder npenc.Encoder) MsgAsyncPublisherFunc {
 	return func(ctx context.Context, spec MsgSpec, msg interface{}, cb func(error)) error {
 		return dc.publishAsync(ctx, spec, msg, encoder, cb)
 	}
 }
 
+// Subscriber creates a subscriber using specified decoder.
 func (dc *DurConn) Subscriber(decoder npenc.Decoder) MsgSubscriberFunc {
 	return func(spec MsgSpec, queue string, handler MsgHandler, opts ...interface{}) error {
 		sub := &subscription{
@@ -412,6 +420,7 @@ func (dc *DurConn) msgHandler(sub *subscription) stan.MsgHandler {
 
 }
 
+// Close shutdowns the DurConn: closes handler runner and disconnects from nats-streaming-server.
 func (dc *DurConn) Close() {
 	dc.mu.Lock()
 	if dc.closed {

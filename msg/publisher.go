@@ -4,7 +4,7 @@ import (
 	"context"
 )
 
-// MsgPublisher is used to publish messages reliably, e.g. at least once delivery.
+// MsgPublisher is used to publish messages.
 type MsgPublisher interface {
 	// Publish publishes a message to the given subject. It returns nil if success.
 	Publish(ctx context.Context, spec MsgSpec, msg interface{}) error

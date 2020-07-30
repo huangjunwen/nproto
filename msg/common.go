@@ -1,4 +1,3 @@
-// Package msg contains high level types/interfaces for msg implementations.
 package msg
 
 import (
@@ -98,6 +97,7 @@ func (spec *msgSpec) String() string {
 	return fmt.Sprintf("MsgSpec(%s %s)", spec.subjectName, spec.msgType.String())
 }
 
+// MustRawDataMsgSpec is must-version of NewRawDataMsgSpec.
 func MustRawDataMsgSpec(subjectName string) MsgSpec {
 	spec, err := NewRawDataMsgSpec(subjectName)
 	if err != nil {
@@ -106,6 +106,7 @@ func MustRawDataMsgSpec(subjectName string) MsgSpec {
 	return spec
 }
 
+// NewRawDataMsgSpec validates and creates a new MsgSpec with *rawenc.RawData msg type.
 func NewRawDataMsgSpec(subjectName string) (MsgSpec, error) {
 	if !SubjectNameRegexp.MatchString(subjectName) {
 		return nil, fmt.Errorf("SubjectName format invalid")

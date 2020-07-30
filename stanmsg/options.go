@@ -14,16 +14,22 @@ import (
 )
 
 var (
+	// DefaultSubjectPrefix is the default value of DCOptSubjectPrefix.
 	DefaultSubjectPrefix = "stanmsg"
 
+	// DefaultReconnectWait is the default value of DCOptReconnectWait.
 	DefaultReconnectWait = 5 * time.Second
 
+	// DefaultStanPingInterval is the default value of DCOptStanPingInterval.
 	DefaultStanPingInterval = stan.DefaultPingInterval
 
+	// DefaultStanPingMaxOut is the defualt value of DCOptStanPingMaxOut.
 	DefaultStanPingMaxOut = stan.DefaultPingMaxOut
 
+	// DefaultStanPubAckWait is the defualt value of DCOptStanPubAckWait.
 	DefaultStanPubAckWait = 2 * time.Second
 
+	// DefaultSubRetryWait is the defualt value of DCOptSubRetryWait.
 	DefaultSubRetryWait = 5 * time.Second
 )
 
@@ -31,6 +37,7 @@ var (
 	subjectPrefixRegexp = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 )
 
+// DCOptLogger sets logger for DurConn.
 func DCOptLogger(logger logr.Logger) DurConnOption {
 	return func(dc *DurConn) error {
 		if logger == nil {
@@ -41,6 +48,7 @@ func DCOptLogger(logger logr.Logger) DurConnOption {
 	}
 }
 
+// DCOptRunner sets runner for handlers.
 func DCOptRunner(runner taskrunner.TaskRunner) DurConnOption {
 	return func(dc *DurConn) error {
 		if runner == nil {
@@ -52,6 +60,7 @@ func DCOptRunner(runner taskrunner.TaskRunner) DurConnOption {
 	}
 }
 
+// DCOptSubjectPrefix sets subject prefix in nats streaming namespace.
 func DCOptSubjectPrefix(subjectPrefix string) DurConnOption {
 	return func(dc *DurConn) error {
 		if !subjectPrefixRegexp.MatchString(subjectPrefix) {
@@ -62,6 +71,7 @@ func DCOptSubjectPrefix(subjectPrefix string) DurConnOption {
 	}
 }
 
+// DCOptContext sets base context for handlers.
 func DCOptContext(ctx context.Context) DurConnOption {
 	return func(dc *DurConn) error {
 		if ctx == nil {
@@ -72,6 +82,7 @@ func DCOptContext(ctx context.Context) DurConnOption {
 	}
 }
 
+// DCOptReconnectWait sets the interval between reconnections.
 func DCOptReconnectWait(t time.Duration) DurConnOption {
 	return func(dc *DurConn) error {
 		if t <= 0 {
@@ -82,6 +93,7 @@ func DCOptReconnectWait(t time.Duration) DurConnOption {
 	}
 }
 
+// DCOptSubRetryWait sets the interval between resubscriptions due to subscription error.
 func DCOptSubRetryWait(t time.Duration) DurConnOption {
 	return func(dc *DurConn) error {
 		if t <= 0 {
@@ -92,6 +104,7 @@ func DCOptSubRetryWait(t time.Duration) DurConnOption {
 	}
 }
 
+// DCOptStanPingInterval sets stan::Pings, must >= 1 (seconds).
 func DCOptStanPingInterval(interval int) DurConnOption {
 	return func(dc *DurConn) error {
 		if interval < 1 {
@@ -103,6 +116,7 @@ func DCOptStanPingInterval(interval int) DurConnOption {
 	}
 }
 
+// DCOptStanPingMaxOut sets stan::Pings, must >= 2.
 func DCOptStanPingMaxOut(maxOut int) DurConnOption {
 	return func(dc *DurConn) error {
 		if maxOut < 2 {
@@ -114,6 +128,7 @@ func DCOptStanPingMaxOut(maxOut int) DurConnOption {
 	}
 }
 
+// DCOptStanPubAckWait sets stan::PubAckWait.
 func DCOptStanPubAckWait(t time.Duration) DurConnOption {
 	return func(dc *DurConn) error {
 		if t <= 0 {
@@ -124,6 +139,7 @@ func DCOptStanPubAckWait(t time.Duration) DurConnOption {
 	}
 }
 
+// DCOptConnectCb sets callback when nats streaming connection establish.
 func DCOptConnectCb(cb func(stan.Conn)) DurConnOption {
 	return func(dc *DurConn) error {
 		if cb == nil {
@@ -134,6 +150,7 @@ func DCOptConnectCb(cb func(stan.Conn)) DurConnOption {
 	}
 }
 
+// DCOptDisconnectCb sets callback when nats streaming connection lost due to unexpected errors.
 func DCOptDisconnectCb(cb func(stan.Conn)) DurConnOption {
 	return func(dc *DurConn) error {
 		if cb == nil {
@@ -144,6 +161,7 @@ func DCOptDisconnectCb(cb func(stan.Conn)) DurConnOption {
 	}
 }
 
+// DCOptSubscribeCb sets callback when subscriptions subscribed.
 func DCOptSubscribeCb(cb func(stan.Conn, MsgSpec)) DurConnOption {
 	return func(dc *DurConn) error {
 		if cb == nil {
@@ -154,6 +172,7 @@ func DCOptSubscribeCb(cb func(stan.Conn, MsgSpec)) DurConnOption {
 	}
 }
 
+// SubOptStanAckWait sets stan::AckWait for a subscription.
 func SubOptStanAckWait(t time.Duration) SubOption {
 	return func(sub *subscription) error {
 		if t <= 0 {
