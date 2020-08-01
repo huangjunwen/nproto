@@ -7,13 +7,13 @@ import (
 	. "github.com/huangjunwen/nproto/v2/rpc"
 )
 
-// PbJsonClient creates an rpc client using protobuf or json for encoding/decoding:
+// NewPbJsonClient creates an rpc client using protobuf or json for encoding/decoding:
 //   - If both input and output are proto.Message, then use protobuf.
 //   - Otherwise use json.
-func PbJsonClient(cc *ClientConn) RPCClientFunc {
+func NewPbJsonClient(cc *ClientConn) RPCClientFunc {
 
-	pbClient := cc.Client(pjenc.DefaultPbEncoder, pjenc.DefaultPjDecoder)
-	jsonClient := cc.Client(pjenc.DefaultJsonEncoder, pjenc.DefaultPjDecoder)
+	pbClient := cc.NewClient(pjenc.DefaultPbEncoder, pjenc.DefaultPjDecoder)
+	jsonClient := cc.NewClient(pjenc.DefaultJsonEncoder, pjenc.DefaultPjDecoder)
 
 	return func(spec RPCSpec) RPCHandler {
 		_, ok1 := spec.InputValue().(proto.Message)
@@ -27,7 +27,7 @@ func PbJsonClient(cc *ClientConn) RPCClientFunc {
 
 }
 
-// PbJsonClient creates an rpc server using protobuf or json for decoding/encoding.
-func PbJsonServer(sc *ServerConn) RPCServerFunc {
-	return sc.Server(pjenc.DefaultPjDecoder, pjenc.DefaultPjEncoder)
+// NewPbJsonClient creates an rpc server using protobuf or json for decoding/encoding.
+func NewPbJsonServer(sc *ServerConn) RPCServerFunc {
+	return sc.NewServer(pjenc.DefaultPjDecoder, pjenc.DefaultPjEncoder)
 }

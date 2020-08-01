@@ -10,10 +10,10 @@ import (
 	. "github.com/huangjunwen/nproto/v2/msg"
 )
 
-// PbJsonPublisher creates a msg publisher using protobuf or json for encoding:
+// NewPbJsonPublisher creates a msg publisher using protobuf or json for encoding:
 //   - If msg is proto.Message, then use protobuf.
 //   - Otherwise use json.
-func PbJsonPublisher(q sqlh.Queryer, schema, table string) MsgPublisherFunc {
+func NewPbJsonPublisher(q sqlh.Queryer, schema, table string) MsgPublisherFunc {
 
 	pbPublisher := NewMsgPublisher(pjenc.DefaultPbEncoder, q, schema, table)
 	jsonPublisher := NewMsgPublisher(pjenc.DefaultJsonEncoder, q, schema, table)

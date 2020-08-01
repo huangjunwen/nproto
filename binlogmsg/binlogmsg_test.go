@@ -62,7 +62,7 @@ func countMsgs(db *sql.DB, schema, table string) int {
 }
 
 func newPublisher(db *sql.DB, schema, table string) MsgPublisherFunc {
-	return PbJsonPublisher(db, schema, table)
+	return NewPbJsonPublisher(db, schema, table)
 }
 
 func newRawPublisher(db *sql.DB, schema, table string) MsgPublisherFunc {

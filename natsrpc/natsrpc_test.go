@@ -144,7 +144,7 @@ func TestCall(t *testing.T) {
 		log.Printf("natsrpc.ServerConn created.\n")
 	}
 
-	server := sc.Server(pjenc.DefaultPjDecoder, pjenc.DefaultPjEncoder)
+	server := sc.NewServer(pjenc.DefaultPjDecoder, pjenc.DefaultPjEncoder)
 
 	// Creates client conns.
 	var (
@@ -172,11 +172,11 @@ func TestCall(t *testing.T) {
 		log.Printf("natsrpc.ClientConn 2 created.\n")
 	}
 
-	pbClient := cc1.Client(pjenc.DefaultPbEncoder, pjenc.DefaultPjDecoder)
+	pbClient := cc1.NewClient(pjenc.DefaultPbEncoder, pjenc.DefaultPjDecoder)
 
-	jsonClient := cc2.Client(pjenc.DefaultJsonEncoder, pjenc.DefaultPjDecoder)
+	jsonClient := cc2.NewClient(pjenc.DefaultJsonEncoder, pjenc.DefaultPjDecoder)
 
-	rawClient := cc2.Client(rawenc.DefaultRawEncoder, rawenc.DefaultRawDecoder)
+	rawClient := cc2.NewClient(rawenc.DefaultRawEncoder, rawenc.DefaultRawDecoder)
 
 	var (
 		svcName = "test"
@@ -765,8 +765,8 @@ func TestLoadBalance(t *testing.T) {
 		log.Printf("natsrpc.ServerConn 2 created.\n")
 	}
 
-	server1 := PbJsonServer(sc1)
-	server2 := PbJsonServer(sc2)
+	server1 := NewPbJsonServer(sc1)
+	server2 := NewPbJsonServer(sc2)
 
 	var (
 		cc *ClientConn
@@ -780,7 +780,7 @@ func TestLoadBalance(t *testing.T) {
 
 	}
 
-	client := PbJsonClient(cc)
+	client := NewPbJsonClient(cc)
 
 	var (
 		spec = MustRPCSpec(

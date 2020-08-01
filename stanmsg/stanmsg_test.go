@@ -172,8 +172,8 @@ func TestPubSub(t *testing.T) {
 	// Wait connect.
 	log.Printf("DurConn connected %p.\n", <-connectC)
 
-	publisher := PbJsonPublisher(dc)
-	subscriber := PbJsonSubscriber(dc)
+	publisher := NewPbJsonPublisher(dc)
+	subscriber := NewPbJsonSubscriber(dc)
 
 	// Subscribe.
 	goodC := make(chan string, 10)
@@ -459,7 +459,7 @@ func TestResubscribe(t *testing.T) {
 		defer dc.Close()
 		log.Printf("DurConn created.\n")
 	}
-	subscriber := PbJsonSubscriber(dc)
+	subscriber := NewPbJsonSubscriber(dc)
 
 	onConnect(func(sc stan.Conn) {
 		err = subscriber.Subscribe(validSpec, queue, handler)
@@ -533,8 +533,8 @@ func TestGroupRedelivery(t *testing.T) {
 			defer dc1.Close()
 			log.Printf("DurConn 1 created.\n")
 		}
-		publisher1 := PbJsonPublisher(dc1)
-		subscriber1 := PbJsonSubscriber(dc1)
+		publisher1 := NewPbJsonPublisher(dc1)
+		subscriber1 := NewPbJsonSubscriber(dc1)
 
 		// The first subscribe always returns error cause redelivery.
 		sub1Handled := make(chan struct{})
@@ -608,7 +608,7 @@ func TestGroupRedelivery(t *testing.T) {
 			defer dc2.Close()
 			log.Printf("DurConn 2 created.\n")
 		}
-		subscriber2 := PbJsonSubscriber(dc2)
+		subscriber2 := NewPbJsonSubscriber(dc2)
 
 		// The second subscribe returns nil.
 		sub2Handled := make(chan struct{})

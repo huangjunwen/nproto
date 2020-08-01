@@ -9,13 +9,13 @@ import (
 	. "github.com/huangjunwen/nproto/v2/msg"
 )
 
-// PbJsonPublisher creates a msg publisher using protobuf or json for encoding:
+// NewPbJsonPublisher creates a msg publisher using protobuf or json for encoding:
 //   - If msg is proto.Message, then use protobuf.
 //   - Otherwise use json.
-func PbJsonPublisher(dc *DurConn) MsgAsyncPublisherFunc {
+func NewPbJsonPublisher(dc *DurConn) MsgAsyncPublisherFunc {
 
-	pbPublisher := dc.Publisher(pjenc.DefaultPbEncoder)
-	jsonPublisher := dc.Publisher(pjenc.DefaultJsonEncoder)
+	pbPublisher := dc.NewPublisher(pjenc.DefaultPbEncoder)
+	jsonPublisher := dc.NewPublisher(pjenc.DefaultJsonEncoder)
 
 	return func(ctx context.Context, spec MsgSpec, msg interface{}, cb func(error)) error {
 		// If msg is proto.Message, then use pbPublisher, otherwise jsonPublisher.
@@ -27,7 +27,7 @@ func PbJsonPublisher(dc *DurConn) MsgAsyncPublisherFunc {
 
 }
 
-// PbJsonSubscriber creates a msg subscriber using protobuf or json for decoding.
-func PbJsonSubscriber(dc *DurConn) MsgSubscriberFunc {
-	return dc.Subscriber(pjenc.DefaultPjDecoder)
+// NewPbJsonSubscriber creates a msg subscriber using protobuf or json for decoding.
+func NewPbJsonSubscriber(dc *DurConn) MsgSubscriberFunc {
+	return dc.NewSubscriber(pjenc.DefaultPjDecoder)
 }

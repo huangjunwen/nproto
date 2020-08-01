@@ -106,15 +106,15 @@ func NewDurConn(nc *nats.Conn, clusterID string, opts ...DurConnOption) (durConn
 	return dc, nil
 }
 
-// Publisher creates a publisher using specified encoder.
-func (dc *DurConn) Publisher(encoder npenc.Encoder) MsgAsyncPublisherFunc {
+// NewPublisher creates a publisher using specified encoder.
+func (dc *DurConn) NewPublisher(encoder npenc.Encoder) MsgAsyncPublisherFunc {
 	return func(ctx context.Context, spec MsgSpec, msg interface{}, cb func(error)) error {
 		return dc.publishAsync(ctx, spec, msg, encoder, cb)
 	}
 }
 
-// Subscriber creates a subscriber using specified decoder.
-func (dc *DurConn) Subscriber(decoder npenc.Decoder) MsgSubscriberFunc {
+// NewSubscriber creates a subscriber using specified decoder.
+func (dc *DurConn) NewSubscriber(decoder npenc.Decoder) MsgSubscriberFunc {
 	return func(spec MsgSpec, queue string, handler MsgHandler, opts ...interface{}) error {
 		sub := &subscription{
 			spec:        spec,

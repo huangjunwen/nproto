@@ -49,8 +49,8 @@ func NewClientConn(nc *nats.Conn, opts ...ClientConnOption) (*ClientConn, error)
 	return cc, nil
 }
 
-// Client creates an rpc client using specified encoder and decoder.
-func (cc *ClientConn) Client(encoder npenc.Encoder, decoder npenc.Decoder) RPCClientFunc {
+// NewClient creates an rpc client using specified encoder and decoder.
+func (cc *ClientConn) NewClient(encoder npenc.Encoder, decoder npenc.Decoder) RPCClientFunc {
 	return func(spec RPCSpec) RPCHandler {
 		return cc.makeHandler(spec, encoder, decoder)
 	}

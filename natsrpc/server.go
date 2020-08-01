@@ -88,8 +88,8 @@ func NewServerConn(nc *nats.Conn, opts ...ServerConnOption) (sc *ServerConn, err
 	return serverConn, nil
 }
 
-// Server creates an rpc server using specified decoder and encoder.
-func (sc *ServerConn) Server(decoder npenc.Decoder, encoder npenc.Encoder) RPCServerFunc {
+// NewServer creates an rpc server using specified decoder and encoder.
+func (sc *ServerConn) NewServer(decoder npenc.Decoder, encoder npenc.Encoder) RPCServerFunc {
 	return func(spec RPCSpec, handler RPCHandler) error {
 		return sc.registHandler(spec, handler, decoder, encoder)
 	}
