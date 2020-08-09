@@ -1,0 +1,58 @@
+version: "3.1"
+
+services:
+
+  mysql:
+    image: "mysql:8.0.19"
+    container_name: "example_mysql"
+    command:
+      - "--character-set-server=utf8mb4"
+      - "--collation-server=utf8mb4_unicode_ci"
+      # - "--general-log=1"
+      - "--general-log-file=/var/lib/mysql/general-query.log"
+      # Turns on binlog with row format, and records full meta data (MySQL 8+).
+      - "--log-bin=/var/lib/mysql/binlog"
+      - "--server-id=1"
+      - "--max-binlog-size=100M"
+      - "--binlog-format=ROW"
+      - "--binlog-row-image=full"
+      - "--binlog-row-metadata=full" 
+      # Use GTID mode.
+      - "--gtid-mode=ON"
+      - "--enforce-gtid-consistency=ON"
+      # Turns off performance_schema to reduce memoery usage.
+      - "--performance-schema=off"
+    volumes:
+      - "./mysql/data:/var/lib/mysql"
+      - "./mysql/init:/docker-entrypoint-initdb.d"
+    environment:
+      MYSQL_DATABASE: "sendmail"
+      MYSQL_ROOT_PASSWORD: "123456" 
+      TZ: "Asia/Shanghai"
+      LANG: "C.UTF-8"
+    ports:
+      - "127.0.0.1:3306:3306"
+    restart: on-failure
+
+  stan:
+    image: "nats-streaming:0.16.2-linux"
+    container_name: "example_stan"
+    command:
+      - "-m"
+      - "8222"
+      - "-sc"
+      - "/stan-conf/stan.conf"
+    volumes:
+      - "./stan/conf:/stan-conf"
+    ports:
+      - "127.0.0.1:4222:4222"
+      - "127.0.0.1:8222:8222"
+    restart: on-failure
+
+  jaeger:
+    image: "jaegertracing/all-in-one:1.16.0"
+    container_name: "example_jaeger"
+    ports:
+      - "127.0.0.1:16686:16686"
+      - "127.0.0.1:14268:14268"
+    restart: on-failure

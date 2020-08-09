@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package nproto.demo.sendmail;
+
+option go_package = "github.com/huangjunwen/nproto/v2/demo/sendmail;sendmail";
+
+import "google/protobuf/empty.proto";
+
+// @@nprpc@@
+service SendMailSvc {
+  rpc Send(Email) returns (EmailEntry);
+
+  rpc List(google.protobuf.Empty) returns (EmailEntries);
+}
+
+message EmailEntries {
+  repeated EmailEntry entries = 1;
+}
+
+// @@npmsg@@
+message EmailEntry {
+  // Id is unique id of the email entry.
+  int64 id = 1;
+
+  // Status indicates the sending status.
+  enum Status {
+    SENDING = 0;
+    SUCCESS = 1;
+    FAILED = 2;
+  }
+  Status status = 2;
+
+  // CreatedAt is the time creating (unix timestamp).
+  int64 created_at = 3;
+
+  // EndedAt is the time success/failed (unix timestamp).
+  int64 ended_at = 4;
+
+  // FailedReason is sending error when failed.
+  string failed_reason = 5;
+
+  // Email is the concrete content.
+  Email email = 6;
+}
+
+message Email {
+  // To email address.
+  string to_addr = 1;
+  
+  // To name.
+  string to_name = 2;
+
+  // Subject of email.
+  string subject = 10;
+
+  // ContentType is the mime type of email content. (e.g. text/html)
+  string content_type = 11;
+
+  // Content is email content.
+  string content = 12;
+}
