@@ -29,6 +29,7 @@ func WrapRPCClient(tracer ot.Tracer) RPCMiddleware {
 			)
 			defer func() {
 				SetSpanError(span, err)
+				span.Finish()
 			}()
 
 			md := npmd.MDFromOutgoingContext(ctx)
