@@ -238,7 +238,23 @@ func main() {
 	avg := time.Duration(h.Mean())
 
 	// http://vanillajava.blogspot.com/2012/04/what-is-latency-throughput-and-degree.html
-	throughput := float64(rpcNumActual) / elapse.Seconds() // How many calls per second.
+	//
+	//            |  <------------------ 1 second ------------------->  |
+	//            |  ____ ____ ____ ____ ____ ____ ____ ____ ____ ____  |
+	//            |  |  | |  | |  | |  | |  | |  | |  | |  | |  | |  |  |
+	//            |  ---- ---- ---- ---- ---- ---- ---- ---- ---- ----  |
+	//            |  ____ ____ ____ ____ ____ ____ ____ ____ ____ ____  |
+	//            |  |  | |  | |  | |  | |  | |  | |  | |  | |  | |  |  |
+	//            |  ---- ---- ---- ---- ---- ---- ---- ---- ---- ----  |
+	//            |  ____ ____ ____ ____ ____ ____ ____ ____ ____ ____  |
+	//            |  |  | |  | |  | |  | |  | |  | |  | |  | |  | |  |  |
+	//            |  ---- ---- ---- ---- ---- ---- ---- ---- ---- ----  |
+	//
+	// For example:
+	//   suppose Throughput == 30 (30 tasks finished in 1 second),
+	//   and Latency == 0.1 s (10 tasks can be handled in sequence in 1 second),
+	//   then Concurrency = Throughput / (1/Latency) = 30 / (1/0.1) = 30 * 0.1 = 3
+	throughput := float64(rpcNumActual) / elapse.Seconds()
 	concurrency := throughput * avg.Seconds()
 
 	logger.Info("Elapse                                :", "value", elapse.String())
@@ -258,12 +274,4 @@ func main() {
 	logger.Info("99.999                                :", "value", time.Duration(h.ValueAtQuantile(99.999)).String())
 	logger.Info("100                                   :", "value", time.Duration(h.ValueAtQuantile(100)).String())
 
-}
-
-func median(durations []time.Duration) time.Duration {
-	l := len(durations)
-	if l%2 == 0 {
-		return (durations[l/2-1] + durations[l/2]) / 2
-	}
-	return durations[l/2]
 }
