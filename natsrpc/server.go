@@ -145,6 +145,16 @@ func (sc *ServerConn) registHandler(spec RPCSpec, handler RPCHandler, decoder np
 			return err
 		}
 
+		// NOTE: QueueSubscribe is async, so issue a roundtrip to make sure the subscription is on the server
+		// after that.
+		// see:
+		//   - https://docs.nats.io/developing-with-nats/sending/caches#flush-and-ping-pong
+		//   - https://github.com/nats-io/nats.go/issues/458
+		if err = sc.nc.Flush(); err != nil {
+			sub.Unsubscribe()
+			return err
+		}
+
 		// Store subscription and method map.
 		sc.subs[svcName] = sub
 		sc.methodMaps[svcName] = mm
