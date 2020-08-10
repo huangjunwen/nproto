@@ -73,7 +73,7 @@ func main() {
 
 	// Prepare rpc params.
 	spec := nprpc.MustRPCSpec(
-		"bench",
+		"bench-natsrpc",
 		"echo",
 		func() interface{} {
 			return wrapperspb.Bytes(nil)

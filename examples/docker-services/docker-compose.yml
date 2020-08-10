@@ -36,7 +36,7 @@ services:
     restart: on-failure
 
   stan:
-    image: "nats-streaming:0.16.2-linux"
+    image: "nats-streaming:0.18-alpine"
     container_name: "example_stan"
     command:
       - "-m"
@@ -52,7 +52,7 @@ services:
     restart: on-failure
 
   jaeger:
-    image: "jaegertracing/all-in-one:1.16.0"
+    image: "jaegertracing/all-in-one:1.18.0"
     container_name: "example_jaeger"
 #   ports:
 #     - "127.0.0.1:16686:16686"
