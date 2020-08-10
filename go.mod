@@ -3,11 +3,12 @@ module github.com/huangjunwen/nproto/v2
 go 1.13
 
 require (
-	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
+	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang/protobuf v1.4.1
 	github.com/huangjunwen/golibs v0.0.0-20200725084014-be55ed31b5a8
 	github.com/huangjunwen/tstsvc v0.7.0
+	github.com/juju/ratelimit v1.0.1
 	github.com/nats-io/nats.go v1.10.0
 	github.com/nats-io/stan.go v0.7.0
 	github.com/opentracing/opentracing-go v1.2.0
