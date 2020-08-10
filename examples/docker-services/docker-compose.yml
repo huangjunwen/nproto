@@ -30,8 +30,9 @@ services:
       MYSQL_ROOT_PASSWORD: "123456" 
       TZ: "Asia/Shanghai"
       LANG: "C.UTF-8"
-    ports:
-      - "127.0.0.1:3306:3306"
+#   ports:
+#     - "127.0.0.1:3306:3306"
+    network_mode: host
     restart: on-failure
 
   stan:
@@ -44,15 +45,17 @@ services:
       - "/stan-conf/stan.conf"
     volumes:
       - "./stan/conf:/stan-conf"
-    ports:
-      - "127.0.0.1:4222:4222"
-      - "127.0.0.1:8222:8222"
+#   ports:
+#     - "127.0.0.1:4222:4222"
+#     - "127.0.0.1:8222:8222"
+    network_mode: host
     restart: on-failure
 
   jaeger:
     image: "jaegertracing/all-in-one:1.16.0"
     container_name: "example_jaeger"
-    ports:
-      - "127.0.0.1:16686:16686"
-      - "127.0.0.1:14268:14268"
+#   ports:
+#     - "127.0.0.1:16686:16686"
+#     - "127.0.0.1:14268:14268"
+    network_mode: host
     restart: on-failure
