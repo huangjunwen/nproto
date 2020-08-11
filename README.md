@@ -1,5 +1,9 @@
 # NProto
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/huangjunwen/nproto)](https://goreportcard.com/report/github.com/huangjunwen/nproto)
+[![Build Status](https://travis-ci.org/huangjunwen/nproto.svg?branch=v2)](https://travis-ci.org/huangjunwen/nproto) 
+[![codecov](https://codecov.io/gh/huangjunwen/nproto/branch/v2/graph/badge.svg)](https://codecov.io/gh/huangjunwen/nproto/branch/v2)
+
 Easy to use communication (e.g. rpc/msg/...) components.
 
 This is the second major version (v2). Compare to v1, v2 has re-designed high level interfaces:
