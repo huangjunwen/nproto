@@ -1,0 +1,5 @@
+examples/docker-services/mysql/data/
+examples/sendmail/client/client
+examples/sendmail/server/server
+examples/sendmail/server/conf.json
+examples/bench-natsrpc/bench-natsrpc
