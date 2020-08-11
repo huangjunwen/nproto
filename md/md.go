@@ -44,7 +44,7 @@ func MDFromOutgoingContext(ctx context.Context) MD {
 	return v.(MD)
 }
 
-// MDFromIncomingCont extracts incoming MD from context or nil if not found.
+// MDFromIncomingContext extracts incoming MD from context or nil if not found.
 func MDFromIncomingContext(ctx context.Context) MD {
 	v := ctx.Value(incomingMDKey{})
 	if v == nil {

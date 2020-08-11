@@ -38,7 +38,7 @@ func (md MetaData) Keys(cb func(string) bool) {
 	if len(md) == 0 {
 		return
 	}
-	for key, _ := range md {
+	for key := range md {
 		if ok := cb(key); !ok {
 			return
 		}

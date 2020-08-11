@@ -23,13 +23,13 @@ var (
 	// DefaultStanPingInterval is the default value of DCOptStanPingInterval.
 	DefaultStanPingInterval = stan.DefaultPingInterval
 
-	// DefaultStanPingMaxOut is the defualt value of DCOptStanPingMaxOut.
+	// DefaultStanPingMaxOut is the default value of DCOptStanPingMaxOut.
 	DefaultStanPingMaxOut = stan.DefaultPingMaxOut
 
-	// DefaultStanPubAckWait is the defualt value of DCOptStanPubAckWait.
+	// DefaultStanPubAckWait is the default value of DCOptStanPubAckWait.
 	DefaultStanPubAckWait = 2 * time.Second
 
-	// DefaultSubRetryWait is the defualt value of DCOptSubRetryWait.
+	// DefaultSubRetryWait is the default value of DCOptSubRetryWait.
 	DefaultSubRetryWait = 5 * time.Second
 )
 

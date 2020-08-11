@@ -129,7 +129,7 @@ func (sc *ServerConn) registHandler(spec RPCSpec, handler RPCHandler, decoder np
 	svcName := spec.SvcName()
 	sub, ok := sc.subs[svcName]
 
-	// No subscription means that it's the first method (of the service) registed.
+	// No subscription means that it's the first method (of the service) registered.
 	if !ok {
 		mm := newMethodMap()
 		msgHandler := sc.msgHandler(svcName, mm)

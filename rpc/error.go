@@ -34,6 +34,7 @@ func (err *RPCError) Error() string {
 	return fmt.Sprintf("RPCError(%s%s%s)", err.Code, sep, err.Message)
 }
 
+// Pre-defined rpc error codes.
 const (
 	UnknownError RPCErrorCode = -32600 - iota
 	SvcNotFound

@@ -27,7 +27,7 @@ func NewPbJsonClient(cc *ClientConn) RPCClientFunc {
 
 }
 
-// NewPbJsonClient creates an rpc server using protobuf or json for decoding/encoding.
+// NewPbJsonServer creates an rpc server using protobuf or json for decoding/encoding.
 func NewPbJsonServer(sc *ServerConn) RPCServerFunc {
 	return sc.NewServer(pjenc.DefaultPjDecoder, pjenc.DefaultPjEncoder)
 }

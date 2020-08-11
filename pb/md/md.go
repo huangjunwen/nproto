@@ -7,6 +7,7 @@ import (
 // MetaData is another npmd.MD implementation.
 type MetaData map[string]*MetaDataValueList
 
+// NewMetaData converts npmd.MD to MetaData.
 func NewMetaData(md npmd.MD) MetaData {
 	if md == nil {
 		return nil
@@ -21,11 +22,12 @@ func NewMetaData(md npmd.MD) MetaData {
 	return ret
 }
 
+// Keys implements npmd.MD interface.
 func (md MetaData) Keys(cb func(string) bool) {
 	if md == nil {
 		return
 	}
-	for key, _ := range md {
+	for key := range md {
 		if ok := cb(key); !ok {
 			return
 		}
@@ -33,11 +35,13 @@ func (md MetaData) Keys(cb func(string) bool) {
 	return
 }
 
+// HasKey implements npmd.MD interface.
 func (md MetaData) HasKey(key string) bool {
 	_, ok := md[key]
 	return ok
 }
 
+// Values implements npmd.MD interface.
 func (md MetaData) Values(key string) [][]byte {
 	v := md[key]
 	if v == nil {
