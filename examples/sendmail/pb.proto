@@ -30,11 +30,11 @@ message EmailEntry {
   }
   Status status = 2;
 
-  // CreatedAt is the time creating (unix timestamp).
-  int64 created_at = 3;
+  // CreatedAt is the time creating.
+  string created_at = 3;
 
-  // EndedAt is the time success/failed (unix timestamp).
-  int64 ended_at = 4;
+  // EndedAt is the time success/failed.
+  string ended_at = 4;
 
   // FailedReason is sending error when failed.
   string failed_reason = 5;

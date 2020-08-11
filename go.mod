@@ -21,4 +21,5 @@ require (
 	github.com/uber/jaeger-lib v2.2.0+incompatible // indirect
 	go.uber.org/atomic v1.6.0 // indirect
 	google.golang.org/protobuf v1.25.0
+	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
 )

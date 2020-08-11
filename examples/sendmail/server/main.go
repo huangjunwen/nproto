@@ -24,6 +24,7 @@ import (
 	ot "github.com/opentracing/opentracing-go"
 	"github.com/rs/zerolog"
 	jaegercfg "github.com/uber/jaeger-client-go/config"
+	"gopkg.in/gomail.v2"
 
 	"github.com/huangjunwen/nproto/v2/binlogmsg"
 	"github.com/huangjunwen/nproto/v2/enc/rawenc"
@@ -34,10 +35,14 @@ import (
 	msgtracing "github.com/huangjunwen/nproto/v2/tracing/msg"
 	rpctracing "github.com/huangjunwen/nproto/v2/tracing/rpc"
 
-	"github.com/huangjunwen/nproto/v2/demo/sendmail"
+	"github.com/huangjunwen/nproto/v2/examples/sendmail"
 )
 
 type Config struct {
+	SMTPHost string `json:"smtpHost"`
+	SMTPPort int    `json:"smtpPort"`
+	User     string `json:"user"`
+	Password string `json:"password"`
 }
 
 const (
@@ -70,15 +75,6 @@ func main() {
 	}
 
 	var err error
-	defer func() {
-		if e := recover(); e != nil {
-			err, ok := e.(error)
-			if !ok {
-				err = fmt.Errorf("%+v", e)
-			}
-			logger.Error(err, "panic", true)
-		}
-	}()
 
 	wg := &sync.WaitGroup{}
 
@@ -137,7 +133,9 @@ func main() {
 		config.Passwd = mysqlPassword
 		config.Net = "tcp"
 		config.Addr = fmt.Sprintf("%s:%d", mysqlHost, mysqlPort)
-		config.DBName = mysqlDBName
+		config.Params = map[string]string{
+			"interpolateParams": "true",
+		}
 		db, err = sql.Open("mysql", config.FormatDSN())
 		if err != nil {
 			panic(err)
@@ -155,9 +153,9 @@ func main() {
 				Type:  "const",
 				Param: 1,
 			},
-			Reporter: &jaegercfg.ReporterConfig{
-				CollectorEndpoint: jaegerReporterEndpoint,
-			},
+			// Reporter: &jaegercfg.ReporterConfig{
+			// 	CollectorEndpoint: jaegerReporterEndpoint,
+			// },
 		}
 		tracer, closer, err = config.NewTracer()
 		if err != nil {
@@ -263,29 +261,35 @@ func main() {
 
 	// --- Prepare ---
 
+	if err := createDatabase(stopCtx, db); err != nil {
+		panic(err)
+	}
+	logger.Info("createDatabase  ok")
+
 	if err := binlogmsg.CreateMsgTable(stopCtx, db, mysqlDBName, mysqlMsgTableName); err != nil {
 		panic(err)
 	}
 	logger.Info("CreateMsgTable ok")
+
 	if err := createEmailEntryTable(stopCtx, db); err != nil {
 		panic(err)
 	}
 	logger.Info("createEmailEntryTable ok")
 
-	// --- Regist rpc service ---
+	// --- Regist rpc service and subscribe msg handler---
 
 	svc := &sendMailSvc{
+		config:       config,
 		db:           db,
 		newPublisher: newPublisher,
 	}
+
 	if err := sendmail.ServeSendMailSvc(server, sendmail.SvcSpec, svc); err != nil {
 		panic(err)
 	}
 	logger.Info("ServeSendMailSvc ok")
 
-	// --- Subscribe msg handler ---
-
-	if err := sendmail.SubscribeEmailEntry(subscriber, sendmail.QueueSpec, "default", handleEmailEntry); err != nil {
+	if err := sendmail.SubscribeEmailEntry(subscriber, sendmail.QueueSpec, "default", svc.handleEmailEntry); err != nil {
 		panic(err)
 	}
 	logger.Info("SubscribeEmailEntry ok")
@@ -295,6 +299,7 @@ func main() {
 }
 
 type sendMailSvc struct {
+	config       *Config
 	db           *sql.DB
 	newPublisher func(sqlh.Queryer) npmsg.MsgPublisherFunc
 }
@@ -302,11 +307,6 @@ type sendMailSvc struct {
 var (
 	_ sendmail.SendMailSvc = (*sendMailSvc)(nil)
 )
-
-func handleEmailEntry(ctx context.Context, entry *sendmail.EmailEntry) error {
-	fmt.Printf(">>> handleEmailEntry: %#v\n", entry)
-	return nil
-}
 
 func (svc *sendMailSvc) Send(ctx context.Context, email *sendmail.Email) (*sendmail.EmailEntry, error) {
 	tx, err := svc.db.BeginTx(ctx, nil)
@@ -339,8 +339,39 @@ func (svc *sendMailSvc) Send(ctx context.Context, email *sendmail.Email) (*sendm
 	return entry, nil
 }
 
+func (svc *sendMailSvc) handleEmailEntry(ctx context.Context, entry *sendmail.EmailEntry) error {
+	m := gomail.NewMessage()
+	m.SetHeader("From", svc.config.User)
+	m.SetAddressHeader("To", entry.Email.ToAddr, entry.Email.ToName)
+	m.SetHeader("Subject", entry.Email.Subject)
+	m.SetBody(entry.Email.ContentType, entry.Email.Content)
+
+	d := gomail.NewDialer(svc.config.SMTPHost, svc.config.SMTPPort, svc.config.User, svc.config.Password)
+	sendErr := d.DialAndSend(m)
+
+	tx, err := svc.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := updateEmailEntry(ctx, tx, entry.Id, sendErr); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
 func (svc *sendMailSvc) List(ctx context.Context, _ *empty.Empty) (*sendmail.EmailEntries, error) {
 	return selectEmailEntries(ctx, svc.db)
+}
+
+func createDatabase(ctx context.Context, q sqlh.Queryer) error {
+	sql := fmt.Sprintf(`
+	CREATE DATABASE IF NOT EXISTS %s
+	`, mysqlDBName)
+	_, err := q.ExecContext(ctx, sql)
+	return err
 }
 
 func createEmailEntryTable(ctx context.Context, q sqlh.Queryer) error {
@@ -348,14 +379,14 @@ func createEmailEntryTable(ctx context.Context, q sqlh.Queryer) error {
 	CREATE TABLE IF NOT EXISTS %s.%s (
 		id BIGINT NOT NULL AUTO_INCREMENT,
 		status TINYINT UNSIGNED NOT NULL DEFAULT 0,
-		created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-		ended_at TIMESTAMP DEFAULT NULL,
-		failed_reason TEXT,
+		created_at DATETIME NOT NULL DEFAULT NOW(),
+		ended_at DATETIME NOT NULL DEFAULT '2000-01-01 00:00:00',
+		failed_reason VARCHAR(256) NOT NULL DEFAULT '',
 		to_addr VARCHAR(256) NOT NULL DEFAULT '',
 		to_name VARCHAR(256) NOT NULL DEFAULT '',
 		subject VARCHAR(256) NOT NULL DEFAULT '',
 		content_type VARCHAR(64) NOT NULL DEFAULT '',
-		content TEXT,
+		content TEXT DEFAULT (''),
 		PRIMARY KEY (id))
 	`, mysqlDBName, mysqlEmailEntryTableName)
 	_, err := q.ExecContext(ctx, sql)
@@ -381,6 +412,27 @@ func insertEmailEntry(ctx context.Context, q sqlh.Queryer, email *sendmail.Email
 		return nil, err
 	}
 	return selectEmailEntry(ctx, q, id)
+}
+
+func updateEmailEntry(ctx context.Context, q sqlh.Queryer, id int64, err error) error {
+	if err == nil {
+		_, e := q.ExecContext(
+			ctx,
+			fmt.Sprintf(`UPDATE %s.%s SET status=?, ended_at=NOW() WHERE id=?`, mysqlDBName, mysqlEmailEntryTableName),
+			sendmail.EmailEntry_SUCCESS,
+			id,
+		)
+		return e
+	} else {
+		_, e := q.ExecContext(
+			ctx,
+			fmt.Sprintf(`UPDATE %s.%s SET status=?, ended_at=NOW(), failed_reason=? WHERE id=?`, mysqlDBName, mysqlEmailEntryTableName),
+			sendmail.EmailEntry_FAILED,
+			err.Error(),
+			id,
+		)
+		return e
+	}
 }
 
 func selectEmailEntry(ctx context.Context, q sqlh.Queryer, id int64) (*sendmail.EmailEntry, error) {
