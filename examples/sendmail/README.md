@@ -5,7 +5,7 @@ This example illustrate the usage of:
   - [stanmsg](https://pkg.go.dev/github.com/huangjunwen/nproto/v2/stanmsg?tab=doc)
   - [binlogmsg](https://pkg.go.dev/github.com/huangjunwen/nproto/v2/binlogmsg?tab=doc)
   - [tracing](https://pkg.go.dev/github.com/huangjunwen/nproto/v2/tracing?tab=doc)
-  - [protoc-gen-nproto](https://pkg.go.dev/github.com/huangjunwen/nproto/v2/protoc-gen-nproto?tab=doc)
+  - [protoc-gen-nproto2](https://pkg.go.dev/github.com/huangjunwen/nproto/v2/protoc-gen-nproto2?tab=doc)
 
 How to run:
   1. You need to run `../docker-services` first.

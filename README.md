@@ -21,7 +21,7 @@ or use other transports (e.g. `http`).
 - [x] [stanmsg](https://pkg.go.dev/github.com/huangjunwen/nproto/v2/stanmsg?tab=doc): Auto reconnection/resubscription client for nats-streaming and msg publisher/subscriber implementation.
 - [x] [binlogmsg](https://pkg.go.dev/github.com/huangjunwen/nproto/v2/binlogmsg?tab=doc): 'Publish' (store) messages to MySQL8 tables then flush to downstream publisher using binlog notification.
 - [x] [tracing](https://pkg.go.dev/github.com/huangjunwen/nproto/v2/tracing?tab=doc): Opentracing middlewares.
-- [x] [protoc-gen-nproto](https://pkg.go.dev/github.com/huangjunwen/nproto/v2/protoc-gen-nproto?tab=doc): Stub code generator for protobuf.
+- [x] [protoc-gen-nproto2](https://pkg.go.dev/github.com/huangjunwen/nproto/v2/protoc-gen-nproto2?tab=doc): Stub code generator for protobuf.
 
 ## Examples
 
