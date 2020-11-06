@@ -2,6 +2,7 @@ package binlogmsg
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"sync"
 	"time"
@@ -95,29 +96,33 @@ func (pipe *MsgPipe) Run(ctx context.Context) (err error) {
 func (pipe *MsgPipe) run(ctx context.Context) (err error) {
 
 	logger := pipe.logger
+
 	db, err := pipe.masterCfg.Client()
 	if err != nil {
 		logger.Error(err, "open db failed")
 		return err
 	}
+	// https://github.com/go-sql-driver/mysql#important-settings
+	db.SetConnMaxLifetime(3 * time.Minute)
 	defer db.Close()
 	logger.Info("open db ok")
 
 	// Get lock.
+	var lockConn *sql.Conn
 	{
-		conn, err := db.Conn(ctx)
+		lockConn, err = db.Conn(ctx)
 		if err != nil {
 			logger.Error(err, "get db conn failed")
 			return err
 		}
-		defer conn.Close()
+		defer lockConn.Close()
 
-		ok, err := getLock(ctx, conn, pipe.lockName)
+		ok, err := getLock(ctx, lockConn, pipe.lockName)
 		if err != nil || !ok {
 			logger.Error(err, "get lock failed")
 			return err
 		}
-		defer releaseLock(ctx, conn, pipe.lockName)
+		defer releaseLock(ctx, lockConn, pipe.lockName)
 
 		logger.Info("get lock ok")
 	}
@@ -133,28 +138,43 @@ func (pipe *MsgPipe) run(ctx context.Context) (err error) {
 
 	ctrlCh := make(chan struct{}, pipe.maxInflight) // for speed control
 
+	// Ping go routine to keeps the lock conn held.
+	wg.Add(1)
+	go func() {
+		logger.Info("ping go routine started")
+		defer wg.Done()
+		defer cancel()
+		defer logger.Info("ping go routine ending")
+		for {
+			select {
+			case <-ctx.Done():
+				return
+
+			case <-time.After(10 * time.Second):
+				if err := lockConn.PingContext(ctx); err != nil {
+					logger.Error(err, "ping error")
+					return
+				}
+			}
+		}
+	}()
+
 	// Post process go routine.
 	wg.Add(1)
 	go func() {
+		logger.Info("post pocess go routine started")
 		defer wg.Done()
 		defer cancel()
-		defer logger.Info("post process go routine ended")
-
-		conn, err := db.Conn(context.Background())
-		if err != nil {
-			logger.Error(err, "post process go routine get del msg conn error")
-			return
-		}
-		defer conn.Close()
+		defer logger.Info("post process go routine ending")
 
 		// Loop until end.
 		for entry := range entryCh {
 			err := entry.GetPublishErr()
 			if err == nil {
-				err = delMsg(context.Background(), conn, entry.SchemaName(), entry.TableName(), entry.Id())
+				err = delMsg(context.Background(), db, entry.SchemaName(), entry.TableName(), entry.Id())
 			}
 
-			// NOTE: Cancel ctx if any error, but don't break the loop until entryCh  is closed.
+			// NOTE: Cancel ctx if any error, but don't break the loop until entryCh is closed.
 			if err != nil {
 				cancel()
 				logger.Error(err, "publish failed", "msgId", entry.Id(), "msgSubj", entry.Subject())
