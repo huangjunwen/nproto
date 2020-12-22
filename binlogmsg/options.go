@@ -41,6 +41,29 @@ func PipeOptLockName(lockName string) MsgPipeOption {
 	}
 }
 
+// PipeOptLockPingInterval sets the ping interval for mysql GET_LOCK connection.
+func PipeOptLockPingInterval(pingInterval time.Duration) MsgPipeOption {
+	return func(pipe *MsgPipe) error {
+		if pingInterval < 0 {
+			return fmt.Errorf("PipeOptLockPingInterval < 0")
+		}
+		pipe.lockPingInterval = pingInterval
+		return nil
+	}
+}
+
+// PipeOptLockCooldownInterval sets the time after mysql GET_LOCK and before
+// actual work.
+func PipeOptLockCooldownInterval(cooldownInterval time.Duration) MsgPipeOption {
+	return func(pipe *MsgPipe) error {
+		if cooldownInterval < 0 {
+			return fmt.Errorf("PipeOptLockCooldownInterval < 0")
+		}
+		pipe.lockCooldownInterval = cooldownInterval
+		return nil
+	}
+}
+
 // PipeOptMaxInflight sets the max number of messages inflight (publishing).
 func PipeOptMaxInflight(maxInflight int) MsgPipeOption {
 	return func(pipe *MsgPipe) error {

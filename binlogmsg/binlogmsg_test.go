@@ -358,7 +358,8 @@ func TestPipe(t *testing.T) {
 		assert.Equal(n, countMsgs(db, dbName, tableName))
 
 		// Downstream callbacks block until runCtx done.
-		runCtx, _ := context.WithTimeout(context.Background(), 2*time.Second)
+		cooldownInterval := time.Second
+		runCtx, _ := context.WithTimeout(context.Background(), cooldownInterval+time.Second)
 		downstream := MsgAsyncPublisherFunc(func(
 			ctx context.Context,
 			spec MsgSpec,
@@ -381,6 +382,7 @@ func TestPipe(t *testing.T) {
 			PipeOptLogger(newLogger()),
 			// 1 message remains.
 			PipeOptMaxInflight(n-1),
+			PipeOptLockCooldownInterval(cooldownInterval),
 		)
 		if err != nil {
 			log.Panic(err)

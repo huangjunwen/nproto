@@ -12,6 +12,7 @@ import (
 	"github.com/huangjunwen/golibs/mycanal/fulldump"
 	"github.com/huangjunwen/golibs/mycanal/incrdump"
 	"github.com/huangjunwen/golibs/sqlh"
+	"github.com/huangjunwen/golibs/sqlh/mysqlh"
 	"google.golang.org/protobuf/proto"
 
 	npenc "github.com/huangjunwen/nproto/v2/enc"
@@ -27,14 +28,16 @@ import (
 // to handle this type of messages.
 type MsgPipe struct {
 	// Immutable fields.
-	downstream  interface{} // msg.MsgPublisher or msg.MsgAsyncPublisher
-	masterCfg   *mycanal.FullDumpConfig
-	slaveCfg    *mycanal.IncrDumpConfig
-	tableFilter MsgTableFilter
-	logger      logr.Logger
-	lockName    string
-	maxInflight int
-	retryWait   time.Duration
+	downstream           interface{} // msg.MsgPublisher or msg.MsgAsyncPublisher
+	masterCfg            *mycanal.FullDumpConfig
+	slaveCfg             *mycanal.IncrDumpConfig
+	tableFilter          MsgTableFilter
+	logger               logr.Logger
+	lockName             string
+	lockPingInterval     time.Duration
+	lockCooldownInterval time.Duration
+	maxInflight          int
+	retryWait            time.Duration
 }
 
 // MsgTableFilter returns true if a given table is a msg table.
@@ -102,30 +105,23 @@ func (pipe *MsgPipe) run(ctx context.Context) (err error) {
 		logger.Error(err, "open db failed")
 		return err
 	}
+
 	// https://github.com/go-sql-driver/mysql#important-settings
 	db.SetConnMaxLifetime(3 * time.Minute)
 	defer db.Close()
-	logger.Info("open db ok")
 
-	// Get lock.
-	var lockConn *sql.Conn
-	{
-		lockConn, err = db.Conn(ctx)
-		if err != nil {
-			logger.Error(err, "get db conn failed")
-			return err
-		}
-		defer lockConn.Close()
+	return mysqlh.WithLockOpts(ctx, db, pipe.lockName, &mysqlh.LockOptions{
+		PingInterval:     pipe.lockPingInterval,
+		CooldownInterval: pipe.lockCooldownInterval,
+		Logger:           logger,
+	}, func(ctx context.Context) {
+		pipe.runWithinLock(ctx, db)
+	})
+}
 
-		ok, err := getLock(ctx, lockConn, pipe.lockName)
-		if err != nil || !ok {
-			logger.Error(err, "get lock failed")
-			return err
-		}
-		defer releaseLock(ctx, lockConn, pipe.lockName)
+func (pipe *MsgPipe) runWithinLock(ctx context.Context, db *sql.DB) (err error) {
 
-		logger.Info("get lock ok")
-	}
+	logger := pipe.logger
 
 	wg := &sync.WaitGroup{}
 	defer wg.Wait()
@@ -133,64 +129,23 @@ func (pipe *MsgPipe) run(ctx context.Context) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	entryCh := make(chan msgEntry, pipe.maxInflight) // for post process
-	defer close(entryCh)
-
 	ctrlCh := make(chan struct{}, pipe.maxInflight) // for speed control
 
-	// Ping go routine to keeps the lock conn held.
-	wg.Add(1)
-	go func() {
-		logger.Info("ping go routine started")
-		defer wg.Done()
-		defer cancel()
-		defer logger.Info("ping go routine ending")
-		for {
-			select {
-			case <-ctx.Done():
-				return
+	entryCh := make(chan msgEntry, pipe.maxInflight) // for post process
+	defer close(entryCh)                             // to stop post process goroutine
 
-			case <-time.After(10 * time.Second):
-				if err := lockConn.PingContext(ctx); err != nil {
-					logger.Error(err, "ping error")
-					return
-				}
-			}
-		}
-	}()
-
-	// Post process go routine.
-	wg.Add(1)
-	go func() {
-		logger.Info("post pocess go routine started")
-		defer wg.Done()
-		defer cancel()
-		defer logger.Info("post process go routine ending")
-
-		// Loop until end.
-		for entry := range entryCh {
-			err := entry.GetPublishErr()
-			if err == nil {
-				err = delMsg(context.Background(), db, entry.SchemaName(), entry.TableName(), entry.Id())
-			}
-
-			// NOTE: Cancel ctx if any error, but don't break the loop until entryCh is closed.
-			if err != nil {
-				cancel()
-				logger.Error(err, "publish failed", "msgId", entry.Id(), "msgSubj", entry.Subject())
-			}
-
-			// Put back quota.
-			<-ctrlCh
-		}
-	}()
-
+	// Flush:
+	//   1. try to get quota to handle next msg entry
+	//   2. flush it to downstream with a callback
+	//   3. inside callback:
+	//     3.1 record result with the msg entry
+	//     3.2 send the msg entry to post process go routine
 	pubCbWg := &sync.WaitGroup{}
 	flush := func(entry msgEntry) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case ctrlCh <- struct{}{}: // Try to get quota.
+		case ctrlCh <- struct{}{}:
 		}
 
 		pubCbWg.Add(1)
@@ -207,6 +162,29 @@ func (pipe *MsgPipe) run(ctx context.Context) (err error) {
 		})
 		return nil
 	}
+
+	// Post process go routine:
+	//   1. receive msg entry (with result) until entryCh closed.
+	//   2. delete msg in table if success, otherwise cancel context
+	//   3. put back quota
+	wg.Add(1)
+	go func() {
+		logger.Info("post pocess go routine started")
+		defer wg.Done()
+		defer cancel()
+		defer logger.Info("post process go routine ending")
+
+		for entry := range entryCh {
+			if err := entry.GetPublishErr(); err == nil {
+				err = delMsg(context.Background(), db, entry.SchemaName(), entry.TableName(), entry.Id())
+			} else {
+				// NOTE: Cancel ctx if any error, but don't break the loop.
+				cancel()
+				logger.Error(err, "publish failed", "msgId", entry.Id(), "msgSubj", entry.Subject())
+			}
+			<-ctrlCh
+		}
+	}()
 
 	logger.Info("full dump starting")
 
