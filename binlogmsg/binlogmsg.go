@@ -2,7 +2,6 @@ package binlogmsg
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"sync"
 	"time"
@@ -12,7 +11,6 @@ import (
 	"github.com/huangjunwen/golibs/mycanal/fulldump"
 	"github.com/huangjunwen/golibs/mycanal/incrdump"
 	"github.com/huangjunwen/golibs/sqlh"
-	"github.com/huangjunwen/golibs/sqlh/mysqlh"
 	"google.golang.org/protobuf/proto"
 
 	npenc "github.com/huangjunwen/nproto/v2/enc"
@@ -28,16 +26,13 @@ import (
 // to handle this type of messages.
 type MsgPipe struct {
 	// Immutable fields.
-	downstream           interface{} // msg.MsgPublisher or msg.MsgAsyncPublisher
-	masterCfg            *mycanal.FullDumpConfig
-	slaveCfg             *mycanal.IncrDumpConfig
-	tableFilter          MsgTableFilter
-	logger               logr.Logger
-	lockName             string
-	lockPingInterval     time.Duration
-	lockCooldownInterval time.Duration
-	maxInflight          int
-	retryWait            time.Duration
+	downstream  interface{} // msg.MsgPublisher or msg.MsgAsyncPublisher
+	masterCfg   *mycanal.FullDumpConfig
+	slaveCfg    *mycanal.IncrDumpConfig
+	tableFilter MsgTableFilter
+	logger      logr.Logger
+	maxInflight int
+	retryWait   time.Duration
 }
 
 // MsgTableFilter returns true if a given table is a msg table.
@@ -71,7 +66,6 @@ func NewMsgPipe(
 		masterCfg:   masterCfg,
 		slaveCfg:    slaveCfg,
 		tableFilter: tableFilter,
-		lockName:    DefaultLockName,
 		logger:      logr.Nop,
 		maxInflight: DefaultMaxInflight,
 		retryWait:   DefaultRetryWait,
@@ -105,23 +99,9 @@ func (pipe *MsgPipe) run(ctx context.Context) (err error) {
 		logger.Error(err, "open db failed")
 		return err
 	}
-
 	// https://github.com/go-sql-driver/mysql#important-settings
 	db.SetConnMaxLifetime(3 * time.Minute)
 	defer db.Close()
-
-	return mysqlh.WithLockOpts(ctx, db, pipe.lockName, &mysqlh.LockOptions{
-		PingInterval:     pipe.lockPingInterval,
-		CooldownInterval: pipe.lockCooldownInterval,
-		Logger:           logger,
-	}, func(ctx context.Context) {
-		pipe.runWithinLock(ctx, db)
-	})
-}
-
-func (pipe *MsgPipe) runWithinLock(ctx context.Context, db *sql.DB) (err error) {
-
-	logger := pipe.logger
 
 	wg := &sync.WaitGroup{}
 	defer wg.Wait()
@@ -136,10 +116,11 @@ func (pipe *MsgPipe) runWithinLock(ctx context.Context, db *sql.DB) (err error) 
 
 	// Flush:
 	//   1. try to get quota to handle next msg entry
-	//   2. flush it to downstream with a callback
+	//   2. incr counter and flush it to downstream with callback
 	//   3. inside callback:
-	//     3.1 record result with the msg entry
+	//     3.1 record result in msg entry
 	//     3.2 send the msg entry to post process go routine
+	//     3.3 decr counter
 	pubCbWg := &sync.WaitGroup{}
 	flush := func(entry msgEntry) error {
 		select {

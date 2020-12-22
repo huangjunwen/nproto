@@ -152,6 +152,7 @@ func TestPipe(t *testing.T) {
 	*tstMsg = "112233"
 
 	func() {
+		log.Printf("\n")
 		log.Printf(">>>> Test publishing.\n")
 		tableName := "__test_publishing"
 		createMsgTable(db, dbName, tableName)
@@ -166,6 +167,7 @@ func TestPipe(t *testing.T) {
 	}()
 
 	func() {
+		log.Printf("\n")
 		log.Printf(">>>> Test flushing messages by fulldump.\n")
 		tableName := "__test_flush_fulldump"
 		createMsgTable(db, dbName, tableName)
@@ -218,6 +220,7 @@ func TestPipe(t *testing.T) {
 	}()
 
 	func() {
+		log.Printf("\n")
 		log.Printf(">>>> Test flushing messages by incrdump.\n")
 		tableName := "__test_flush_incrdump"
 		createMsgTable(db, dbName, tableName)
@@ -290,6 +293,7 @@ func TestPipe(t *testing.T) {
 	}()
 
 	func() {
+		log.Printf("\n")
 		log.Printf(">>>> Test publish error.\n")
 		tableName := "__test_publish_error"
 		createMsgTable(db, dbName, tableName)
@@ -345,6 +349,7 @@ func TestPipe(t *testing.T) {
 	}()
 
 	func() {
+		log.Printf("\n")
 		log.Printf(">>>> Test max inflight.\n")
 		tableName := "__test_max_inflight"
 		createMsgTable(db, dbName, tableName)
@@ -358,8 +363,7 @@ func TestPipe(t *testing.T) {
 		assert.Equal(n, countMsgs(db, dbName, tableName))
 
 		// Downstream callbacks block until runCtx done.
-		cooldownInterval := time.Second
-		runCtx, _ := context.WithTimeout(context.Background(), cooldownInterval+time.Second)
+		runCtx, _ := context.WithTimeout(context.Background(), 2*time.Second)
 		downstream := MsgAsyncPublisherFunc(func(
 			ctx context.Context,
 			spec MsgSpec,
@@ -382,7 +386,6 @@ func TestPipe(t *testing.T) {
 			PipeOptLogger(newLogger()),
 			// 1 message remains.
 			PipeOptMaxInflight(n-1),
-			PipeOptLockCooldownInterval(cooldownInterval),
 		)
 		if err != nil {
 			log.Panic(err)

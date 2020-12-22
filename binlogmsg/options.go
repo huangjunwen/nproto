@@ -8,9 +8,6 @@ import (
 )
 
 var (
-	// DefaultLockName is the default value of PipeOptLockName.
-	DefaultLockName = "nproto.binlogmsg"
-
 	// DefaultMaxInflight is the default value of PipeOptMaxInflight.
 	DefaultMaxInflight = 4096
 
@@ -25,41 +22,6 @@ func PipeOptLogger(logger logr.Logger) MsgPipeOption {
 			logger = logr.Nop
 		}
 		pipe.logger = logger.WithValues("component", "nproto.binlogmsg.MsgPipe")
-		return nil
-	}
-}
-
-// PipeOptLockName sets the lock name using in MySQL get lock ("SELECT GET_LOCK"):
-// only one instance of pipes can run for the same lock name.
-func PipeOptLockName(lockName string) MsgPipeOption {
-	return func(pipe *MsgPipe) error {
-		if lockName == "" {
-			return fmt.Errorf("PipeOptLockName got empty lockName")
-		}
-		pipe.lockName = lockName
-		return nil
-	}
-}
-
-// PipeOptLockPingInterval sets the ping interval for mysql GET_LOCK connection.
-func PipeOptLockPingInterval(pingInterval time.Duration) MsgPipeOption {
-	return func(pipe *MsgPipe) error {
-		if pingInterval < 0 {
-			return fmt.Errorf("PipeOptLockPingInterval < 0")
-		}
-		pipe.lockPingInterval = pingInterval
-		return nil
-	}
-}
-
-// PipeOptLockCooldownInterval sets the time after mysql GET_LOCK and before
-// actual work.
-func PipeOptLockCooldownInterval(cooldownInterval time.Duration) MsgPipeOption {
-	return func(pipe *MsgPipe) error {
-		if cooldownInterval < 0 {
-			return fmt.Errorf("PipeOptLockCooldownInterval < 0")
-		}
-		pipe.lockCooldownInterval = cooldownInterval
 		return nil
 	}
 }
