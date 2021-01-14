@@ -6,7 +6,7 @@ require (
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/golang/protobuf v1.4.2
-	github.com/huangjunwen/golibs v0.0.0-20201222082223-434b78fee059
+	github.com/huangjunwen/golibs v0.0.0-20210114032939-d63eb40941ec
 	github.com/huangjunwen/tstsvc v0.8.1
 	github.com/juju/ratelimit v1.0.1
 	github.com/nats-io/nats.go v1.10.0
