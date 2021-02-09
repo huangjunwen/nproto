@@ -123,21 +123,13 @@ func TestPipe(t *testing.T) {
 	}
 
 	// Configs.
-	cfg := mycanal.Config{
+	cfg := &mycanal.Config{
 		Host:     "localhost",
 		Port:     res.HostPort,
 		User:     "root",
 		Password: res.RootPassword,
-	}
-	masterCfg := &mycanal.FullDumpConfig{
-		Config: cfg,
-	}
-	slaveCfg := &mycanal.IncrDumpConfig{
-		Config:   cfg,
 		ServerId: 1001,
 	}
-	_ = masterCfg
-	_ = slaveCfg
 	dbName := res.DBName
 
 	// Params.
@@ -206,8 +198,8 @@ func TestPipe(t *testing.T) {
 
 		pipe, err := NewMsgPipe(
 			downstream,
-			masterCfg,
-			slaveCfg,
+			cfg,
+			cfg,
 			func(schema, table string) bool { return table == tableName },
 			PipeOptLogger(newLogger()),
 		)
@@ -279,8 +271,8 @@ func TestPipe(t *testing.T) {
 
 		pipe, err := NewMsgPipe(
 			downstream,
-			masterCfg,
-			slaveCfg,
+			cfg,
+			cfg,
 			func(schema, table string) bool { return table == tableName },
 			PipeOptLogger(newLogger()),
 		)
@@ -334,8 +326,8 @@ func TestPipe(t *testing.T) {
 
 		pipe, err := NewMsgPipe(
 			downstream,
-			masterCfg,
-			slaveCfg,
+			cfg,
+			cfg,
 			func(schema, table string) bool { return table == tableName },
 			PipeOptLogger(newLogger()),
 			PipeOptRetryWait(time.Second),
@@ -380,8 +372,8 @@ func TestPipe(t *testing.T) {
 
 		pipe, err := NewMsgPipe(
 			downstream,
-			masterCfg,
-			slaveCfg,
+			cfg,
+			cfg,
 			func(schema, table string) bool { return table == tableName },
 			PipeOptLogger(newLogger()),
 			// 1 message remains.

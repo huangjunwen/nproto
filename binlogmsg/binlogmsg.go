@@ -27,8 +27,8 @@ import (
 type MsgPipe struct {
 	// Immutable fields.
 	downstream  interface{} // msg.MsgPublisher or msg.MsgAsyncPublisher
-	masterCfg   *mycanal.FullDumpConfig
-	slaveCfg    *mycanal.IncrDumpConfig
+	masterCfg   *mycanal.Config
+	slaveCfg    *mycanal.Config
 	tableFilter MsgTableFilter
 	logger      logr.Logger
 	maxInflight int
@@ -43,13 +43,13 @@ type MsgPipeOption func(*MsgPipe) error
 
 // NewMsgPipe creates a new msg pipe:
 //   - downstream: must be MsgPublisher or MsgAsyncPublisher.
-//   - masterCfg: master connection to read (full dump) and write (delete published messages).
-//   - slaveCfg: slave config for binlog subscription.
+//   - masterCfg: master connection to delete published messages.
+//   - slaveCfg: slave connection for fulldump and incrdump.
 //   - tableFilter: determine whether a table is used to store messages.
 func NewMsgPipe(
 	downstream interface{},
-	masterCfg *mycanal.FullDumpConfig,
-	slaveCfg *mycanal.IncrDumpConfig,
+	masterCfg *mycanal.Config,
+	slaveCfg *mycanal.Config,
 	tableFilter MsgTableFilter,
 	opts ...MsgPipeOption,
 ) (*MsgPipe, error) {
@@ -169,7 +169,9 @@ func (pipe *MsgPipe) run(ctx context.Context) (err error) {
 
 	logger.Info("full dump starting")
 
-	gtidSet, err := fulldump.FullDump(ctx, pipe.masterCfg, func(ctx context.Context, q sqlh.Queryer) error {
+	// Use slaveCfg for both fulldump and incrdump for consistent gtid set.
+
+	gtidSet, err := fulldump.FullDump(ctx, pipe.slaveCfg, func(ctx context.Context, q sqlh.Queryer) error {
 		schemas, tables, err := listMsgTables(ctx, q, pipe.tableFilter)
 		if err != nil {
 			return err
