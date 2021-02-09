@@ -195,22 +195,18 @@ func main() {
 			msgtracing.WrapMsgAsyncPublisher(tracer, true),
 		)
 
-		c := mycanal.Config{
+		c := &mycanal.Config{
 			Host:     mysqlHost,
 			Port:     mysqlPort,
 			User:     mysqlUser,
 			Password: mysqlPassword,
-		}
-		masterCfg := &mycanal.FullDumpConfig{Config: c}
-		slaveCfg := &mycanal.IncrDumpConfig{
-			Config:   c,
 			ServerId: 1023,
 		}
 
 		pipe, err = binlogmsg.NewMsgPipe(
 			downstream,
-			masterCfg,
-			slaveCfg,
+			c,
+			c,
 			func(schema, table string) bool {
 				return schema == mysqlDBName && table == mysqlMsgTableName
 			},
