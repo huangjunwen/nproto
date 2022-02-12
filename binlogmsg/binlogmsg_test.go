@@ -19,7 +19,7 @@ import (
 	// "github.com/huangjunwen/golibs/mycanal/fulldump"
 	// "github.com/huangjunwen/golibs/mycanal/incrdump"
 	tstmysql "github.com/huangjunwen/tstsvc/mysql"
-	"github.com/ory/dockertest"
+	"github.com/ory/dockertest/v3"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/huangjunwen/nproto/v2/enc"
