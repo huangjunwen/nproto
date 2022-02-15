@@ -9,7 +9,6 @@ require (
 	github.com/huangjunwen/golibs v0.0.0-20210208230516-98ed48b2a307
 	github.com/huangjunwen/tstsvc v0.8.3
 	github.com/juju/ratelimit v1.0.1
-	github.com/nats-io/jwt v1.2.2
 	github.com/nats-io/nats.go v1.13.1-0.20220121202836-972a071d373d
 	github.com/nats-io/stan.go v0.10.2
 	github.com/opentracing/opentracing-go v1.2.0
